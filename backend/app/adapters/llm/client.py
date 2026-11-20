@@ -9,6 +9,7 @@ from app.adapters.llm.fallback_chain import ChainCall, ChainOutcome, FallbackCha
 from app.adapters.llm.rendering import PromptRenderer, RenderedPrompt
 from app.adapters.llm.routing import TaskRouter
 from app.adapters.llm.schema_compiler import compile_schema
+from app.adapters.llm.untrusted import SANITIZE_VERSION
 from app.core.config import LLMSettings, Tier
 from app.core.logging import get_logger
 from app.ports.clock import Clock
@@ -158,7 +159,13 @@ class DefaultLLMClient:
             logger.info("llm_tier_override", task=task.value, tier=tier)
         canonical_input = prompt_input.model_dump_json()
         input_hash = sha256(canonical_input)
-        key = cache_key(task.value, spec.prompt_version, canonical_input, context.language, schema_name)
+        key = cache_key(
+            task.value,
+            f"{spec.prompt_version}+s{SANITIZE_VERSION}",
+            canonical_input,
+            context.language,
+            schema_name,
+        )
         if context.idempotency_key is not None:
             hit = await self._cache.get(key)
             if hit is not None:

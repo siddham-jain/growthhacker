@@ -18,6 +18,8 @@ STOP_REASONS: dict[str, StopReason] = {
     "stop_sequence": "stop_sequence",
 }
 EPHEMERAL = {"type": "ephemeral"}
+# anthropic routes 400 on sampling params (D18), so workspace extra params never carry them
+SAMPLING_PARAMS = frozenset({"temperature", "top_p", "top_k"})
 
 
 def _text_param(block: TextBlock) -> dict[str, Any]:
@@ -36,6 +38,9 @@ class AnthropicProvider:
         if settings.api_key is None:
             raise ValueError("the anthropic provider needs settings.llm.anthropic.api_key")
         self._connect_timeout_s = settings.connect_timeout_s
+        self._extra_params = {
+            key: value for key, value in settings.extra_params.items() if key not in SAMPLING_PARAMS
+        }
         # the fallback chain owns retries so every attempt is accounted and deadline-aware
         self._client = anthropic.AsyncAnthropic(
             api_key=settings.api_key.get_secret_value(),
@@ -56,6 +61,7 @@ class AnthropicProvider:
         ]
         messages.extend({"role": turn.role, "content": turn.text} for turn in request.followups)
         params: dict[str, Any] = {
+            **self._extra_params,
             "model": request.model,
             "max_tokens": request.max_output_tokens,
             "system": [_text_param(block) for block in request.system_blocks],

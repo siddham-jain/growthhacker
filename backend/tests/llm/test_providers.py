@@ -92,6 +92,21 @@ async def test_anthropic_request_shape_for_haiku_has_no_effort_or_sampling() -> 
     assert body["metadata"] == {"user_id": "opaque"}
 
 
+async def test_anthropic_extra_params_apply_without_sampling_or_overrides() -> None:
+    recorder = Recorder(200, message([{"type": "text", "text": "{}"}]))
+    settings = make_llm_settings().anthropic.model_copy(
+        update={"extra_params": {"service_tier": "auto", "temperature": 0.2, "top_p": 0.9, "model": "other"}}
+    )
+    provider = AnthropicProvider(
+        settings, http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(recorder))
+    )
+    await provider.complete(request("claude-haiku-4-5"))
+    body = recorder.requests[0]
+    assert body["service_tier"] == "auto"
+    assert not SAMPLING & set(body)
+    assert body["model"] == "claude-haiku-4-5"
+
+
 async def test_anthropic_sonnet_gets_explicit_effort() -> None:
     recorder = Recorder(200, message([{"type": "text", "text": "{}"}]))
     await anthropic(recorder).complete(request("claude-sonnet-5-5", effort="low"))

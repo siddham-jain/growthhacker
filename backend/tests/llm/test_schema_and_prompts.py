@@ -131,3 +131,25 @@ def test_writer_prompt_input_is_deterministic_and_cache_friendly() -> None:
     evidence = json.loads(a.trusted[0].text)
     assert [fact["alias"] for fact in evidence["facts"]] == ["f1", "f2", "f3", "f4"]
     assert "draft_" not in a.client_context.text
+
+
+def test_sanitize_keeps_line_structure_and_collapses_spaces() -> None:
+    from app.adapters.llm.untrusted import sanitize
+
+    table = "F1 | offering |   Epilepsy\t treatment\n\n\n\nF2 | offering | Migraine"
+    assert (
+        sanitize(table, "verified_facts") == "F1 | offering | Epilepsy treatment\n\nF2 | offering | Migraine"
+    )
+
+
+def test_sanitize_gives_batched_sources_their_own_budget() -> None:
+    from app.adapters.llm.untrusted import DEFAULT_LIMIT, sanitize
+
+    facts = "\n".join(f"F{index:04d} | offering | treatment {index}" for index in range(2000))
+    assert len(facts) > DEFAULT_LIMIT * 10
+    assert sanitize(facts, "verified_facts").endswith("treatment 1999")
+    page = "x" * 25_000
+    assert len(sanitize(page, "website_page")) == 25_000
+    videos = "v" * 30_000
+    assert len(sanitize(videos, "youtube_metadata")) == 30_000
+    assert len(sanitize(videos, "some.domain.example")) == DEFAULT_LIMIT

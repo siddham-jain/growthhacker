@@ -74,7 +74,7 @@ DEFAULT_TASKS: tuple[TaskSpec, ...] = (
         cache_ttl_days=14,
         degrade_path="stricter lexical/semantic threshold with review flag",
     ),
-    TaskSpec(TaskId.topic_alias_proposal, "low", 1024, 20, 400, degrade_path="no alias proposals"),
+    TaskSpec(TaskId.topic_alias_proposal, "low", 6000, 40, 2500, degrade_path="no alias proposals"),
     TaskSpec(TaskId.directness_tiebreak, "low", 1024, 20, 300, degrade_path="deterministic directness"),
     TaskSpec(TaskId.news_judgement, "medium", 4096, 35, 1200, degrade_path="keyword overlap, confidence low"),
     TaskSpec(TaskId.refresh_phrasing, "low", 1024, 20, 300, degrade_path="keyword-only suggestion"),
