@@ -1950,7 +1950,19 @@
             "title": "Channel Ref"
           },
           "market": {
-            "$ref": "#/components/schemas/Market"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Market"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "market_explicit": {
+            "default": true,
+            "title": "Market Explicit",
+            "type": "boolean"
           },
           "name": {
             "maxLength": 120,
@@ -1989,8 +2001,7 @@
           }
         },
         "required": [
-          "name",
-          "market"
+          "name"
         ],
         "title": "ClientCreate",
         "type": "object"

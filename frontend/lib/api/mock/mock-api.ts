@@ -218,7 +218,7 @@ export const mockApi: GrowthHackerApi = {
         website_url: input.website_url ?? null,
         own_channel: null,
         lifecycle: "onboarding",
-        market: input.market,
+        market: input.market ?? apollo.market,
         window_days: input.window_days ?? 30,
         last_success_at: null,
         created_at: new Date().toISOString(),

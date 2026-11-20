@@ -1995,7 +1995,12 @@ export interface components {
         ClientCreate: {
             /** Channel Ref */
             channel_ref?: string | null;
-            market: components["schemas"]["Market"];
+            market?: components["schemas"]["Market"] | null;
+            /**
+             * Market Explicit
+             * @default true
+             */
+            market_explicit: boolean;
             /** Name */
             name: string;
             /**

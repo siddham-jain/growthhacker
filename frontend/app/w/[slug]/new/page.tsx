@@ -71,6 +71,7 @@ export default function NewClientPage() {
           website_url: website?.kind === "website" ? website.url : null,
           channel_ref: channel?.kind === "channel" ? channel.ref : null,
           market,
+          market_explicit: false,
           start_onboarding: true,
         },
         idempotencyKey,
@@ -113,9 +114,7 @@ export default function NewClientPage() {
           onChange={(event) => setName(event.target.value)}
           placeholder="Apollo Hospitals"
         />
-        <p className="text-caption-1-regular text-muted-foreground">
-          Market: {market.country} · {market.language} · {market.timezone}
-        </p>
+        <p className="text-caption-1-regular text-muted-foreground">We detect your market from your website&apos;s phone numbers, addresses and prices.</p>
         {existing ? <InfoNote tone="warning">You already added this business. Open it from your clients list.</InfoNote> : null}
         <Button type="submit" variant="primary" size="medium" trailingIcon={RiArrowRightLine} disabled={submitting} className="h-13 rounded-full text-[15px]">
           {submitting ? "Starting…" : "Analyse my business"}

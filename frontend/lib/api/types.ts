@@ -115,7 +115,9 @@ export interface ClientCreate {
   name: string;
   website_url?: string | null;
   channel_ref?: string | null;
-  market: Market;
+  market?: Market | null;
+  // false: the market is only a hint (the browser locale); onboarding replaces it with what the site shows
+  market_explicit?: boolean;
   window_days?: WindowDays;
   start_onboarding?: boolean;
 }
