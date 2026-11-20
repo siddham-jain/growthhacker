@@ -218,8 +218,8 @@ class AnalyticsStage:
 
     name: ClassVar[str] = "analytics"
     version: ClassVar[int] = 1
-    depends_on: ClassVar[tuple[str, ...]] = ("ingest", "enrich", "topics")
-    optional_deps: ClassVar[tuple[str, ...]] = ("own_analytics", "niche_discovery")
+    depends_on: ClassVar[tuple[str, ...]] = ("ingest", "topics")
+    optional_deps: ClassVar[tuple[str, ...]] = ("enrich", "own_analytics", "niche_discovery")
     produces: ClassVar[ArtifactKey[AnalyticsResult]] = ANALYTICS_RESULT
     policy: ClassVar[StagePolicy] = StagePolicy(timeout_s=120, soft_timeout_s=60)
     weight: ClassVar[float] = 10.0

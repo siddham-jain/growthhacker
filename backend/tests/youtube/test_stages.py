@@ -182,6 +182,8 @@ async def test_prefetch_and_own_analytics_enablement() -> None:
     ctx, _, _ = context(layer)
     prefetch = await PrefetchOwnChannelStage().run(ctx)
     assert prefetch.status == "succeeded" and prefetch.artifact.videos == 1
-    assert not PrefetchOwnChannelStage().enabled(context(layer, own=None)[0].snapshot)
+    # the channel may only be located during onboarding, so a missing one skips at run time
+    without_channel = await PrefetchOwnChannelStage().run(context(layer, own=None)[0])
+    assert without_channel.status == "skipped"
     assert not OwnAnalyticsStage().enabled(ctx.snapshot)
     assert OwnAnalyticsStage().enabled(context(layer, oauth=True)[0].snapshot)

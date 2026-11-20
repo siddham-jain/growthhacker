@@ -10,6 +10,7 @@ from app.domain.competitors import DriftEvent
 from app.domain.profile import BusinessProfile
 from app.domain.runs import RunNotice, RunNoticeCode
 from app.pipeline.contracts import RunConfigSnapshot, RunContext, StageBudget, StagePolicy, StageResult
+from app.pipeline.stages.website_intel import LOCATED_BUSINESS
 from app.ports.artifacts import ArtifactKey
 from app.services.competitors.drift.monitor import CompetitorDriftMonitor
 from app.services.competitors.model import DiscoveryResult
@@ -120,12 +121,14 @@ class DiscoverCompetitorsStage:
     async def run(self, ctx: RunContext[Container]) -> StageResult[DiscoveryResult]:
         await ctx.checkpoint()
         profile = await ctx.artifacts.get(BUSINESS_PROFILE_ARTIFACT)
+        located = await ctx.artifacts.get_optional(LOCATED_BUSINESS)
+        own_channel = ctx.snapshot.own_channel_id or (located.channel_id if located else None)
         request = DiscoveryRequest(
             scope=TenantScope(workspace_id=ctx.workspace_id, client_id=ctx.client_id),
             trigger="onboarding",
             profile=profile,
             pipeline_run_id=ctx.run_id,
-            own_channel_ids=[ctx.snapshot.own_channel_id] if ctx.snapshot.own_channel_id else [],
+            own_channel_ids=[own_channel] if own_channel else [],
             topic_refs=list(ctx.snapshot.topic_refs),
             ledger=ctx.budget,
         )

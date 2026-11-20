@@ -33,6 +33,7 @@ from app.ports.buyer_questions import BuyerQuestionCandidate
 from app.ports.clock import Clock
 from app.ports.embeddings import EmbedderUnavailable
 from app.ports.llm import LLMClient
+from app.services.topics import prompt_specs  # noqa: F401  registers the topic prompts with 10
 from app.services.topics.calibration.background import load_background
 from app.services.topics.corpus import corpus_frequencies
 from app.services.topics.directness.tiebreak import DirectnessTieBreaker, tiebreak_cases

@@ -41,7 +41,8 @@ class RecommendStage:
     name = "recommend"
     version = 1
     depends_on = ("topics", "analytics")
-    optional_deps = ("news",)
+    # 08 and 09 drafts go through the same gates, so both run first when they run at all
+    optional_deps = ("news", "refresh")
     produces = RECOMMEND_ARTIFACT
     policy = StagePolicy(timeout_s=90, soft_timeout_s=60)
     weight = 5.0

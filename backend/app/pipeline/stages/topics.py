@@ -1,3 +1,4 @@
+import weakref
 from collections.abc import Mapping
 from typing import Any, ClassVar
 
@@ -61,16 +62,18 @@ class TopicsStage:
 
     name: ClassVar[str] = "topics"
     version: ClassVar[int] = 1
-    depends_on: ClassVar[tuple[str, ...]] = ("ingest", "enrich")
-    optional_deps: ClassVar[tuple[str, ...]] = ("niche_discovery",)
+    # enrich is non-critical, so its thumbnail text is used when present but never blocks matching
+    depends_on: ClassVar[tuple[str, ...]] = ("ingest",)
+    optional_deps: ClassVar[tuple[str, ...]] = ("enrich", "niche_discovery")
     produces: ClassVar[ArtifactKey[TopicEngineReport]] = TOPIC_REPORT
     policy: ClassVar[StagePolicy] = StagePolicy(
-        timeout_s=600, soft_timeout_s=480, budget=StageBudget(llm_usd=0.30)
+        timeout_s=600, soft_timeout_s=480, budget=StageBudget(llm_usd=0.50)
     )
     weight: ClassVar[float] = 10.0
 
     def __init__(self) -> None:
-        self._engines: dict[int, TopicEngine] = {}
+        # one engine per long-lived deps object (per-run deps expose it as .shared), released with it
+        self._engines: weakref.WeakKeyDictionary[Any, TopicEngine] = weakref.WeakKeyDictionary()
 
     def enabled(self, snapshot: RunConfigSnapshot) -> bool:
         return bool(snapshot.topic_refs)
@@ -84,10 +87,10 @@ class TopicsStage:
         }
 
     def _engine(self, ctx: RunContext[Any]) -> TopicEngine:
-        key = id(ctx.deps)
-        if key not in self._engines:
-            self._engines[key] = TopicEngine.from_container(ctx.deps)
-        return self._engines[key]
+        shared = getattr(ctx.deps, "shared", ctx.deps)
+        if shared not in self._engines:
+            self._engines[shared] = TopicEngine.from_container(shared)
+        return self._engines[shared]
 
     async def run(self, ctx: RunContext[Any]) -> StageResult[TopicEngineReport]:
         engine = self._engine(ctx)

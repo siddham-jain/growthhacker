@@ -17,6 +17,7 @@ from app.pipeline.artifacts import ArtifactExpiry, ArtifactMissing, PgArtifactSt
 from app.pipeline.checkpoints import CheckpointStore, LeaseLost
 from app.pipeline.context import RunBudgetLedger, RunCancellation
 from app.pipeline.contracts import RunBudget, RunConfigSnapshot, UsageLedger
+from app.pipeline.deps import PipelineDeps
 from app.pipeline.plan import RunError, RunOutcome, RunParams, RunPlan, RunTimings
 from app.pipeline.progress import RUN_TERMINAL_EVENT, EventLog, EventPublisher, RunProgress, cancel_key
 from app.pipeline.registry import PipelineDefinition
@@ -37,6 +38,7 @@ class RunExecutor:
         self._runs = runs
         self._publisher = publisher
         self._settings = container.settings
+        self._deps = PipelineDeps(container)
 
     async def execute(self, run_id: UUID, attempt: int, owner: str) -> RunStatus | None:
         run = await self._runs.claim(run_id, attempt, owner)
@@ -81,7 +83,7 @@ class RunExecutor:
             quota_tz=ZoneInfo(self._settings.quota.timezone),
             clock=self._container.clock,
             business_clock=FrozenClock(run.as_of) if plan.kind is RunKind.backtest else self._container.clock,
-            deps=self._container,
+            deps=await self._deps.for_run(scope, plan.kind),
         )
         ledger = RunBudgetLedger(plan.budget, plan.prior_usage)
         await progress.emit(

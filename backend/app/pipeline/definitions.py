@@ -18,6 +18,7 @@ ANALYSIS_STAGES = (
     "niche_discovery",
     "own_analytics",
     "news",
+    "competitor_drift",
     "enrich",
     "topics",
     "analytics",

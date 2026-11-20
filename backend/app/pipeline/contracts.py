@@ -108,6 +108,9 @@ class RunConfigSnapshot(DomainModel):
     windows_computed: list[WindowDays] = [7, 30, 90]
     own_channel_id: ChannelId | None = None
     website_url: str | None = None
+    # what the user typed, so onboarding can locate a business from its name or an unverified channel
+    business_name: str | None = None
+    channel_ref: str | None = None
     competitor_channel_ids: list[ChannelId] = []
     topic_refs: list[TopicRef] = []
     topic_set_version: int

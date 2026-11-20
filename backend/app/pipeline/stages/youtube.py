@@ -12,6 +12,7 @@ from app.domain.common import ChannelRole
 from app.domain.runs import RunKind, RunNotice, RunNoticeCode, RunTrigger, VideosFetchedPayload
 from app.domain.youtube import QuotaBucket, QuotaPriority
 from app.pipeline.contracts import BudgetKind, RunConfigSnapshot, RunContext, StagePolicy, StageResult
+from app.pipeline.stages.website_intel import LOCATED_BUSINESS
 from app.ports.artifacts import ArtifactKey
 from app.services.youtube import messages
 from app.services.youtube.context import YouTubeRequestContext, request_context
@@ -250,13 +251,15 @@ class PrefetchOwnChannelStage:
     weight = 8.0
 
     def enabled(self, snapshot: RunConfigSnapshot) -> bool:
-        return snapshot.own_channel_id is not None
+        # the channel is often only found by resolve_inputs, so the frozen snapshot cannot decide this
+        return True
 
     def fingerprint_inputs(self, ctx: RunContext[Any]) -> Mapping[str, Any]:
         return {"own": ctx.snapshot.own_channel_id, "pt_day": ctx.as_of.date().isoformat()}
 
     async def run(self, ctx: RunContext[Any]) -> StageResult[OwnChannelPrefetch]:
-        channel_id = ctx.snapshot.own_channel_id
+        located = await ctx.artifacts.get_optional(LOCATED_BUSINESS)
+        channel_id = ctx.snapshot.own_channel_id or (located.channel_id if located else None)
         if channel_id is None:
             return StageResult(status="skipped", artifact=None)
         layer = data_layer(ctx)

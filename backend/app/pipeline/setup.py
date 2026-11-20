@@ -25,6 +25,9 @@ class SetupConfirmer(Protocol):
     # accepts onboarding suggestions (competitors, keywords, buyer questions) for demo auto-confirm
     async def accept_suggestions(self, scope: TenantScope) -> None: ...
 
+    # freezes the reviewed competitor set and rebuilds topic refs before a manual confirm is validated
+    async def prepare(self, scope: TenantScope) -> None: ...
+
 
 class SetupNotWired(LookupError):
     pass
@@ -117,7 +120,11 @@ class SetupService:
         window_days: int | None = None,
         requested_by: str | None = None,
         idempotency_key: str | None = None,
+        prepared: bool = False,
     ) -> tuple[RunRequestResult, SetupValidation]:
+        if self._confirmer is not None and not prepared:
+            await self._ready(scope)
+            await self._confirmer.prepare(scope)
         validation = await self.validate(scope, window_days)
         if validation.problems:
             raise SetupInvalid(validation.problems)
@@ -144,4 +151,10 @@ class SetupService:
         if self._confirmer is None:
             raise SetupNotWired("no setup_confirmer adapter is registered; confirm the setup manually")
         await self._confirmer.accept_suggestions(scope)
-        return await self.confirm(scope, requested_by=requested_by)
+        return await self.confirm(scope, requested_by=requested_by, prepared=True)
+
+    async def _ready(self, scope: TenantScope) -> None:
+        async with self._session_factory() as session:
+            client = await self._client(session, scope)
+        if ClientLifecycle(client.lifecycle) not in CONFIRMABLE:
+            raise SetupNotReady(f"client is {client.lifecycle}; onboarding has not finished")

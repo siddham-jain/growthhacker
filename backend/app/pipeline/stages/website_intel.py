@@ -2,12 +2,16 @@ import hashlib
 from collections.abc import Mapping
 from typing import Any
 
+from sqlalchemy import select
+
 import app.adapters.context  # noqa: F401  registers every ContextSource tier
 from app.core.registry import artifact_schema_registry, stage_registry
 from app.core.tenancy import TenantScope
 from app.domain.profile import BusinessProfile
 from app.domain.runs import RunNotice, RunNoticeCode
 from app.domain.web import CoverageFacet, SourceKind
+from app.domain.youtube import OwnershipLabel
+from app.models.tenancy import Client
 from app.pipeline.contracts import (
     BudgetKind,
     RunConfigSnapshot,
@@ -37,6 +41,9 @@ for _key in (LOCATED_BUSINESS, SITE_ACQUISITION, BUSINESS_PROFILE):
     artifact_schema_registry.register(_key.name, _key.schema_version, _key.model)
 
 SITE_TIERS = frozenset({SourceKind.site_direct, SourceKind.site_rendered})
+CHANNEL_STATUS = {OwnershipLabel.verified: "verified", OwnershipLabel.rejected: "rejected"}
+# 02's verdict method in the api's verified_by vocabulary
+VERIFIED_BY = {"link": "website_link", "oauth": "oauth", "user": "manual"}
 
 
 def website_service(ctx: RunContext[Any]) -> WebsiteIntelService:
@@ -45,6 +52,51 @@ def website_service(ctx: RunContext[Any]) -> WebsiteIntelService:
 
 def scope(ctx: RunContext[Any]) -> TenantScope:
     return TenantScope(workspace_id=ctx.workspace_id, client_id=ctx.client_id)
+
+
+async def record_located(ctx: RunContext[Any], located: LocatedBusinessDetail) -> None:
+    """writes the located site and channel (with 02's ownership verdict) back to the client row."""
+    async with ctx.deps.session_factory() as session, session.begin():
+        client = await session.get(Client, ctx.client_id, with_for_update=True)
+        if client is None or client.workspace_id != ctx.workspace_id:
+            return
+        if located.site is not None and client.website_url is None:
+            client.website_url = located.site.canonical_origin
+            client.website_domain = located.site.registrable_domain
+        channel_id = located.channel_id
+        if (
+            channel_id is None
+            or client.own_channel_status == "verified"
+            and client.own_channel_id != channel_id
+        ):
+            return
+        taken = (
+            await session.execute(
+                select(Client.id).where(
+                    Client.workspace_id == ctx.workspace_id,
+                    Client.own_channel_id == channel_id,
+                    Client.id != ctx.client_id,
+                    Client.deleted_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+        if taken is not None:
+            return
+        ownership = located.ownership
+        client.own_channel_id = channel_id
+        client.own_channel_status = (
+            CHANNEL_STATUS.get(ownership.label, "proposed") if ownership else "proposed"
+        )
+        if ownership is not None:
+            verified = ownership.label is OwnershipLabel.verified
+            client.own_channel_verification = [
+                {
+                    "verified_by": VERIFIED_BY.get(ownership.method or "") if verified else None,
+                    "label": ownership.label.value,
+                    "score": ownership.score,
+                    "signals": [signal.model_dump(mode="json") for signal in ownership.signals],
+                }
+            ]
 
 
 @stage_registry.register("resolve_inputs")
@@ -66,25 +118,29 @@ class ResolveInputsStage:
         snapshot = ctx.snapshot
         return {
             "website": snapshot.website_url,
-            "channel": snapshot.own_channel_id,
+            "channel": snapshot.own_channel_id or snapshot.channel_ref,
+            "name": snapshot.business_name,
             "country": snapshot.market.country,
         }
 
     async def run(self, ctx: RunContext[Any]) -> StageResult[LocatedBusinessDetail]:
         snapshot = ctx.snapshot
-        if not (snapshot.website_url or snapshot.own_channel_id):
-            raise ValueError("Add your website or YouTube channel.")
+        channel_ref = snapshot.own_channel_id or snapshot.channel_ref
+        if not (snapshot.website_url or channel_ref or snapshot.business_name):
+            raise ValueError("Add your website, YouTube channel or business name.")
         service = website_service(ctx)
         located = await service.locate(
             BusinessLookup(
+                business_name=snapshot.business_name,
                 website_url=snapshot.website_url,
-                channel_ref=snapshot.own_channel_id,
+                channel_ref=channel_ref,
                 country_hint=snapshot.market.country,
             ),
             ctx.reporter,
             client_id=ctx.client_id,
             run_id=ctx.run_id,
         )
+        await record_located(ctx, located)
         notices = tuple(
             RunNotice(code=RunNoticeCode.partial_profile, stage=self.name, message=note[:200])
             for note in located.notes[:3]
@@ -158,8 +214,12 @@ class CrawlSiteStage:
                 )
                 await store.upsert_pages(website_id, crawl_run_id, outcome.pages)
                 await store.upsert_inventory(website_id, outcome, ctx.clock.now())
+                full = SiteAcquisition.from_outcome(outcome, website_id=website_id, crawl_run_id=crawl_run_id)
+                await store.save_acquisition(crawl_run_id, full.compressed())
                 await uow.commit()
         artifact = SiteAcquisition.from_outcome(outcome, website_id=website_id, crawl_run_id=crawl_run_id)
+        if crawl_run_id is not None:
+            artifact = artifact.pointer()
         site_pages = sum(1 for page in outcome.pages if page.page.source_kind in SITE_TIERS)
         notices = []
         if outcome.missing:
@@ -207,6 +267,11 @@ class BuildProfileStage:
         service = website_service(ctx)
         async with ctx.deps.uow() as uow:
             store = WebsiteIntelStore(uow.session, scope(ctx))
+            if acquisition.stored and acquisition.crawl_run_id is not None:
+                payload = await store.acquisition(acquisition.crawl_run_id)
+                if payload is None:
+                    raise ValueError("the crawl's pages expired; run the crawl again")
+                acquisition = SiteAcquisition.decompressed(payload)
             previous = await store.latest_profile()
             version = await store.next_version()
             tombstones = await store.tombstones()

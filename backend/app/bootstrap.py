@@ -14,6 +14,7 @@ REGISTRATION_MODULES: tuple[str, ...] = (
     "app.adapters.youtube.factory",
     "app.adapters.llm.factory",
     "app.adapters.search.tavily",
+    "app.services.competitors.site_fetcher",
     "app.adapters.embeddings",
     "app.adapters.freshness.arxiv",
     "app.adapters.freshness.gdelt",
@@ -36,7 +37,11 @@ REGISTRATION_MODULES: tuple[str, ...] = (
     "app.services.recommend.recommenders.base",
     "app.services.refresh.gates",
     "app.pipeline.stages.youtube",
-    "app.pipeline.stages.website",
+    "app.pipeline.stages.website_intel",
+    "app.pipeline.stages.niche",
+    "app.pipeline.stages.topic_seed",
+    "app.pipeline.setup_confirmer",
+    "app.pipeline.maintenance",
     "app.pipeline.stages.competitors",
     "app.pipeline.stages.topics",
     "app.pipeline.stages.analytics",
@@ -45,6 +50,8 @@ REGISTRATION_MODULES: tuple[str, ...] = (
     "app.pipeline.stages.refresh",
     "app.pipeline.stages.cards",
     "app.pipeline.stages.evaluation",
+    "app.evaluation.registrations",
+    "app.api.services_impl",
 )
 
 
