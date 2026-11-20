@@ -9,7 +9,7 @@ from app.api.envelopes import ActiveResult, active_result, envelope
 from app.api.errors import PROBLEM_RESPONSES, Forbidden
 from app.api.pagination import Page, PageRequest
 from app.api.presenters import present_run
-from app.api.schemas.common import ResultEnvelope, WindowDays
+from app.api.schemas.common import QueryWindowDays, ResultEnvelope
 from app.api.schemas.results import (
     CompetitorDetail,
     CompetitorSheet,
@@ -17,6 +17,7 @@ from app.api.schemas.results import (
     EarlySignalView,
     FeedbackIn,
     FeedbackOut,
+    GapMatrixData,
     HygieneData,
     NewsOpportunityView,
     OutlierRow,
@@ -50,7 +51,7 @@ from app.pipeline.runs import RunRequest
 
 router = APIRouter(tags=["results"], responses=PROBLEM_RESPONSES)
 
-Window = Annotated[WindowDays | None, Query()]
+Window = Annotated[QueryWindowDays | None, Query()]
 Cursor = Annotated[str | None, Query()]
 Limit = Annotated[int, Query(ge=1, le=100)]
 CreatorSortParam = Literal[
@@ -223,6 +224,20 @@ async def analytics_topics(
     service = state.service(ANALYTICS)
     active = await _published(state, scope, window_days)
     return _wrap(state, await service.topics(scope, active.run_id, active.window_days), active)
+
+
+@router.get(
+    "/clients/{client_id}/analytics/gaps",
+    operation_id="analytics_gaps",
+    response_model=ResultEnvelope[GapMatrixData],
+    dependencies=[Depends(only_params("window_days"))],
+)
+async def analytics_gaps(
+    state: State, scope: ClientScope, window_days: Window = None
+) -> ResultEnvelope[GapMatrixData]:
+    service = state.service(ANALYTICS)
+    active = await _published(state, scope, window_days)
+    return _wrap(state, await service.gaps(scope, active.run_id, active.window_days), active)
 
 
 @router.get(

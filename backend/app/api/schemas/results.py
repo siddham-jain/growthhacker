@@ -81,14 +81,37 @@ class TopicCoverage(BaseModel):
     client: GapCell | None = None
 
 
+class OwnSide(BaseModel):
+    # the client's own channel over the same window, for side-by-side reading; raw stats only
+    channel: ChannelRef
+    scorecard: ChannelScorecard
+    cadence_series: list[CadencePoint] = []
+
+
 class CompetitorDetail(BaseModel):
     channel: ChannelRef
     scorecard: ChannelScorecard
+    own: OwnSide | None = None
     cadence_series: list[CadencePoint] = []
     top_outliers: list[OutlierRow] = Field(default=[], max_length=10)
     trait_lift: list[TraitLift] = []
     topic_coverage: list[TopicCoverage] = []
     collaborations: list[CollabMention] = []
+
+
+class GapRow(BaseModel):
+    topic_ref_id: str
+    label: str
+    kind: str
+
+
+class GapMatrixData(BaseModel):
+    # counts only: rows are topic refs, columns the tracked channels; no score, no rank
+    rows: list[GapRow]
+    channels: list[ChannelRef]
+    cells: dict[str, dict[str, GapCell]]
+    own_channel: ChannelRef | None = None
+    own: dict[str, GapCell] = {}
 
 
 class TrendingData(BaseModel):

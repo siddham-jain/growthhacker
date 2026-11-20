@@ -83,6 +83,10 @@ class OpsQuotaOut(BaseModel):
     queues: list[QueueView] = []
 
 
+class ConnectOut(BaseModel):
+    authorization_url: str
+
+
 class BacktestCreate(ApiModel):
     client_id: str
     frozen_at: AwareDatetime

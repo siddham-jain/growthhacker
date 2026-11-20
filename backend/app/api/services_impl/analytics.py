@@ -12,8 +12,11 @@ from app.api.schemas.results import (
     CadencePoint,
     CompetitorDetail,
     CompetitorSheet,
+    GapMatrixData,
+    GapRow,
     OutlierRow,
     OwnPerformanceData,
+    OwnSide,
     TopicCoverage,
     TopicSummary,
     TrendingData,
@@ -28,17 +31,20 @@ from app.api.services_impl.common import (
     summary_or_bare,
     video_summaries,
 )
+from app.api.services_impl.own_figures import own_scorecard
 from app.api.services_impl.profile import ProfileEdits, ProfileMissing
 from app.core.container import Container
 from app.core.tenancy import TenantScope
 from app.domain.analytics import ChannelScorecard, LiftScope, OutlierRecord, TraitLift
 from app.domain.common import ChannelRole
+from app.domain.topics import TopicKind
 from app.models.runs import PipelineRun
 from app.models.topics import TopicReviewItem
 from app.models.youtube_cache import YtVideo
 from app.pipeline.contracts import RunConfigSnapshot
 from app.pipeline.stages.analytics import ANALYTICS_RESULT
 from app.services.analytics.result import AnalyticsResult, WindowAnalytics
+from app.services.analytics.settings import AnalyticsEngineSettings
 
 SCOPE_KEYS: dict[str, LiftScope] = {
     "own": LiftScope.own,
@@ -193,11 +199,43 @@ class AnalyticsReadService(ServiceBase):
         return CompetitorDetail(
             channel=refs[channel_id],
             scorecard=card,
+            own=await self._own_side(run_id, window, result, window_days),
             cadence_series=await self._cadence(channel_id, result, window_days),
             top_outliers=await self._outlier_rows(unique),
             trait_lift=card.top_traits,
             topic_coverage=coverage,
             collaborations=card.collaborations,
+        )
+
+    async def _own_side(
+        self, run_id: UUID, window: WindowAnalytics, result: AnalyticsResult, window_days: int
+    ) -> OwnSide | None:
+        snapshot = await self._snapshot(run_id)
+        channel_id = window.own_report.channel_id if window.own_report else None
+        channel_id = channel_id or (snapshot.own_channel_id if snapshot else None)
+        if channel_id is None:
+            return None
+        async with self.session_factory() as session:
+            published = list(
+                (
+                    await session.execute(
+                        select(YtVideo.published_at).where(
+                            YtVideo.channel_id == channel_id, YtVideo.published_at <= result.as_of
+                        )
+                    )
+                ).scalars()
+            )
+        ref = (await channel_refs(self.session_factory, [channel_id], lambda _: True))[channel_id]
+        card = own_scorecard(
+            result,
+            window,
+            channel_id,
+            ref.subscriber_count,
+            published,
+            AnalyticsEngineSettings.from_settings(self.settings),
+        )
+        return OwnSide(
+            channel=ref, scorecard=card, cadence_series=await self._cadence(channel_id, result, window_days)
         )
 
     @staticmethod
@@ -332,6 +370,40 @@ class AnalyticsReadService(ServiceBase):
                 )
             )
         return summaries
+
+    async def gaps(self, scope: TenantScope, run_id: UUID, window_days: int) -> GapMatrixData:
+        _, window = await self._window(scope, run_id, window_days)
+        snapshot = await self._snapshot(run_id)
+        refs = (
+            [ref for ref in snapshot.topic_refs if ref.kind is TopicKind.buyer_question] if snapshot else []
+        )
+        tracked = [card for card in window.scorecards if card.role is ChannelRole.competitor]
+        own_id = window.own_report.channel_id if window.own_report else None
+        own_id = own_id or (snapshot.own_channel_id if snapshot else None)
+        names = await channel_refs(self.session_factory, [card.channel_id for card in tracked])
+        channels = sorted(names.values(), key=lambda ref: (ref.title or ref.channel_id).casefold())
+        cells = window.gap_matrix.cells
+        own_channel = None
+        if own_id is not None:
+            own_channel = (await channel_refs(self.session_factory, [own_id], lambda _: True))[own_id]
+        return GapMatrixData(
+            rows=[GapRow(topic_ref_id=ref.id, label=ref.label, kind=ref.kind.value) for ref in refs],
+            channels=channels,
+            cells={
+                ref.id: {
+                    channel.channel_id: cell
+                    for channel in channels
+                    if (cell := cells.get(ref.id, {}).get(channel.channel_id)) is not None
+                }
+                for ref in refs
+            },
+            own_channel=own_channel,
+            own={
+                ref.id: cell
+                for ref in refs
+                if own_id is not None and (cell := cells.get(ref.id, {}).get(own_id)) is not None
+            },
+        )
 
     async def _review_flags(self, scope: TenantScope) -> Counter[str]:
         async with self.session_factory() as session:

@@ -1,19 +1,17 @@
-import json
-import secrets
 from datetime import date, datetime
 from typing import Annotated
-from urllib.parse import urlencode
-from uuid import UUID
+from urllib.parse import parse_qs, urlencode, urlparse
 
 from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.api import ids
 from app.api.deps import Access, ClientScope, Owner, State, WorkspaceScope, limited, require_role
-from app.api.errors import PROBLEM_RESPONSES, AppError, NotFound, OAuthStateInvalid
+from app.api.errors import PROBLEM_RESPONSES, Forbidden, NotFound
 from app.api.pagination import Page, PageRequest
 from app.api.schemas.admin import (
     BacktestCreate,
+    ConnectOut,
     LabelIn,
     LabelOut,
     OpsQuotaOut,
@@ -39,8 +37,13 @@ public_router = APIRouter(responses=PROBLEM_RESPONSES)
 Editor = Depends(require_role(Role.editor))
 
 
-def _state_key(state: ApiState, token: str) -> str:
-    return f"{state.settings.redis.key_prefix}:oauth_state:{token}"
+def _return_key(state: ApiState, token: str) -> str:
+    # which client the browser returns to; 02 keeps the pkce state itself under its own key
+    return f"{state.settings.redis.key_prefix}:oauth_return:{token}"
+
+
+def _frontend(state: ApiState, path: str, **params: str) -> RedirectResponse:
+    return RedirectResponse(f"{state.settings.api.frontend_url}{path}?{urlencode(params)}", status_code=302)
 
 
 async def _client_in_workspace(state: ApiState, scope: TenantScope, client_id: str) -> TenantScope:
@@ -56,6 +59,7 @@ async def _client_in_workspace(state: ApiState, scope: TenantScope, client_id: s
     "/integrations/youtube/connect",
     tags=["integrations"],
     operation_id="integrations_youtube_connect",
+    response_model=ConnectOut,
     dependencies=[Editor, Depends(limited("oauth"))],
 )
 async def integrations_youtube_connect(
@@ -67,20 +71,13 @@ async def integrations_youtube_connect(
 ) -> Response:
     service = state.service(YOUTUBE_OAUTH)
     client_scope = await _client_in_workspace(state, scope, client_id)
-    token = secrets.token_urlsafe(32)
-    # single use, ten minutes: the callback consumes it with GETDEL
+    if context.user_id is None:
+        raise Forbidden("connect YouTube from a signed-in session, not with an API key")
+    url = await service.start(client_scope, context.user_id)
+    token = parse_qs(urlparse(url).query).get("state", [""])[0]
     await state.container.redis.set(
-        _state_key(state, token),
-        json.dumps(
-            {
-                "workspace_id": str(client_scope.workspace_id),
-                "client_id": str(client_scope.client_id),
-                "user_id": None if context.user_id is None else str(context.user_id),
-            }
-        ),
-        ex=state.settings.api.oauth_state_ttl_s,
+        _return_key(state, token), client_id, ex=state.settings.api.oauth_state_ttl_s
     )
-    url = service.authorization_url(client_scope, token)
     if redirect:
         return RedirectResponse(url, status_code=302)
     return JSONResponse({"authorization_url": url})
@@ -90,23 +87,23 @@ async def integrations_youtube_connect(
     "/integrations/youtube/callback", tags=["integrations"], operation_id="integrations_youtube_callback"
 )
 async def integrations_youtube_callback(
-    state: State, code: str, state_token: Annotated[str, Query(alias="state")]
+    state: State,
+    state_token: Annotated[str, Query(alias="state", max_length=200)],
+    code: Annotated[str | None, Query(max_length=2000)] = None,
+    error: Annotated[str | None, Query(max_length=200)] = None,
 ) -> Response:
     service = state.service(YOUTUBE_OAUTH)
-    raw = await state.container.redis.getdel(_state_key(state, state_token))
+    raw = await state.container.redis.getdel(_return_key(state, state_token))
     if raw is None:
-        raise OAuthStateInvalid("the connection link expired or was already used")
-    claims = json.loads(raw)
-    scope = TenantScope(workspace_id=UUID(claims["workspace_id"]), client_id=UUID(claims["client_id"]))
-    user_id = None if claims.get("user_id") is None else UUID(claims["user_id"])
-    target = f"{state.settings.api.frontend_url}/clients/{ids.encode(ids.CLIENT, scope.client_id)}"
-    try:
-        await service.complete(scope, code, user_id)
-    except AppError as error:
-        return RedirectResponse(
-            f"{target}?{urlencode({'oauth': 'error', 'reason': error.code})}", status_code=302
-        )
-    return RedirectResponse(f"{target}?oauth=connected", status_code=302)
+        return _frontend(state, "/", oauth="error", reason="invalid_state")
+    target = f"/c/{raw.decode() if isinstance(raw, bytes) else raw}/settings"
+    if error is not None or code is None:
+        # the user declined on google's consent screen; 02's pending state simply expires
+        return _frontend(state, target, tab="integrations", oauth="error", reason="access_denied")
+    outcome = await service.complete(state_token, code)
+    if outcome.status != "connected":
+        return _frontend(state, target, tab="integrations", oauth="error", reason=outcome.status)
+    return _frontend(state, target, tab="integrations", oauth="connected")
 
 
 @router.delete(

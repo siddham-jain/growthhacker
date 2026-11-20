@@ -18,6 +18,7 @@ from app.api.schemas.results import (
     CreatorsData,
     EarlySignalView,
     FeedbackIn,
+    GapMatrixData,
     HygieneData,
     NewsOpportunityView,
     OutlierRow,
@@ -29,7 +30,14 @@ from app.api.schemas.results import (
     TrendingData,
     VideoRow,
 )
-from app.api.schemas.settings import LLMSettingsIn, LLMSettingsOut
+from app.api.schemas.settings import (
+    LLMSettingsIn,
+    LLMSettingsOut,
+    LLMTestOut,
+    NotificationSettingsOut,
+    NotificationSettingsPatch,
+    ProviderName,
+)
 from app.api.schemas.setup import (
     BusinessProfileView,
     BuyerQuestionCreate,
@@ -64,6 +72,7 @@ YOUTUBE_OAUTH = "youtube_oauth"
 EVALUATION = "evaluation"
 OPS = "ops"
 SETTINGS = "settings"
+NOTIFICATIONS = "notifications"
 
 TopicRefKind = Literal["keyword", "buyer_question"]
 AnalyticsScope = Literal["own", "competitors", "niche"]
@@ -165,6 +174,9 @@ class AnalyticsService(Protocol):
 
     async def topics(self, scope: TenantScope, run_id: UUID, window_days: int) -> list[TopicSummary]: ...
 
+    # buyer questions x tracked channels, counts only (06 gap matrix)
+    async def gaps(self, scope: TenantScope, run_id: UUID, window_days: int) -> GapMatrixData: ...
+
 
 @dataclass(frozen=True)
 class RecommendationFilters:
@@ -249,13 +261,19 @@ class CreatorService(Protocol):
     ) -> CreatorsData: ...
 
 
+@dataclass(frozen=True)
+class OAuthOutcome:
+    status: Literal["connected", "channel_mismatch", "no_channel", "invalid_state", "failed"]
+    message: str | None = None
+
+
 class YouTubeOAuthService(Protocol):
-    # the api owns the single-use state; 02 owns google, tokens and the ownership check
-    def authorization_url(self, scope: TenantScope, state: str) -> str: ...
+    # 02 owns google, pkce state, tokens and the ownership check; the api maps results to redirects
+    async def start(self, scope: TenantScope, user_id: UUID) -> str: ...
 
-    async def complete(self, scope: TenantScope, code: str, user_id: UUID | None) -> None: ...
+    async def complete(self, state: str, code: str) -> OAuthOutcome: ...
 
-    async def disconnect(self, scope: TenantScope) -> None: ...
+    async def disconnect(self, scope: TenantScope) -> bool: ...
 
 
 class EvaluationService(Protocol):
@@ -289,3 +307,12 @@ class SettingsService(Protocol):
     async def llm(self, scope: TenantScope) -> LLMSettingsOut: ...
 
     async def put_llm(self, scope: TenantScope, body: LLMSettingsIn) -> LLMSettingsOut: ...
+
+    async def test(self, scope: TenantScope, provider: ProviderName | None) -> LLMTestOut: ...
+
+
+class NotificationService(Protocol):
+    # per-client delivery choices, stored ahead of an email sender
+    async def get(self, scope: TenantScope) -> NotificationSettingsOut: ...
+
+    async def patch(self, scope: TenantScope, body: NotificationSettingsPatch) -> NotificationSettingsOut: ...

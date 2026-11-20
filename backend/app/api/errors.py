@@ -104,6 +104,9 @@ NotImplementedYet = _error(
     "NotImplementedYet", 501, "not_implemented", "This capability is not available yet"
 )
 Unavailable = _error("Unavailable", 503, "unavailable", "A dependency is unavailable")
+IntegrationNotConfigured = _error(
+    "IntegrationNotConfigured", 503, "integration_not_configured", "This integration is not configured"
+)
 
 
 def _request_id(request: Request) -> str:

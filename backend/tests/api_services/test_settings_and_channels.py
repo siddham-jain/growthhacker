@@ -25,7 +25,7 @@ async def test_llm_keys_are_write_only_and_override_the_environment(harness: Har
     path = "/api/v1/settings/llm"
     before = (await harness.client.get(path, headers=owner.headers)).json()
     assert before["providers"]["anthropic"]["api_key_set"] is False
-    assert before["providers"]["anthropic"]["models"]["low"] == "claude-haiku-4-5"
+    assert before["providers"]["anthropic"]["tiers"]["low"]["model"] == "claude-haiku-4-5"
 
     body = {
         "provider_order": ["openai_compat", "anthropic"],
@@ -33,7 +33,7 @@ async def test_llm_keys_are_write_only_and_override_the_environment(harness: Har
             "openai_compat": {
                 "base_url": "https://gateway.example.com/v1",
                 "api_key": SECRET,
-                "models": {"low": "small-model", "medium": "mid-model"},
+                "tiers": {"low": {"model": "small-model"}, "medium": {"model": "mid-model"}},
             }
         },
     }
@@ -42,7 +42,11 @@ async def test_llm_keys_are_write_only_and_override_the_environment(harness: Har
     assert SECRET not in saved.text
     fallback = saved.json()["providers"]["openai_compat"]
     assert fallback["api_key_set"] and fallback["api_key_source"] == "workspace" and fallback["configured"]
-    assert fallback["models"] == {"low": "small-model", "medium": "mid-model", "high": None}
+    assert [fallback["tiers"][tier]["model"] for tier in ("low", "medium", "high")] == [
+        "small-model",
+        "mid-model",
+        None,
+    ]
     assert SECRET not in (await harness.client.get(path, headers=owner.headers)).text
 
     effective = await harness.state.service(SETTINGS).effective(owner.scope.workspace_id)

@@ -38,6 +38,24 @@ STATUS_FILTER = {
     "dismissed": (RefreshStatus.dismissed,),
 }
 MAX_DIFF_CHARS = 20_000
+# why a suggestion exists, in the words the card shows; unknown kinds fall back to their name
+TRIGGER_REASONS = {
+    "missing_cta": "No booking link or call to action",
+    "missing_contact": "No phone number or contact link",
+    "missing_chapters": "No chapters",
+    "missing_hashtags": "No hashtags",
+    "missing_disclaimer": "No medical disclaimer",
+    "broken_link": "A link in the description is broken",
+    "stale_year": "Mentions a past year",
+    "news_entity": "In the news",
+    "buyer_question_gap": "Answers a buyer question",
+    "above_fold_keyword": "Keyword missing from the first lines",
+}
+
+
+def reason(kind: str, keyword: str | None) -> str:
+    text = TRIGGER_REASONS.get(kind, kind.replace("_", " "))
+    return f"{text}: {keyword}" if keyword else text
 
 
 class RefreshNotOpen(AppError):
@@ -93,10 +111,7 @@ class RefreshReadService(ServiceBase):
                         url=video_url(row.video_id),
                     ),
                     basis=basis_of(refresh),  # type: ignore[arg-type]
-                    warranted_because=[
-                        trigger.kind.replace("_", " ") + (f": {trigger.keyword}" if trigger.keyword else "")
-                        for trigger in refresh.triggers
-                    ],
+                    warranted_because=[reason(trigger.kind, trigger.keyword) for trigger in refresh.triggers],
                     operations=refresh.operations,
                     advisories=refresh.advisories,
                     inserted_bytes=refresh.inserted_bytes,

@@ -1,11 +1,27 @@
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import AfterValidator, AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import (
+    AfterValidator,
+    AwareDatetime,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    StringConstraints,
+)
 
 from app.domain.runs import RunNotice
 
 WindowDays = Literal[7, 30, 90]
+
+
+def _query_int(value: object) -> object:
+    # query strings arrive as text and literal ints never coerce, so "30" must become 30 first
+    return int(value) if isinstance(value, str) and value.isdigit() else value
+
+
+QueryWindowDays = Annotated[WindowDays, BeforeValidator(_query_int)]
 
 
 def _valid_timezone(value: str) -> str:
