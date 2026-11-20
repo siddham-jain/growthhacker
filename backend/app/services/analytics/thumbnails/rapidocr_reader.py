@@ -6,7 +6,16 @@ import numpy as np
 from app.core.registry import adapter_registry
 from app.services.analytics.thumbnails.text import ScriptHint, TextBox
 
-DEVANAGARI_PARAMS = {"Rec.lang_type": "devanagari", "Rec.ocr_version": "PP-OCRv5", "Rec.model_type": "mobile"}
+
+def devanagari_params() -> dict[str, Any]:
+    # rapidocr 3.10+ rejects plain strings for these keys; it wants its own enums
+    from rapidocr import LangRec, ModelType, OCRVersion
+
+    return {
+        "Rec.lang_type": LangRec.DEVANAGARI,
+        "Rec.ocr_version": OCRVersion.PPOCRV5,
+        "Rec.model_type": ModelType.MOBILE,
+    }
 
 
 class RapidOcrReader:
@@ -27,7 +36,7 @@ class RapidOcrReader:
             if script not in self._engines:
                 params: dict[str, Any] = {"Global.log_level": "error", "Global.text_score": 0.0}
                 if script == "devanagari":
-                    params |= DEVANAGARI_PARAMS
+                    params |= devanagari_params()
                 self._engines[script] = self._factory(params=params)
             return self._engines[script]
 
