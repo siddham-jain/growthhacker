@@ -49,6 +49,8 @@ class OwnershipEvidence:
     channel: ChannelRecord
     hint: BusinessHint
     recent_descriptions: Sequence[str]
+    # "kind:name" refs (legacy username, custom url) the api resolved to this channel
+    aliases: frozenset[str] = frozenset()
 
 
 class OwnershipThresholds(Protocol):
@@ -89,15 +91,18 @@ class OwnershipSignalProvider(Protocol):
 ownership_signal_registry: Registry[OwnershipSignalProvider] = Registry("youtube_ownership_signals")
 
 
-def link_points_to(link: str, channel: ChannelRecord) -> bool | None:
-    """true if a site link names this channel, false if it names another channel, none if it is not a channel link."""
+def link_points_to(link: str, channel: ChannelRecord, aliases: frozenset[str] = frozenset()) -> bool | None:
+    """true if a site link names this channel, false if it names another channel, none if it cannot tell."""
     ref = _PARSER.parse(link)
     if ref.kind == "channel_id":
         return ref.value == channel.channel_id
-    if ref.kind in ("handle", "custom_url", "username"):
-        handle = (channel.handle or "").lstrip("@").casefold()
-        return bool(handle) and ref.value.casefold() == handle
-    return None
+    if ref.kind not in ("handle", "custom_url", "username"):
+        return None
+    name = ref.value.casefold()
+    if f"{ref.kind}:{name}" in aliases or name == (channel.handle or "").lstrip("@").casefold():
+        return True
+    # a legacy /user/ or /c/ name differs from the handle, so a mismatch proves nothing
+    return False if ref.kind == "handle" else None
 
 
 @ownership_signal_registry.register("site_links_channel")
@@ -106,13 +111,13 @@ class SiteLinksChannel:
     def signals(
         self, evidence: OwnershipEvidence, weights: YouTubeOwnershipSettings
     ) -> list[OwnershipSignal]:
-        hint, channel = evidence.hint, evidence.channel
+        hint, channel, aliases = evidence.hint, evidence.channel, evidence.aliases
         found = []
         for name, links in (
             ("site_links_channel", hint.site_channel_links),
             ("jsonld_sameas", hint.site_sameas_links),
         ):
-            hits = [link for link in links if link_points_to(link, channel)]
+            hits = [link for link in links if link_points_to(link, channel, aliases)]
             if hits:
                 found.append(
                     OwnershipSignal(
@@ -135,7 +140,7 @@ class SiteLinksChannel:
         others = [
             link
             for link in [*hint.site_channel_links, *hint.site_sameas_links]
-            if link_points_to(link, channel) is False
+            if link_points_to(link, channel, aliases) is False
         ]
         if others:
             return [
@@ -277,13 +282,20 @@ class OwnershipVerifier:
         rows = await self._store.channel_videos(channel.channel_id)
         return [row.description or "" for row in rows[:50]]
 
-    async def assess(self, channel: ChannelRecord, hint: BusinessHint) -> OwnershipVerdict:
+    async def assess(
+        self, channel: ChannelRecord, hint: BusinessHint, *, aliases: Sequence[str] = ()
+    ) -> OwnershipVerdict:
         if hint.oauth_channel_id == channel.channel_id:
             signal = OwnershipSignal(name="oauth", weight=1.0, detail="owner signed in with this channel")
             return OwnershipVerdict(
                 label=OwnershipLabel.verified, method="oauth", score=1.0, signals=[signal]
             )
-        evidence = OwnershipEvidence(channel, hint, await self._recent_descriptions(channel))
+        evidence = OwnershipEvidence(
+            channel,
+            hint,
+            await self._recent_descriptions(channel),
+            frozenset(alias.casefold() for alias in aliases),
+        )
         return self.verdict(
             [signal for p in self._providers for signal in p.signals(evidence, self._settings)]
         )

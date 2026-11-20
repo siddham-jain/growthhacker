@@ -55,7 +55,9 @@ class ChannelResolver:
         needs_confirmation = method == "custom_url_search"
         ownership = None
         if hint is not None and self._verifier is not None:
-            ownership = await self._verifier.assess(channel, hint)
+            # a name the api resolved to this channel is the channel, even when it is not its handle
+            aliases = [f"{ref.kind}:{ref.value}"] if method in ("username", "handle") else []
+            ownership = await self._verifier.assess(channel, hint, aliases=aliases)
             needs_confirmation = needs_confirmation or ownership.label.value != "verified"
             if ownership.label.value == "rejected":
                 message = messages.ownership_mismatch(

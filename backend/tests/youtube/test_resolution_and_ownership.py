@@ -185,3 +185,28 @@ async def test_search_match_needs_an_exact_custom_url_and_confirmation() -> None
     )
     assert resolution.channel.channel_id == APOLLO_247
     assert resolution.method == "custom_url_search" and resolution.needs_user_confirmation
+
+
+async def test_legacy_username_link_resolved_to_the_channel_counts_as_the_site_link() -> None:
+    gateway = apollo_gateway()
+    legacy = "https://www.youtube.com/user/apollohospitals"
+    hint = BusinessHint(
+        website_domain="apollohospitals.com",
+        country="US",
+        site_channel_links=[legacy],
+        site_identity_confirmed=True,
+    )
+    resolution = await resolver(gateway).resolve(legacy, CTX, hint=hint)
+    assert resolution.method == "username"
+    assert resolution.ownership.label is OwnershipLabel.verified
+    assert "site_links_other_channel" not in {signal.name for signal in resolution.ownership.signals}
+
+
+async def test_unresolved_legacy_username_link_is_not_another_channel() -> None:
+    hint = SITE.model_copy(update={"site_channel_links": ["https://www.youtube.com/user/SomeOldName"]})
+    verdict = await verifier().assess(APOLLO_CHANNEL, hint)
+    assert "site_links_other_channel" not in {signal.name for signal in verdict.signals}
+    other = SITE.model_copy(update={"site_channel_links": ["https://www.youtube.com/@SomeoneElse"]})
+    assert "site_links_other_channel" in {
+        s.name for s in (await verifier().assess(APOLLO_CHANNEL, other)).signals
+    }

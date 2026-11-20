@@ -7,6 +7,7 @@ from app.core.container import Container
 from app.core.registry import UnknownRegistrationError
 from app.core.tenancy import TenantScope
 from app.domain.youtube import ChannelRecord, OwnershipLabel, OwnershipVerdict, QuotaPriority
+from app.models.tenancy import Client
 from app.ports.youtube import RequestContext
 from app.services.youtube.ownership import BusinessHint
 from app.services.youtube.resolve import SearchAllowance
@@ -36,6 +37,21 @@ def candidate(
     )
 
 
+def onboarding_verdict(client: Client, channel_id: str) -> OwnershipVerdict | None:
+    """the verdict onboarding stored for its proposed channel; it saw the site's links, this lookup does not."""
+    if client.own_channel_id != channel_id:
+        return None
+    for entry in client.own_channel_verification or []:
+        if isinstance(entry, dict) and entry.get("label") and "signals" in entry:
+            return OwnershipVerdict(
+                label=entry["label"],
+                method="link" if entry.get("verified_by") == "website_link" else None,
+                score=entry.get("score") or 0.0,
+                signals=entry["signals"],
+            )
+    return None
+
+
 class ChannelResolveService(ServiceBase):
     """02's resolver with the client's site as the ownership hint; it never attaches a channel itself."""
 
@@ -53,8 +69,9 @@ class ChannelResolveService(ServiceBase):
         )
         candidates = []
         if resolution.channel is not None:
-            notes = [resolution.message] if resolution.message else []
-            candidates.append(candidate(resolution.channel, resolution.ownership, notes))
+            stored = onboarding_verdict(client, resolution.channel.channel_id)
+            notes = [resolution.message] if resolution.message and stored is None else []
+            candidates.append(candidate(resolution.channel, stored or resolution.ownership, notes))
         seen = {item.channel.channel_id for item in candidates}
         for channel in resolution.candidates:
             if channel.channel_id not in seen:

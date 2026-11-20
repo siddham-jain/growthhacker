@@ -10,6 +10,7 @@ from app.domain.youtube import (
     OwnershipSignal,
     OwnershipVerdict,
 )
+from app.models.tenancy import Client
 from app.services.youtube.input_parser import InputParser
 from tests.api.conftest import Harness
 from tests.api_services.conftest import tenant
@@ -150,3 +151,44 @@ async def test_channel_resolve_reports_ownership_and_attach_verifies_the_pick(ha
     )
     assert detached.json()["own_channel"] is None
     assert json.loads(detached.headers["etag"]) > json.loads(attached.headers["etag"])
+
+
+async def test_channel_resolve_shows_onboarding_evidence_for_the_proposed_channel(harness: Harness) -> None:
+    owner = await tenant(harness, "chanlikely")
+    async with harness.container.session_factory() as session, session.begin():
+        client = await session.get(Client, owner.scope.client_id)
+        client.own_channel_id, client.own_channel_status = CHANNEL, "proposed"
+        client.own_channel_verification = [
+            {
+                "verified_by": None,
+                "label": "likely",
+                "score": 0.5,
+                "signals": [
+                    {
+                        "name": "site_links_channel",
+                        "weight": 0.5,
+                        "detail": "official site links to https://www.youtube.com/user/apollo",
+                        "source_url": "https://www.youtube.com/user/apollo",
+                    }
+                ],
+            }
+        ]
+    fresh = OwnershipVerdict(label=OwnershipLabel.rejected, method=None, score=0.0, signals=[])
+    resolver = FakeResolver(
+        ChannelResolution(
+            input=InputParser().parse(CHANNEL),
+            channel=channel(CHANNEL, "Apollo Hospitals"),
+            method="id",
+            ownership=fresh,
+            needs_user_confirmation=True,
+            message="doesn't link to apollohospitals.com",
+        )
+    )
+    harness.container.override("youtube_data_layer", FakeDataLayer(resolver))
+    response = await harness.client.post(
+        f"{owner.path}/channel/resolve", json={"channel_ref": CHANNEL}, headers=owner.headers
+    )
+    assert response.status_code == 200, response.text
+    [only] = response.json()["candidates"]
+    assert only["confidence"] == "medium"
+    assert only["ownership_evidence"] == ["official site links to https://www.youtube.com/user/apollo"]
