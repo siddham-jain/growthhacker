@@ -1,0 +1,54 @@
+# versioned matching lexicons; any edit changes lexicon_hash and therefore preparer/engine versions
+version: 1
+
+stopwords:
+  en: [a, an, the, is, are, was, were, be, been, being, am, do, does, did, done, how, much, many, what,
+       which, who, whom, whose, why, when, where, can, could, should, would, will, shall, may, might,
+       must, i, me, my, we, our, you, your, he, she, it, its, they, them, their, this, that, these,
+       those, of, in, on, at, to, for, from, by, with, about, as, into, than, then, there, here, and,
+       or, but, if, so, not, no, yes, all, any, some, more, most, very, just, also, get, got, need,
+       needs, really, after, before, during, over, under, up, down, out, off, one, ever, every, like,
+       let, us, vs, via, per, know, things]
+  hi: [का, की, के, है, हैं, था, थी, थे, में, मे, और, से, को, पर, क्या, कैसे, कितना, कितने, कितनी, होता,
+       होती, होते, हो, यह, ये, वह, वो, इस, उस, एक, भी, तो, ही, लिए, जब, तक, कब, क्यों, कौन, कहाँ, आप,
+       अपने, हम, मैं, ना, न, नहीं, बाद, पहले, साथ, करें, करना, करने, करे, जाता, जाती, जाते, सकता, सकते]
+  hi-Latn: [ka, ki, ke, hai, hain, tha, thi, the, mein, me, aur, se, ko, par, kya, kaise, kaisa, kitna,
+            kitne, kitni, hota, hoti, hote, ho, yah, ye, yeh, vah, wo, woh, is, us, ek, bhi, to, hi,
+            liye, jab, tak, kab, kyun, kyon, kaun, kahan, aap, apne, hum, main, na, nahi, nahin, baad,
+            pehle, saath, kare, karen, karna, karne, jata, jati, jate, sakta, sakte]
+
+question_words:
+  en: [what, how, why, when, who, can, is, should, which, where, does, do, are, will]
+  hi: [क्या, कैसे, कितना, कितने, कितनी, क्यों, कब, कौन, कहाँ]
+  hi-Latn: [kya, kaise, kitna, kitne, kitni, kyun, kyon, kab, kaun, kahan]
+
+hinglish_function_words: [hai, ka, ki, ke, kya, kaise, kitna, kitne, mein, me, aur, nahi, bina, liye]
+
+negation:
+  en: [not, no, never, without, "isn't", "doesn't", "don't", "can't", cannot, myth, myths]
+  hi: [नहीं, ना, बिना, मत]
+  hi-Latn: [nahi, nahin, na, bina, mat]
+
+generic:
+  en: [health, healthy, doctor, doctors, hospital, hospitals, clinic, clinics, medical, medicine,
+       video, videos, tips, tip, treatment, treatments, care, best, top, new, latest, live, episode,
+       part, full, info, information, news, update, updates, india, indian, talk, show, podcast,
+       interview, guide, review, reviews, problem, problems, disease, patient, patients, expert,
+       experts, specialist, centre, center, service, services, solution, solutions, tool, tools,
+       app, apps, software, platform, online, free, help, life, day, today, home, end, shocking,
+       truth, secret, secrets, amazing, wow, omg, unbelievable, crazy, viral, trending, finally, real,
+       story, happened, watch, must, see, ever, thing, everyone, nobody, part]
+  hi: [स्वास्थ्य, सेहत, डॉक्टर, अस्पताल, इलाज, उपचार, वीडियो, टिप्स, बीमारी, मरीज, समस्या, जानकारी]
+  hi-Latn: [sehat, swasthya, doctor, aspatal, ilaj, ilaaj, upchar, bimari, mareez, samasya, jankari, sach,
+            dekho, zaroor]
+
+# brand-like common words: as a client keyword they need corroboration
+common_words: [max, care, plus, prime, one, go, life, star, sun, global, first, smart, magic, studio, labs,
+               hub, now, pro, ai]
+
+ambiguous_acronyms: [MS, AC, PT, OT, ER, CT, IT, PR, HR, OS, PC]
+healthcare_exempt_acronyms: [CT]
+
+hashtag_words: [the, and, for, of, in, how, to, with, my, your, best, top, tips, cost, price, surgery,
+                treatment, health, india, care, doctor, hospital, free, new, live, video, life, day,
+                pain, ai, tool, tools, app, make, money, online, guide, tutorial, review, vs, near, me]

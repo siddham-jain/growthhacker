@@ -1,0 +1,104 @@
+# facet, intent, promo, cta and specificity cues; phrases are matched on normalised token keys
+version: 1
+
+facets:
+  cost:
+    en: [cost, costs, price, prices, pricing, charges, fee, fees, expense, expensive, cheap, affordable,
+         "how much", budget, rate, rates, plan, plans, subscription]
+    hi: [कीमत, खर्च, खर्चा, दाम, फीस, "कितने का", "कितने की", "कितना खर्च", "कितने रुपये"]
+    hi-Latn: [kharcha, kharch, keemat, kimat, daam, "kitne ka", "kitne ki", "kitna kharcha", "kitne rupaye"]
+  eligibility:
+    en: [eligible, eligibility, criteria, "who can", "who should", candidate, qualify, suitable, "right for"]
+    hi: [पात्र, पात्रता, योग्य, "कौन करा सकता"]
+    hi-Latn: [patrata, yogya, "kaun kara sakta", "kise karana chahiye"]
+  procedure:
+    en: [procedure, process, steps, step, "step by step", technique, method, "how is", "how to", performed,
+         setup, tutorial, workflow]
+    hi: ["कैसे होता", "कैसे होती", प्रक्रिया, तरीका]
+    hi-Latn: ["kaise hota", "kaise hoti", "kaise kare", prakriya, tarika]
+  symptoms:
+    en: [symptom, symptoms, signs, "warning signs", "early signs"]
+    hi: [लक्षण, संकेत]
+    hi-Latn: [lakshan, lakshan, sanket]
+  causes:
+    en: [cause, causes, "why does", reason, reasons, "risk factors"]
+    hi: [कारण, वजह]
+    hi-Latn: [karan, kaaran, wajah, vajah]
+  treatment_options:
+    en: [treatment, treatments, therapy, options, cure, remedy, remedies, medication, medicines]
+    hi: [इलाज, उपचार, दवा, दवाई]
+    hi-Latn: [ilaj, ilaaj, upchar, dawa, dava, dawai]
+  recovery:
+    en: [recovery, recover, rehab, rehabilitation, healing, "back to work", "after surgery"]
+    hi: [रिकवरी, "ठीक होने"]
+    hi-Latn: [recovery, "theek hone", "thik hone"]
+  risks:
+    en: [risk, risks, "side effects", "side effect", complications, safe, safety, danger, dangerous]
+    hi: [जोखिम, खतरा, "साइड इफेक्ट"]
+    hi-Latn: [jokhim, khatra, "side effect"]
+  comparison:
+    en: [vs, versus, compare, comparison, "difference between", better, alternative, alternatives]
+    hi: [तुलना, अंतर, बेहतर]
+    hi-Latn: [tulna, antar, behtar]
+  location:
+    en: ["near me", nearby, "where to", "where can", "where is"]
+    hi: ["मेरे पास", कहाँ]
+    hi-Latn: ["mere paas", "mere pass", kahan]
+  timing:
+    en: [when, "how long", duration, "right time", "best time", "how soon", "how many days"]
+    hi: [कब, "कितने दिन", समय]
+    hi-Latn: [kab, "kitne din", samay]
+  definition:
+    en: ["what is", meaning, definition, "what does"]
+    hi: ["क्या है", "क्या होता", मतलब]
+    hi-Latn: ["kya hai", "kya hota", matlab]
+  booking:
+    en: [book, booking, appointment, consult, consultation, "sign up", signup, demo, "free trial", trial]
+    hi: [बुक, अपॉइंटमेंट, परामर्श]
+    hi-Latn: [appointment, "book kare"]
+
+# applied in this order of precedence when deriving the funnel stage
+facet_stage:
+  decision: [cost, location, booking]
+  consideration: [eligibility, procedure, comparison, treatment_options, risks]
+  awareness: [symptoms, causes, definition, timing]
+  post_purchase: [recovery]
+
+intent:
+  en: [explained, explainer, faq, faqs, "q&a", "doctor answers", "expert answers", "everything you need to know",
+       "all you need to know", "myth vs fact", "myths and facts", "complete guide", tutorial, "how to"]
+  hi: [जानिए, जानें, "सब कुछ"]
+  hi-Latn: [jaaniye, janiye, "sab kuch"]
+
+promo:
+  en: [inaugurates, inaugurated, inauguration, celebrates, celebrating, celebration, award, awards, awarded,
+       felicitation, felicitated, "launch event", webinar, "press conference", milestone, anniversary,
+       congratulations, achievement]
+  hi: [उद्घाटन, सम्मान, समारोह]
+  hi-Latn: [udghatan, samman, samaroh]
+
+cta:
+  en: [subscribe, "follow us", "like and share", "like share", "book an appointment", "book appointment",
+       "call us", "call now", "download the app", "download our app", disclaimer, "for appointments",
+       "contact us", whatsapp, "visit our website", "visit us", "bell icon", "turn on notifications",
+       "hit the bell", "join our", "connect with us", "follow on", "for more information", "for enquiries"]
+  hi: [सब्सक्राइब, "फॉलो करें", "संपर्क करें", "कॉल करें"]
+  hi-Latn: ["subscribe kare", "follow kare", "call kare"]
+
+link_list_prefixes: ["▶", "►", "👉", "watch:", "also watch", "related", "watch more", "must watch", "playlist"]
+
+# regular expressions on normalised text; a match means the facet is covered concretely
+specificity:
+  cost: ['(₹|\brs\.?|\binr\b|\$|usd)\s?\d', '\d+(\.\d+)?\s?(lakh|lakhs|lac|crore|k)\b', '\d\s?(लाख|हजार|रुपये)',
+         'price list', '\d+\s?/\s?(month|mo|year|yr)']
+  eligibility: ['\bage\b', '\d+\s?(years|yrs|saal|साल)', 'criteria', 'who can', '\bkaun\b', 'कौन']
+  procedure: ['\bsteps?\b', '\bprocess\b', 'step by step', 'kaise hota', 'कैसे होता', '\d+\s?steps']
+  recovery: ['\d+\s?(weeks?|days?|months?|din|hafte|mahine|दिन|हफ्ते|महीने)']
+  timing: ['\d+\s?(weeks?|days?|months?|years?|hours?|din|saal|दिन|साल)']
+  risks: ['\d+(\.\d+)?\s?%']
+  comparison: ['\bvs\.?\b', '\bversus\b']
+  symptoms: ['\d+\s?(signs|symptoms|लक्षण)']
+  causes: ['\d+\s?(causes|reasons|कारण)']
+  treatment_options: ['\d+\s?(options|treatments|ways)']
+  definition: ['\bmeaning\b', '\bdefinition\b', 'matlab', 'मतलब']
+  booking: ['\bbook\b', 'appointment']
