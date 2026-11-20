@@ -77,6 +77,22 @@ async def test_site_link_alone_is_only_likely_and_oauth_is_decisive() -> None:
     assert oauth.label is OwnershipLabel.verified and oauth.method == "oauth"
 
 
+async def test_confirmed_official_site_linking_the_channel_is_verified() -> None:
+    one_way = APOLLO_CHANNEL.model_copy(update={"description": "Open every Sunday"})
+    sameas = BusinessHint(
+        website_domain="apollohospitals.com",
+        site_sameas_links=["https://www.youtube.com/@ApolloHospitalsIndia"],
+        site_identity_confirmed=True,
+    )
+    verdict = await verifier().assess(one_way, sameas)
+    assert verdict.label is OwnershipLabel.verified and verdict.method == "link"
+    assert {s.name for s in verdict.signals} == {"jsonld_sameas", "confirmed_site_links_channel"}
+    # confirmation never helps a channel the site does not link, nor an unofficial one
+    assert (await verifier().assess(APOLLO_247_CHANNEL, sameas)).label is OwnershipLabel.rejected
+    fan = one_way.model_copy(update={"description": "Unofficial fan page"})
+    assert (await verifier().assess(fan, sameas)).label is not OwnershipLabel.verified
+
+
 async def test_embed_majority_and_channel_id_links_count() -> None:
     hint = BusinessHint(
         website_domain="apollohospitals.com",

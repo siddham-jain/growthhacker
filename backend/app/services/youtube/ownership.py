@@ -13,6 +13,7 @@ from app.services.youtube.input_parser import InputParser
 from app.services.youtube.store import YouTubeStore
 
 LINK_SIGNALS = frozenset({"site_links_channel", "jsonld_sameas", "embed_majority", "channel_links_site"})
+CONFIRMED_SITE_SIGNAL = "confirmed_site_links_channel"
 DOMAIN = regex.compile(r"(?i)\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b")
 UNOFFICIAL = regex.compile(r"(?i)\b(fan ?(page|channel|made)|unofficial|not affiliated|re-?upload(s|ed)?)\b")
 _EXTRACT = tldextract.TLDExtract(suffix_list_urls=())
@@ -39,6 +40,8 @@ class BusinessHint(BaseModel):
     embed_channel_ids: list[str] = []
     user_asserted_channel_id: str | None = None
     oauth_channel_id: str | None = None
+    # the site itself is confirmed official (user input or a knowledge-base official website, wikidata p856)
+    site_identity_confirmed: bool = False
 
 
 @dataclass(frozen=True)
@@ -46,6 +49,35 @@ class OwnershipEvidence:
     channel: ChannelRecord
     hint: BusinessHint
     recent_descriptions: Sequence[str]
+
+
+class OwnershipThresholds(Protocol):
+    verified_min: float
+    likely_min: float
+    uncertain_min: float
+
+
+def ownership_verdict(signals: list[OwnershipSignal], thresholds: OwnershipThresholds) -> OwnershipVerdict:
+    """the one labelling rule (c38): verified needs a link signal; a confirmed official site linking the channel
+    counts as verified unless penalties pull it below likely."""
+    score = min(1.0, max(0.0, sum(signal.weight for signal in signals)))
+    names = {signal.name for signal in signals}
+    has_link = bool(names & LINK_SIGNALS)
+    if has_link and (
+        score >= thresholds.verified_min
+        or (CONFIRMED_SITE_SIGNAL in names and score >= thresholds.likely_min)
+    ):
+        label, method = OwnershipLabel.verified, "link"
+    elif score >= thresholds.likely_min:
+        label, method = (
+            OwnershipLabel.likely,
+            "user" if "user_asserted" in names else ("link" if has_link else None),
+        )
+    elif score >= thresholds.uncertain_min:
+        label, method = OwnershipLabel.uncertain, "user" if "user_asserted" in names else None
+    else:
+        label, method = OwnershipLabel.rejected, None
+    return OwnershipVerdict(label=label, method=method, score=round(score, 4), signals=signals)
 
 
 class OwnershipSignalProvider(Protocol):
@@ -91,7 +123,15 @@ class SiteLinksChannel:
                     )
                 )
         if found:
-            return found[:1]
+            if not hint.site_identity_confirmed:
+                return found[:1]
+            confirmed = OwnershipSignal(
+                name=CONFIRMED_SITE_SIGNAL,
+                weight=weights.confirmed_site_links_channel,
+                detail="the linking site is the confirmed official website",
+                source_url=found[0].source_url,
+            )
+            return [found[0], confirmed]
         others = [
             link
             for link in [*hint.site_channel_links, *hint.site_sameas_links]
@@ -249,19 +289,4 @@ class OwnershipVerifier:
         )
 
     def verdict(self, signals: list[OwnershipSignal]) -> OwnershipVerdict:
-        weights = self._settings
-        score = min(1.0, max(0.0, sum(signal.weight for signal in signals)))
-        names = {signal.name for signal in signals}
-        has_link = bool(names & LINK_SIGNALS)
-        if score >= weights.verified_min and has_link:
-            label, method = OwnershipLabel.verified, "link"
-        elif score >= weights.likely_min:
-            label, method = (
-                OwnershipLabel.likely,
-                "user" if "user_asserted" in names else ("link" if has_link else None),
-            )
-        elif score >= weights.uncertain_min:
-            label, method = OwnershipLabel.uncertain, "user" if "user_asserted" in names else None
-        else:
-            label, method = OwnershipLabel.rejected, None
-        return OwnershipVerdict(label=label, method=method, score=round(score, 4), signals=signals)
+        return ownership_verdict(signals, self._settings)
