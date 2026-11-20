@@ -165,6 +165,7 @@ class YouTubeCommentSettings(BaseModel):
 
 class YouTubeOwnershipSettings(BaseModel):
     site_links_channel: float = 0.50
+    confirmed_site_links_channel: float = 0.30
     embed_majority: float = 0.30
     channel_links_site: float = 0.40
     uploads_link_site: float = 0.20
@@ -220,7 +221,7 @@ class LLMTierSettings(BaseModel):
     model: str | None = None
     max_tokens: int = 4096
     timeout_s: float = 30
-    max_retries: int = 2
+    max_retries: int = 1
     effort: Effort | None = None
 
 
@@ -354,7 +355,8 @@ class CardWriterSettings(BaseModel):
 
 
 class LLMBudgetSettings(BaseModel):
-    per_call_max_usd: float = 0.10
+    # covers the worst case of 03's profile synthesis (sonnet, 12k output tokens, long fact input)
+    per_call_max_usd: float = 0.40
     onboarding_run_max_usd: float = 1.50
     analysis_run_max_usd: float = 1.50
     daily_refresh_run_max_usd: float = 0.75
@@ -825,6 +827,7 @@ class OwnershipWeights(BaseModel):
     embed_majority: float = 0.30
     channel_links_site: float = 0.40
     uploads_link_site: float = 0.20
+    uploads_brand_reference: float = 0.10
     name_similarity_strong: float = 0.15
     name_similarity_weak: float = 0.05
     websearch_youtube_hit: float = 0.10
@@ -837,7 +840,8 @@ class OwnershipWeights(BaseModel):
     verified_min: float = 0.80
     likely_min: float = 0.50
     uncertain_min: float = 0.20
-    adjudication_min: float = 0.30
+    # a strong name match plus one corroborating signal earns the llm review (never more than likely)
+    adjudication_min: float = 0.25
 
 
 class CompetitorSettings(BaseModel):
@@ -845,6 +849,7 @@ class CompetitorSettings(BaseModel):
     source_caps: CompetitorSourceCaps = CompetitorSourceCaps()
     ownership: OwnershipWeights = OwnershipWeights()
     max_entities_to_resolve: int = 25
+    resolution_reserve_aggregators: int = 2
     max_resolution_searches: int = 3
     max_handle_guesses: int = 3
     max_leads_per_entity: int = 3
@@ -856,7 +861,7 @@ class CompetitorSettings(BaseModel):
     web_search_max_results: int = 8
     hallucination_guard_searches: int = 10
     merge_name_ratio: float = 92
-    niche_queries_for_discovery: int = 6
+    niche_queries_for_discovery: int = 3
     niche_lookback_days: int = 90
     niche_min_query_hits: int = 2
     niche_min_total_hits: int = 4
@@ -867,7 +872,7 @@ class CompetitorSettings(BaseModel):
     youtube_tier_high_overlap: float = 0.25
     youtube_tier_high_activity: float = 0.50
     youtube_tier_medium_overlap: float = 0.10
-    proposal_size: int = 5
+    proposal_size: int = 7
     min_competitors: int = 3
     max_competitors: int = 10
     niche_max: int = 20
@@ -1083,8 +1088,83 @@ class RecommendSettings(BaseModel):
         return RecommendSettings.model_validate(deep_merge(self.model_dump(), overrides))
 
 
+class BacktestSettings(BaseModel):
+    window_days: Literal[7, 30, 90] = 30
+    horizon_days: int = Field(default=10, ge=1)
+    outcome_age_days: int = Field(default=7, ge=1)
+    # 07's per-type card caps (99 C18), so every arm gets as many specs as the client would see
+    k_per_type: dict[str, int] = {
+        "video_idea": 4,
+        "title_pattern": 2,
+        "thumbnail_pattern": 2,
+        "format": 2,
+        "creator": 3,
+    }
+    random_replicates: int = Field(default=1000, ge=1)
+    bootstrap_resamples: int = Field(default=10_000, ge=100)
+    alpha: float = Field(default=0.05, gt=0, lt=1)
+    include_own_channel: bool = False
+    baseline_videos: int = Field(default=30, ge=1)
+    baseline_min_videos: int = Field(default=5, ge=1)
+    min_universe_videos_client: int = 20
+    min_matched_videos_client: int = 5
+    min_universe_videos_pooled: int = 100
+    min_matched_videos_pooled: int = 30
+    min_channels_pooled: int = 10
+    few_clusters: int = 5
+    max_missing_share: float = Field(default=0.2, ge=0, le=1)
+    max_usd: float = 5.0
+    max_quota_units: int = 1000
+
+
+class LabellingSettings(BaseModel):
+    sample_size: int = 100
+    # ratio bands relative to the outlier threshold: r1 >= 2θ, r2 [θ, 2θ), r3 [0.6θ, θ), r4 < 0.6θ
+    ratio_band_allocation: dict[str, int] = {"R1": 15, "R2": 30, "R3": 25, "R4": 30}
+    shorts_sample_size: int = 30
+    max_per_channel: int = 3
+    min_per_cell: int = 2
+    pack_batch_size: int = 25
+    sweep_min: float = 1.5
+    sweep_max: float = 6.0
+    sweep_step: float = 0.25
+    min_precision: float = 0.80
+    kappa_gate: float = 0.6
+    max_unsure_share: float = 0.15
+    bootstrap_resamples: int = Field(default=10_000, ge=100)
+
+
+class ReviewSettings(BaseModel):
+    sample_size: int = 30
+    decoys: int = 6
+    min_per_type: int = 3
+    target_mean: float = 4.0
+    min_criterion_mean: float = 3.5
+    would_ship_target: float = 0.7
+    decoy_gap_min: float = 0.3
+    alpha_min: float = 0.667
+    retention_min: float = 0.7
+    bootstrap_resamples: int = Field(default=10_000, ge=100)
+
+
+class OpsSettings(BaseModel):
+    tavily_usd_per_credit: float = 0.008
+    prices_verified_at: date = date(2026, 11, 20)
+    price_stale_days: int = 90
+    latency_target_s: float = 120.0
+    units_per_client_budget: int = 150
+    alert_dedupe_minutes: int = 60
+    alert_webhook_url: SecretStr | None = None
+
+
 class EvaluationSettings(BaseModel):
     bundle_dir: Path = REPO_ROOT / "var" / "eval_bundles"
+    docs_dir: Path = REPO_ROOT / "docs" / "evaluation"
+    seed: int = 20261119
+    backtest: BacktestSettings = BacktestSettings()
+    labelling: LabellingSettings = LabellingSettings()
+    review: ReviewSettings = ReviewSettings()
+    ops: OpsSettings = OpsSettings()
 
 
 class EmbeddingModelSettings(BaseModel):
@@ -1186,11 +1266,12 @@ class TopicEngineSettings(BaseModel):
     adj_batch_videos: int = 20
     adj_max_candidates: int = 5
     adj_concurrency: int = 4
-    adj_max_videos_per_run: dict[str, int] = {"cold": 300, "daily": 60}
+    adj_max_videos_per_run: dict[str, int] = {"cold": 800, "daily": 60}
     adj_description_chars: int = 600
     adj_max_tags: int = 15
     adj_quote_min_partial: float = 95
-    adj_estimated_usd_per_batch: float = 0.02
+    # observed on apollo: ~$0.008 per 20-video haiku batch; the estimate keeps a margin over that
+    adj_estimated_usd_per_batch: float = 0.012
     max_topics_per_video: int = 5
     lift_min_confidence: Literal["high", "medium", "low"] = "medium"
     lift_fractional_multi: bool = True
@@ -1226,6 +1307,7 @@ class AdapterSettings(BaseModel):
     image_source: str = "ytimg_http"
     thumbnail_text_reader: str = "rapidocr"
     run_config_source: str = "tables"
+    setup_confirmer: str = "tables"
 
 
 class RunBudgetSettings(BaseModel):
