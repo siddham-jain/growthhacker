@@ -279,7 +279,7 @@ Switching the low tier to Haiku 5.5 cuts low-tier LLM cost about 10× (owner dec
 
 ## 10. Failure philosophy
 
-- **Degrade, never block.** LLM down → deterministic fallbacks and templates. Tavily down → profile/LLM-only discovery and news skipped. Search quota gone → cached results, with "demand not checked" labels. Crawl blocked → channel-derived profile plus user prompts.
+- **Degrade, never block.** LLM down → deterministic fallbacks and templates. Tavily down → profile/LLM-only discovery and news skipped. Search quota gone → cached results, with "demand not checked" labels. Crawl blocked → acquisition cascade (render, reader proxies, search index, archives, knowledge base, web mentions, channel), then user prompts.
 - **Partial results are labelled, not hidden.** Run status `partial` / `completed_degraded`, with notices in the UI.
 - **Thin data says so.** Insufficiency notices show found, required and projected counts per window.
 - **Resume, don't restart.** Hash-keyed stage artifacts; a failed run resumes from the failed stage.
@@ -331,19 +331,22 @@ Contracts are frozen first so parallel subagents can't drift. Each phase ends wi
 | D17 | Single owners: `ViewsAtAge` resolver = 06 (02 owns snapshot cadence incl. a 72 h milestone); channel ownership verifier = 02; answer directness = 05; format/Shorts classification = 02; `WebSearch` port = 03; run kinds, statuses and queues = 11 | Removes triple implementations found in review |
 | D18 | No sampling params anywhere; determinism comes from the LLM result cache + pinned model ids | Anthropic 400s on temperature (verified) |
 | D19 | All stats-only refreshes use `videos:batchGetStats`; the quota ledger tracks three buckets (main, search, batchGetStats) | Cheapest compliant polling |
+| D20 | Business context comes from a tiered `ContextSource` cascade (03 §14); every fact carries `source_kind`, and third-party or archived facts need confirmation | Owner: blocked or changed sites must still yield a profile |
 | D11 | Refresh = additive insertions only (≤3 lines + link fixes), truth levels, healthcare policy pack | YouTube spam/misleading metadata policy; owner requirement |
 | D12 | Crawler respects robots.txt (protego); Tavily extract is a capped fallback only | Python's robotparser mis-parsed Apollo's rules |
 | D13 | Beautiful UI installed from its shadcn registry (no Playwright copying needed); Zeus primary; BoardUI free tier; libraries.dev effects only | Research findings in plan 13 |
 | D14 | "Ask your analyst" chat paused | Owner |
 
-## 13. Owner decisions needed (recommended default in bold)
+## 13. Owner decisions (recommended default in bold)
+
+Owner approved all bold defaults on 2026-11-20; O4 was revised as below.
 
 | # | Decision | Options |
 |---|---|---|
 | O1 | Derived-metrics policy posture | **Proceed under assignment guardrails + disclosure labels + apply for audit/derived-metrics allowance now** · or limit to raw metrics only |
 | O2 | Low-tier model | **Keep Haiku 4.5 (your choice), with Haiku 5.5 available as a config switch after a benchmark** · switch now (~10× cheaper) |
 | O3 | Cards with fewer than 3 references (first-mover news, rule-based hygiene) | **Separate "Early signals" and "Channel hygiene" surfaces, outside the recommendation list** · allow inside the list with a label |
-| O4 | Crawler identity on WAF block (e.g. Apollo returns 403 to bot UAs) | **Honest `GrowthHackerBot` UA only; on block, fall back to Tavily extract (with "I own or represent this business" attestation) + channel-derived profile + user-provided facts** · opt-in browser-style UA still carrying the bot token (Apollo crawl would work directly; the review flags this as a gray area) |
+| O4 | Crawler identity on WAF block | **Resolved 2026-11-20 (owner): acquisition cascade (03 §14). Honest UA → compat UA → Playwright render → Tavily extract / Jina Reader → Tavily index → Wayback / Common Crawl → Wikipedia/Wikidata → web mentions → YouTube channel → user input. No CAPTCHA solving or proxy rotation. Name-only onboarding supported.** |
 | O13 | Search budget split (100 calls/day) | **Onboarding 30 · news 15 · shared niche 55** · custom |
 | O5 | Rare UI folder licence (MIT + Commons Clause + mandatory visible credit link) | **Use Zeus `artemis-folder-card` behind the same interface; Rare UI only if you accept the credit link** · use Rare UI |
 | O6 | Health news/refresh human approval | **Required for regulated niches (Apollo)** · optional |

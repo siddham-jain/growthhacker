@@ -8,6 +8,7 @@
 - Add shared context brief, env template and gitignore.
 
 ### Decisions
+- Business context uses a tiered source cascade (site → render → reader proxies → search index → archives → knowledge base → mentions → channel → user) — owner requires a profile even when a WAF blocks us or the company changes.
 - Follow the assignment's simple-maths guardrails with "calculated by GrowthHacker" disclosures and apply for YouTube's derived-metrics allowance — Developer Policies III.E.4.h forbids derived metrics otherwise.
 - No channel scores or leaderboards; evidence sheets and single transparent sorts only — YouTube policy guide forbids ranking channels and custom channel scores.
 - Search calls (100/day, own bucket) are the binding quota, so niche search results are cached and shared across clients — search.list no longer costs 100 units.

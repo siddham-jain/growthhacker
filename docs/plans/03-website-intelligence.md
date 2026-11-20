@@ -1424,3 +1424,27 @@ Sources:
 - [Cloudflare challenge detection](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/detect-response/)
 - [trafilatura Python usage](https://trafilatura.readthedocs.io/en/latest/usage-python.html)
 - [Playwright page.goto](https://playwright.dev/python/docs/api/class-page#page-goto)
+
+## 14. Acquisition cascade: business context even when the site blocks us (owner decision O4, revised 2026-11-20)
+
+Owner directive: a firewall, a JS challenge, a dead site or a missing website must never leave a client without a business profile. This works for any business, not just Apollo. Every source is a `ContextSource` strategy registered in `context_source_registry`. The orchestrator `AcquisitionCascade` runs them in tiers until coverage targets are met (`home`, `offerings`, `about`, `contact/locations`, `conversion actions`). Adding a source means adding a class; the cascade itself does not change.
+
+| Tier | Source (`source_kind`) | When it runs | What it gives |
+|---|---|---|---|
+| 1 | `site_direct`: httpx, honest UA, then compat UA (§5.6) | always first | full pages, robots respected |
+| 2 | `site_rendered`: Playwright Chromium, compat UA, real browser | JS shells, or `waf_block`/`cf_challenge` on tier 1 | rendered DOM. Interstitials that a normal browser clears without interaction pass; we never solve CAPTCHAs |
+| 3 | `reader_proxy`: Tavily extract (advanced), then Jina Reader `r.jina.ai/<url>` | tier 1–2 blocked or empty | clean markdown fetched from third-party egress |
+| 4 | `search_index`: Tavily search with `include_domains=[domain]`, `include_raw_content=markdown`; Tavily map/crawl | coverage still short | page bodies and URLs from Tavily's index, without touching the origin |
+| 5 | `archive`: Wayback CDX (`web.archive.org/cdx/search/cdx`) → latest 200 snapshot via `id_` raw URLs; Common Crawl index fallback | origin unreachable or all tiers blocked | historical pages labelled with snapshot date; facts older than 18 months are flagged stale |
+| 6 | `knowledge_base`: Wikipedia REST summary + Wikidata (P856 website, P452 industry, P159 HQ, P355 subsidiaries, P1056 products) | always (cheap) | canonical identity, sister brands, official site for name-only onboarding |
+| 7 | `web_mentions`: Tavily general search (`"<brand>" services`, `"<brand>" pricing`, `"<brand>" reviews`, `<brand> locations`) | coverage short after tiers 1–5 | third-party descriptions of offerings and locations; facts marked `third_party`, never auto-confirmed |
+| 8 | `youtube_channel`: channel description, links, playlist titles, recent titles/descriptions (via 02) | whenever a channel is known | offerings, CTAs (booking/WhatsApp/phone links), languages |
+| 9 | `user`: pasted text, uploaded PDF brochure, URL list | UI prompt when coverage is still `thin` | user-confirmed facts |
+
+Rules:
+- Every page and fact carries `source_kind`, `source_url`, `fetched_at` and, for archives, `snapshot_at`. Quote verification (§5.11) runs against the text the source returned. The profile shows a "sources used" strip, and facts from tiers 5–7 are labelled and default to `needs_confirmation`.
+- Coverage is scored per required facet after each tier. The cascade stops once every facet is covered, or when the budget (`max_tavily_credits`, `max_archive_fetches`, `max_reader_fetches`) is spent.
+- Robots: tiers 1–2 obey robots.txt. Tiers 3–7 read third-party copies or indexes and never touch the origin. Attestation ("I own or represent this business") is recorded but no longer gates the fallbacks, because every source is public.
+- Never: CAPTCHA solving, residential or rotating proxies, IP rotation, stealth or fingerprint-spoofing plugins, login bypass, or paywalled content.
+- **Name-only or changed-company onboarding.** `BusinessLocator` accepts any of a website, a channel or a business name. Given a name, it resolves the official site (Wikidata P856, then Tavily top result with a domain/brand match) and the channel (website links, then Tavily `site:youtube.com`, then a handle lookup, then 02's ownership verifier). Changing the company on a client starts a new profile lineage; the old one is archived, never merged.
+- Events: `crawl.source_started{tier, source_kind}`, `crawl.blocked{reason}` and `crawl.fallback{from, to}` stream to the live panel, so a blocked site visibly "routes around" in the UI.
