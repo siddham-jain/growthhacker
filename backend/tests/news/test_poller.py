@@ -128,3 +128,26 @@ async def test_primary_feed_items_may_be_undated(redis, redis_prefix):
     result = await poller(redis, redis_prefix, [feed]).poll([query], NOW)
     assert result.items[0].published_precision == "none"
     assert result.items[0].source_tier.value == "tier1_primary"
+
+
+async def test_queries_fetch_side_by_side_within_the_concurrency_bound(redis, redis_prefix):
+    import asyncio
+
+    class SlowSource(FakeSource):
+        def __init__(self) -> None:
+            super().__init__("tavily_news", [ok(LAUNCH)])
+            self.in_flight = 0
+            self.peak = 0
+
+        async def fetch(self, query, since):
+            self.in_flight += 1
+            self.peak = max(self.peak, self.in_flight)
+            await asyncio.sleep(0.01)
+            self.in_flight -= 1
+            return await super().fetch(query, since)
+
+    source = SlowSource()
+    news = NewsSettings(poll_concurrency=3)
+    result = await poller(redis, redis_prefix, [source], news=news).poll([due() for _ in range(7)], NOW)
+    assert len(source.calls) == 7 and len(result.runs) == 7
+    assert source.peak == 3

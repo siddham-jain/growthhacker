@@ -1,5 +1,8 @@
 key: auto_us
 description: us car launches, recalls and ev credits
+# profiles of these industries (and countries, when set) get this pack when they name none
+industries: [auto_dealer]
+countries: [US]
 event_terms:
   product: [launch, unveil, price, recall]
   company: [launch, unveil, recall]

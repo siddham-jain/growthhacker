@@ -1,5 +1,7 @@
 key: dental
 description: dental research and professional bodies
+# profiles of these industries (and countries, when set) get this pack when they name none
+industries: [healthcare_dental]
 event_terms:
   procedure: [guideline, study, new]
   device: [approval, recall]

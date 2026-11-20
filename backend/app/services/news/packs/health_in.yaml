@@ -1,5 +1,8 @@
 key: health_in
 description: indian health regulators, advisories and clinical guidance
+# profiles of these industries (and countries, when set) get this pack when they name none
+industries: [healthcare_hospital, healthcare_clinic, healthcare_dental, pharma]
+countries: [IN]
 event_terms:
   regulator: [approval, guideline, advisory]
   drug: [approval, launch, recall]

@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -339,9 +340,12 @@ class NewsScanner:
         candidates = self._prefilter.select(
             inputs.bundles, ctx, now, business_vector=inputs.business_vector, centroids=inputs.centroids
         )
+        # every judgement happens before any database read, so no transaction idles across llm calls
+        judged = await asyncio.gather(
+            *(self._judgement(candidate, inputs, outcome) for candidate in candidates)
+        )
         evaluated: list[_Evaluated] = []
-        for candidate in candidates:
-            stored = await self._judgement(candidate, inputs, outcome)
+        for candidate, stored in zip(candidates, judged, strict=True):
             if stored is None:
                 continue
             evaluated.append(

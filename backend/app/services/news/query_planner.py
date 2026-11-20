@@ -12,9 +12,12 @@ from app.services.news.context import NewsClientContext, raised
 from app.services.news.packs import SourcePack
 from app.services.news.text import contains_phrase, normalize
 
-Origin = Literal["client", "entity", "seasonal", "offering", "competitor", "domain", "feed", "research"]
+Origin = Literal[
+    "client", "entity", "topic", "seasonal", "offering", "competitor", "domain", "feed", "research"
+]
 ORIGIN_WEIGHT: dict[Origin, float] = {
     "client": 1.0,
+    "topic": 0.95,
     "entity": 0.9,
     "seasonal": 0.9,
     "domain": 0.85,
@@ -144,6 +147,16 @@ class QueryPlanner:
             planned.append(self._news(text, subject, params, cadence, "entity", entity.importance))
         return planned
 
+    def _topic_queries(self, ctx, params, cadence) -> list[PlannedSubscription]:
+        # the profile's own watch topics are written as searches, e.g. a lab's new model release
+        planned = []
+        for topic in ctx.freshness.watch_topics:
+            if self._excluded(ctx, topic.query):
+                continue
+            topic_params = {**params, "language": topic.language} if topic.language else params
+            planned.append(self._news(topic.query, [topic.query], topic_params, cadence, "topic", 3))
+        return planned
+
     def _offering_queries(self, ctx, params, cadence, year: int) -> list[PlannedSubscription]:
         planned = []
         offerings = sorted(ctx.profile.offerings, key=lambda o: (not o.is_primary, -o.priority, o.name))
@@ -228,6 +241,7 @@ class QueryPlanner:
                 "client",
                 3,
             ),
+            *self._topic_queries(ctx, params, cadence),
             *self._entity_queries(ctx, packs, params, cadence),
             *self._seasonal_queries(ctx, seasonal_params, seasonal_envelope.search_cadence_minutes, now),
             *self._offering_queries(ctx, params, cadence, now.year),

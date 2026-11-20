@@ -30,6 +30,8 @@ class DomainGroup(PackModel):
 class SourcePack(PackModel):
     key: str
     description: str = ""
+    industries: list[str] = []
+    countries: list[str] = []
     event_terms: dict[str, list[str]] = {}
     feeds: list[FeedSpec] = []
     domain_groups: list[DomainGroup] = []
@@ -67,6 +69,16 @@ class SourcePackRegistry:
 
     def resolve(self, keys: list[str]) -> list[SourcePack]:
         return [self._packs.get(key) for key in keys if key in self._packs]
+
+    def for_profile(self, keys: list[str], industry: str | None, country: str | None) -> list[SourcePack]:
+        """the profile's own packs, else every pack declared for its industry (and country, when one is set)."""
+        if keys:
+            return self.resolve(keys)
+        return [
+            pack
+            for pack in (self._packs.get(key) for key in sorted(self._packs.keys()))
+            if industry in pack.industries and (not pack.countries or country in pack.countries)
+        ]
 
     def keys(self) -> list[str]:
         return self._packs.keys()

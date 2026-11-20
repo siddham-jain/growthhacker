@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app.domain.news import SourceTier
+from app.domain.profile import WatchTopic
 from app.ports.freshness import RawNewsItem
 from app.services.news.normalize import canonicalize_url, date_precision, detect_language, registrable_domain
 from app.services.news.packs import load_pack_registry
@@ -168,3 +169,25 @@ def test_excluded_topics_are_never_queried():
     freshness = profile.freshness.model_copy(update={"excluded_topics": ["GPT"]})
     plan = _plan(runable_context(profile=profile.model_copy(update={"freshness": freshness})))
     assert not any("gpt" in s.query.normalized_query for s in plan.subscriptions if s.origin == "entity")
+
+
+def test_profiles_without_packs_get_the_packs_declared_for_their_industry_and_country():
+    def keys(industry, country, own=()):
+        return [pack.key for pack in PACKS.for_profile(list(own), industry, country)]
+
+    assert keys("ai_software", "US") == ["ai_frontier"]
+    assert keys("healthcare_hospital", "IN") == ["health_global", "health_in"]
+    assert keys("healthcare_hospital", "US") == ["health_global"]
+    assert keys("auto_dealer", "US") == ["auto_us"]
+    assert keys("restaurant", "IN") == []
+    assert keys("ai_software", "US", own=["dental"]) == ["dental"]
+
+
+def test_watch_topics_are_planned_as_their_own_queries():
+    profile = runable_context().profile
+    topic = WatchTopic(query="Claude new model release", language="en")
+    freshness = profile.freshness.model_copy(update={"watch_topics": [topic]})
+    plan = _plan(runable_context(profile=profile.model_copy(update={"freshness": freshness})))
+    topics = [s for s in plan.subscriptions if s.origin == "topic"]
+    assert [s.query.normalized_query for s in topics] == ["claude new model release"]
+    assert topics[0].importance == 3

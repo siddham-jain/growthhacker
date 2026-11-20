@@ -1,5 +1,8 @@
 key: home_services_us
 description: rebates, codes and weather advisories for home services
+# profiles of these industries (and countries, when set) get this pack when they name none
+industries: [home_services]
+countries: [US]
 event_terms:
   program: [rebate, credit, code change]
   event: [advisory, warning]

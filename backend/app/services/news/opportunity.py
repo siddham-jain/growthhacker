@@ -129,7 +129,9 @@ def news_confidence(signal: NewsSignal, min_refs: int) -> Confidence:
     demand = signal.demand
     outliers = [v for v in demand.early_videos if v.is_outlier]
     outlier_channels = len({v.channel_id for v in outliers})
-    if demand.early_video_count < min_refs:
+    # only videos compared against their own channel's normal can be references (§3.4 "qualifying")
+    qualifying = [v for v in demand.early_videos if v.outlier_ratio is not None]
+    if len(qualifying) < min_refs:
         return Confidence(
             label=ConfidenceLabel.low,
             outliers=len(outliers),

@@ -1,5 +1,7 @@
 key: ai_frontier
 description: frontier labs, model launches and developer tools
+# profiles of these industries (and countries, when set) get this pack when they name none
+industries: [ai_software, b2b_saas]
 event_terms:
   model: [launch, release, '"new model"']
   product: [launch, release, update, pricing]

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import math
 from collections.abc import Mapping, Sequence
@@ -180,39 +181,48 @@ class NewsPoller:
     async def poll(self, due: Sequence[DueQuery], now: datetime) -> PollResult:
         result = PollResult()
         ordered = sorted(due, key=lambda d: -d.weight)
-        for query in ordered:
-            lease = await self._locks.try_acquire(
-                f"news:lock:{query.planned.query_hash}", self._news.query_lock_ttl_s
-            )
-            if lease is None:
-                result.skip("locked")
-                continue
-            try:
-                started = now
-                fetched_pair = await self._fetch(query, now, result)
-                if fetched_pair is None:
-                    continue
-                planned, fetched = fetched_pair
-                items = self._normalise(planned, fetched, now) if fetched.status in {"ok", "partial"} else []
-                result.items.extend(items)
-                status = "degraded" if planned.source_key != query.planned.source_key else fetched.status
-                result.runs.append(
-                    QueryRunRecord(
-                        query_id=query.id,
-                        started_at=started,
-                        finished_at=now,
-                        status=status,
-                        cost=fetched.cost,
-                        item_count=len(items),
-                        error=fetched.error,
-                        request_id=fetched.provider_request_id,
-                        next_run_at=self._next_run(query, fetched.status, now),
-                    )
-                )
-            except Exception:
-                logger.exception("news query failed", extra={"source": query.planned.source_key})
-                await self._breaker.record(query.planned.source_key, "error")
-                result.skip("exception")
-            finally:
-                await self._locks.release(lease)
+        # fetches are network bound, so a client's forced poll runs them side by side
+        slots = asyncio.Semaphore(self._news.poll_concurrency)
+
+        async def bounded(query: DueQuery) -> None:
+            async with slots:
+                await self._poll_one(query, now, result)
+
+        await asyncio.gather(*(bounded(query) for query in ordered))
         return result
+
+    async def _poll_one(self, query: DueQuery, now: datetime, result: PollResult) -> None:
+        lease = await self._locks.try_acquire(
+            f"news:lock:{query.planned.query_hash}", self._news.query_lock_ttl_s
+        )
+        if lease is None:
+            result.skip("locked")
+            return
+        try:
+            started = now
+            fetched_pair = await self._fetch(query, now, result)
+            if fetched_pair is None:
+                return
+            planned, fetched = fetched_pair
+            items = self._normalise(planned, fetched, now) if fetched.status in {"ok", "partial"} else []
+            result.items.extend(items)
+            status = "degraded" if planned.source_key != query.planned.source_key else fetched.status
+            result.runs.append(
+                QueryRunRecord(
+                    query_id=query.id,
+                    started_at=started,
+                    finished_at=now,
+                    status=status,
+                    cost=fetched.cost,
+                    item_count=len(items),
+                    error=fetched.error,
+                    request_id=fetched.provider_request_id,
+                    next_run_at=self._next_run(query, fetched.status, now),
+                )
+            )
+        except Exception:
+            logger.exception("news query failed", extra={"source": query.planned.source_key})
+            await self._breaker.record(query.planned.source_key, "error")
+            result.skip("exception")
+        finally:
+            await self._locks.release(lease)

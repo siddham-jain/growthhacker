@@ -50,7 +50,9 @@ def scanner_factory(
         )
         return NewsScanner(
             settings=settings.news,
-            packs=packs.resolve(ctx.freshness.source_packs),
+            packs=packs.for_profile(
+                ctx.freshness.source_packs, ctx.profile.identity.industry, ctx.profile.identity.country
+            ),
             judge=judge,
             demand=demand,
             history=history,

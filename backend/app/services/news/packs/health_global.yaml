@@ -1,5 +1,7 @@
 key: health_global
 description: global health authorities and drug approvals
+# profiles of these industries (and countries, when set) get this pack when they name none
+industries: [healthcare_hospital, healthcare_clinic, healthcare_dental, pharma]
 event_terms:
   regulator: [approval, guideline, advisory]
   drug: [approval, recall]

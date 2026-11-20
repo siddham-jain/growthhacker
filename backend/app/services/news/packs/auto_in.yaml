@@ -1,5 +1,8 @@
 key: auto_in
 description: indian car launches and ev policy
+# profiles of these industries (and countries, when set) get this pack when they name none
+industries: [auto_dealer]
+countries: [IN]
 event_terms:
   product: [launch, unveil, price]
   company: [launch, unveil, price]

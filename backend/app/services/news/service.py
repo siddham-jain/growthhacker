@@ -21,7 +21,7 @@ from app.services.news.context import NewsClientContext
 from app.services.news.gates import surface_of
 from app.services.news.opportunity import SURFACE_EARLY_SIGNALS, SURFACE_RECOMMENDATIONS, SURFACE_REVIEW
 from app.services.news.packs import SourcePackRegistry
-from app.services.news.poller import NewsPoller
+from app.services.news.poller import NewsPoller, PollResult
 from app.services.news.prefilter import StoryBundle
 from app.services.news.query_planner import QueryPlanner
 from app.services.news.repository import (
@@ -134,12 +134,19 @@ class NewsRadarService:
         await store.save_stories(clustered.stories, clustered.assignments, clustered.centroids)
         return len(clustered.stories)
 
-    async def _run_poll(
-        self, uow: UnitOfWork, now: datetime, client_id: UUID | None, force: bool
-    ) -> IngestSummary:
-        queries = NewsQueryStore(uow.session)
-        due = await queries.due(now, POLL_BATCH, client_id=client_id, force=force)
+    async def _run_poll(self, now: datetime, client_id: UUID | None, force: bool) -> IngestSummary:
+        # no transaction stays open across the fetches, which can take a minute
+        async with self._uow() as uow:
+            due = await NewsQueryStore(uow.session).due(now, POLL_BATCH, client_id=client_id, force=force)
+            await uow.commit()
         result = await self._poller.poll(due, now)
+        async with self._uow() as uow:
+            summary = await self._record_poll(uow, result, now)
+            await uow.commit()
+        return summary
+
+    async def _record_poll(self, uow: UnitOfWork, result: PollResult, now: datetime) -> IngestSummary:
+        queries = NewsQueryStore(uow.session)
         for run in result.runs:
             await queries.record_run(
                 run.query_id,
@@ -158,10 +165,7 @@ class NewsRadarService:
 
     async def poll_due(self, now: datetime) -> IngestSummary:
         """global cron entry point (every 15 min); clients never trigger fetches directly."""
-        async with self._uow() as uow:
-            summary = await self._run_poll(uow, now, None, False)
-            await uow.commit()
-        return summary
+        return await self._run_poll(now, None, False)
 
     async def _force_allowed(self, client_id: UUID) -> bool:
         key = f"{self._settings.redis.key_prefix}:news:force:{client_id}"
@@ -240,7 +244,9 @@ class NewsRadarService:
         self, ctx: NewsClientContext, *, now: datetime, run_id: UUID | None = None, force: bool = False
     ) -> NewsRadarReport:
         scope = TenantScope(workspace_id=ctx.workspace_id, client_id=ctx.client_id)
-        packs = self._packs.resolve(ctx.freshness.source_packs)
+        packs = self._packs.for_profile(
+            ctx.freshness.source_packs, ctx.profile.identity.industry, ctx.profile.identity.country
+        )
         plan = self._planner.plan(ctx, packs, now)
         async with self._uow() as uow:
             await NewsQueryStore(uow.session).sync_subscriptions(
@@ -249,9 +255,7 @@ class NewsRadarService:
             await uow.commit()
         ingest = None
         if force and await self._force_allowed(ctx.client_id):
-            async with self._uow() as uow:
-                ingest = await self._run_poll(uow, now, ctx.client_id, True)
-                await uow.commit()
+            ingest = await self._run_poll(now, ctx.client_id, True)
         async with self._uow() as uow:
             items = NewsItemStore(uow.session)
             signals = NewsSignalStore(uow.session, scope, self._settings.policy.retention_days)
@@ -270,6 +274,10 @@ class NewsRadarService:
                 centroids=await items.story_centroids(story_ids) if self._embedder else {},
                 business_vector=self._business_vector(ctx),
             )
+            await uow.commit()
+        # a fresh transaction: the scan judges with the llm first, so nothing is held open meanwhile
+        async with self._uow() as uow:
+            signals = NewsSignalStore(uow.session, scope, self._settings.policy.retention_days)
             outcome = await self._scanner_for(ctx, uow).scan(inputs)
             await signals.save_judgements(outcome.new_judgements)
             await signals.save_signals(outcome.signals, now)

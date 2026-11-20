@@ -41,8 +41,9 @@ class NewsStage:
     optional_deps: ClassVar[tuple[str, ...]] = ()
     produces: ClassVar[ArtifactKey[NewsRadarReport]] = NEWS_ARTIFACT
     policy: ClassVar[StagePolicy] = StagePolicy(
-        timeout_s=40,
-        soft_timeout_s=15,
+        # relevance judging reads full article text, which takes ~30-40s for a broad profile
+        timeout_s=90,
+        soft_timeout_s=60,
         critical=False,
         budget=StageBudget(llm_calls=15, tavily_credits=20),
     )
