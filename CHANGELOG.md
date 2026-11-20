@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Added
+- Infer the client market from evidence (user, cctld, phone codes, addresses, currency, lang, wikidata) and write it back unless the user picked it.
+- Canonicalise and merge duplicate offerings, locations, value props and contacts with the union of their quotes.
 - Add README, design review (docs/DESIGN.md) and evaluation status (docs/evaluation/EVALUATION.md).
 - Add weekly answer-citation tracking: tavily answers for the top 10 buyer questions, cited videos resolved via videos.list, a read endpoint and Your channel / Competitors panels.
 - Add CSP with frame-ancestors 'none' and security headers to the frontend.
@@ -58,6 +60,11 @@
 - Move confirm-setup's competitor freeze and topic rebuild into the worker; the endpoint returns 202 with the run.
 
 ### Fixed
+- Parse site phone numbers in the inferred market, not the browser locale (1800 numbers came out as US).
+- Move calls to action out of offerings and drop app-store, navigation and category labels.
+- Drop third-party locations in another country, url-slug cities, bare states and reach statements from locations.
+- Set the regulated flag from the industry code only, not from regulated customers.
+- Leave third-party claims that need confirmation unconfirmed in demo auto-confirm.
 - Verify a channel the site links by legacy /user/ url instead of penalising it as another channel.
 - Drop form buttons, bare dial codes and short codes from contact facts; hide leftovers in the confirm UI.
 - Confirm page offers onboarding's proposed channel with its evidence and groups sources by kind.
@@ -117,6 +124,9 @@
 - Fix rapidocr 3.10 enum params that failed thumbnail enrichment.
 
 ### Decisions
+- The browser locale is sent as a market hint (market_explicit=false), not a choice — name-only site search still needs a country, but phone parsing and the stored market must come from the site.
+- Locations merge by canonical name within a city and fold city-only sentences into that city's facility — two clinics in one city stay apart because their residual names differ.
+- Crawls without an explicit market keep national phone numbers unparsed until build_profile infers the region — the region is unknown at crawl time.
 - Channel resolve reuses onboarding's stored ownership verdict for the proposed channel — only onboarding saw the site's links.
 - The evaluation ops report covers the period after the final deploy — whole-day figures include forced recomputes, which are not warm refreshes by definition.
 - Video lookups coalesce only within one quota identity (client, run) — cross-client sharing happens through in-flight claims, so each caller pays its own calls and one cap never fails another.
