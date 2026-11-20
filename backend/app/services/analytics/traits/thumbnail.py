@@ -4,6 +4,7 @@ from app.core.registry import trait_extractor_registry
 from app.domain.analytics import ThumbnailTraits
 from app.domain.youtube import VideoRecord
 from app.services.analytics.settings import ThumbnailSettings
+from app.services.analytics.thumbnails.analyzer import has_text_traits
 from app.services.analytics.traits.base import Features, TraitContext, flag
 
 
@@ -38,12 +39,15 @@ class ThumbnailTraitExtractor:
         if traits is None or part.degenerate:
             return {}
         features: Features = {
-            "thumbnail.text_present": flag(traits.text_present),
-            "thumbnail.brand_text_only": flag(traits.brand_text_only),
             "thumbnail.brightness_band": frozenset({traits.brightness_band}),
             "thumbnail.contrast_band": frozenset({traits.contrast_band}),
             "thumbnail.colorfulness_band": frozenset({traits.colorfulness_band}),
         }
+        # unread text leaves the text-trait population, the same way a missing thumbnail does
+        if not has_text_traits(traits):
+            return features
+        features["thumbnail.text_present"] = flag(traits.text_present)
+        features["thumbnail.brand_text_only"] = flag(traits.brand_text_only)
         if traits.word_count_band is not None:
             features["thumbnail.word_count_band"] = frozenset({traits.word_count_band})
         return features

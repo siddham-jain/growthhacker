@@ -227,11 +227,12 @@ class Reader:
 
 
 async def test_enrich_stage_builds_thumbnail_traits_and_watermark_stats():
-    channel = make_channel(COMPETITORS[0], "Clinic")
+    # the client's own uploads are always in ocr scope
+    channel = make_channel(APOLLO, "Clinic")
     videos = [
         make_video(
             f"en{n:09d}",
-            COMPETITORS[0],
+            APOLLO,
             AS_OF - timedelta(days=2 + n),
             thumbnails={
                 "high": ThumbnailRef(
@@ -243,14 +244,14 @@ async def test_enrich_stage_builds_thumbnail_traits_and_watermark_stats():
     ]
     store = MemoryStore()
     deps = Deps(
-        analytics_inputs=StaticSource(make_inputs([scoped(channel, ChannelRole.competitor)], videos)),
+        analytics_inputs=StaticSource(make_inputs([scoped(channel, ChannelRole.own)], videos)),
         analytics_store=store,
         image_source=Images(),
         thumbnail_text_reader=Reader(),
     )
     result = await EnrichStage().run(context(deps))
     assert result.artifact.computed == 7 and result.artifact.failed == [videos[3].video_id]
-    assert ("clinic", 8) in store.recurring[COMPETITORS[0]]
+    assert ("clinic", 8) in store.recurring[APOLLO]
     traits = store.thumbnails[0]
     assert traits.text_present and traits.word_count == 3 and traits.text_box_count == 1
     assert traits.ocr_engine == "fake" and 0 <= traits.brightness <= 1

@@ -1,6 +1,7 @@
 from typing import Literal
 
 from app.domain.analytics import VideoTraits
+from app.services.analytics.thumbnails.analyzer import has_text_traits
 
 PatternKind = Literal["title", "thumbnail", "format"]
 
@@ -73,7 +74,8 @@ def flatten_traits(traits: VideoTraits) -> dict[str, str]:
             flat[f"title.{name}"] = str(value)
     thumbnail = traits.thumbnail
     if thumbnail is not None:
-        flat.update({f"thumbnail.{name}": _bool(getattr(thumbnail, name)) for name in THUMBNAIL_FLAGS})
+        if has_text_traits(thumbnail):
+            flat.update({f"thumbnail.{name}": _bool(getattr(thumbnail, name)) for name in THUMBNAIL_FLAGS})
         for name in THUMBNAIL_BANDS:
             value = getattr(thumbnail, name)
             if value is not None:

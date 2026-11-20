@@ -162,7 +162,8 @@ class SharedCacheInputSource:
     async def load(self, request: AnalysisRequest) -> AnalyticsInputs:
         async with self.session_factory() as session:
             niche_ids = await self._niche_channel_ids(session, request)
-            roles = {cid: ChannelRole.niche for cid in niche_ids}
+            roles = {cid: ChannelRole.creator for cid in request.creator_channel_ids}
+            roles |= {cid: ChannelRole.niche for cid in niche_ids}
             roles |= {cid: ChannelRole.competitor for cid in request.competitor_channel_ids}
             if request.own_channel_id:
                 roles[request.own_channel_id] = ChannelRole.own

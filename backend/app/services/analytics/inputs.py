@@ -72,6 +72,8 @@ class AnalysisRequest(DomainModel):
     as_of: datetime
     own_channel_id: ChannelId | None = None
     competitor_channel_ids: list[ChannelId] = []
+    # creators found by the niche search, read at baseline depth
+    creator_channel_ids: list[ChannelId] = []
     topic_refs: list[TopicRef] = []
     timezone: str | None = None
     country: str | None = None

@@ -11,6 +11,7 @@ from app.domain.common import DomainModel
 from app.domain.runs import OutlierFoundPayload, RunNotice, RunNoticeCode, TraitLiftPayload
 from app.domain.youtube import VideoRecord
 from app.pipeline.contracts import RunConfigSnapshot, RunContext, StagePolicy, StageResult
+from app.pipeline.stages.niche import NICHE_DISCOVERY, creator_channel_ids
 from app.ports.artifacts import ArtifactKey
 from app.services.analytics.engine import AnalyticsEngine
 from app.services.analytics.inputs import AnalysisRequest, AnalyticsInputs, AnalyticsInputSource
@@ -18,8 +19,14 @@ from app.services.analytics.result import AnalyticsResult, WindowAnalytics
 from app.services.analytics.settings import AnalyticsEngineSettings
 from app.services.analytics.storage import AnalyticsStore
 from app.services.analytics.thumbnails import rapidocr_reader
-from app.services.analytics.thumbnails.analyzer import TRAITS_VERSION, ReadThumbnail, ThumbnailTraitBuilder
+from app.services.analytics.thumbnails.analyzer import (
+    TRAITS_VERSION,
+    ReadThumbnail,
+    ThumbnailTraitBuilder,
+    has_text_traits,
+)
 from app.services.analytics.thumbnails.fetch import ImageSource, ThumbnailFetcher
+from app.services.analytics.thumbnails.selection import ocr_scope
 from app.services.analytics.thumbnails.text import ThumbnailTextReader, brand_tokens_of, recurring_text
 from app.services.analytics.traits.title import script_of
 
@@ -79,20 +86,54 @@ class AnalyticsStageDeps:
         )
 
 
-def analysis_request(ctx: RunContext[Any]) -> AnalysisRequest:
+async def analysis_request(ctx: RunContext[Any]) -> AnalysisRequest:
     snapshot = ctx.snapshot
+    niche = await ctx.artifacts.get_optional(NICHE_DISCOVERY)
     return AnalysisRequest(
         workspace_id=snapshot.workspace_id,
         client_id=snapshot.client_id,
         as_of=ctx.as_of,
         own_channel_id=snapshot.own_channel_id,
         competitor_channel_ids=snapshot.competitor_channel_ids,
+        creator_channel_ids=creator_channel_ids(niche),
         topic_refs=snapshot.topic_refs,
         timezone=snapshot.market.timezone,
         country=snapshot.market.country,
         language=snapshot.market.language,
         oauth_connected=snapshot.oauth_connected,
     )
+
+
+class ReadBatch:
+    """fetch and read thumbnails concurrently; the semaphore bounds in-flight downloads and ocr threads."""
+
+    def __init__(
+        self,
+        fetcher: ThumbnailFetcher,
+        builder: ThumbnailTraitBuilder,
+        scope: frozenset[str],
+        limit: asyncio.Semaphore,
+    ) -> None:
+        self.fetcher = fetcher
+        self.builder = builder
+        self.scope = scope
+        self.limit = limit
+        self.ocr_reads = 0
+
+    async def read_all(self, videos: list[VideoRecord], hint: bool) -> dict[str, ReadThumbnail]:
+        found = await asyncio.gather(*(self._read(v, hint) for v in videos))
+        return {v.video_id: read for v, read in zip(videos, found, strict=True) if read is not None}
+
+    async def _read(self, video: VideoRecord, hint: bool) -> ReadThumbnail | None:
+        async with self.limit:
+            fetched = await self.fetcher.fetch_best(video)
+            if fetched is None:
+                return None
+            ocr = video.video_id in self.scope
+            read = await asyncio.to_thread(self.builder.read, fetched, hint, ocr)
+            if ocr and read is not None:
+                self.ocr_reads += 1
+            return read
 
 
 @stage_registry.register("enrich")
@@ -111,20 +152,29 @@ class EnrichStage:
         return True
 
     def fingerprint_inputs(self, ctx: RunContext[EnrichDeps]) -> Mapping[str, Any]:
-        return {"thumbnail_traits": TRAITS_VERSION}
+        return {
+            "thumbnail_traits": TRAITS_VERSION,
+            "ocr_control_share": ctx.deps.settings.analytics.thumbnail_ocr_control_share,
+        }
 
     async def run(self, ctx: RunContext[EnrichDeps]) -> StageResult[ThumbnailEnrichment]:
         deps = ctx.deps
         settings = AnalyticsEngineSettings.from_settings(deps.settings)
-        inputs = await deps.analytics_inputs.load(analysis_request(ctx))
+        inputs = await deps.analytics_inputs.load(await analysis_request(ctx))
         builder = ThumbnailTraitBuilder(deps.thumbnail_text_reader, settings.thumbnails)
         fetcher = ThumbnailFetcher(deps.image_source, settings.thumbnails.source_order)
         await ctx.reporter.step("enrich.thumbnails", "Reading thumbnail text and colour")
+        scope = await asyncio.to_thread(
+            ocr_scope, inputs, settings, ctx.as_of, deps.settings.analytics.thumbnail_ocr_control_share
+        )
+        batch = ReadBatch(
+            fetcher, builder, scope, asyncio.Semaphore(deps.settings.analytics.thumbnail_ocr_workers)
+        )
         computed, reused, failed = 0, 0, []
         channels = sorted({v.channel_id for v in inputs.videos})
         for index, channel_id in enumerate(channels):
             await ctx.checkpoint()
-            made, kept, missing = await self._channel(ctx, inputs, channel_id, builder, fetcher, settings)
+            made, kept, missing = await self._channel(ctx, inputs, channel_id, batch, settings)
             computed, reused, failed = computed + made, reused + kept, failed + missing
             await ctx.reporter.progress(index + 1, len(channels), "channels")
         status = "degraded" if failed and not computed else "succeeded"
@@ -137,6 +187,8 @@ class EnrichStage:
                 "thumbnails_computed": computed,
                 "thumbnails_reused": reused,
                 "thumbnails_failed": len(failed),
+                "thumbnails_ocr": batch.ocr_reads,
+                "thumbnails_ocr_scope": len(scope),
             },
         )
 
@@ -145,11 +197,10 @@ class EnrichStage:
         ctx: RunContext[EnrichDeps],
         inputs: AnalyticsInputs,
         channel_id: str,
-        builder: ThumbnailTraitBuilder,
-        fetcher: ThumbnailFetcher,
+        batch: ReadBatch,
         settings: AnalyticsEngineSettings,
     ) -> tuple[int, int, list[str]]:
-        cfg, store = settings.thumbnails, ctx.deps.analytics_store
+        cfg, store, builder = settings.thumbnails, ctx.deps.analytics_store, batch.builder
         videos = sorted(
             (v for v in inputs.videos if v.channel_id == channel_id and v.thumbnails),
             key=lambda v: (v.published_at, v.video_id),
@@ -157,23 +208,21 @@ class EnrichStage:
         )
         window_start = ctx.as_of - timedelta(days=max(settings.windows))
         targets = [
-            v for v in videos if v.published_at >= window_start and self._needs_traits(v, inputs.thumbnails)
+            v
+            for v in videos
+            if v.published_at >= window_start and self._needs_traits(v, inputs.thumbnails, batch.scope)
         ]
         recurring = await store.recurring_text(channel_id, ctx.as_of - timedelta(days=RECURRING_REFRESH_DAYS))
-        lookback = videos[: cfg.recurring_lookback_thumbnails] if recurring is None else []
+        # watermark stats come from in-scope thumbnails only, so skipped videos are never read for them
+        in_scope = [v for v in videos if v.video_id in batch.scope]
+        lookback = in_scope[: cfg.recurring_lookback_thumbnails] if recurring is None else []
         hint = self._devanagari_hint(videos, inputs, cfg.devanagari_title_share)
-        reads: dict[str, ReadThumbnail] = {}
-        failed: list[str] = []
-        for video in {v.video_id: v for v in targets + lookback}.values():
-            fetched = await fetcher.fetch_best(video)
-            read = await asyncio.to_thread(builder.read, fetched, hint) if fetched else None
-            if read is None:
-                failed.append(video.video_id)
-                continue
-            reads[video.video_id] = read
+        reads = await batch.read_all(list({v.video_id: v for v in targets + lookback}.values()), hint)
+        failed = [v.video_id for v in targets if v.video_id not in reads]
         if recurring is None:
+            pages = [reads[v.video_id].page for v in lookback if v.video_id in reads]
             shares = recurring_text(
-                [reads[v.video_id].page for v in lookback if v.video_id in reads],
+                [page for page in pages if page is not None],
                 cfg.recurring_text_share,
                 cfg.recurring_min_thumbnails,
             )
@@ -190,16 +239,19 @@ class EnrichStage:
             traits, {t.video_id: reads[t.video_id].fetched.url for t in traits}, ctx.as_of
         )
         reused = sum(1 for v in videos if v.published_at >= window_start) - len(targets)
-        return len(traits), reused, [vid for vid in failed if any(v.video_id == vid for v in targets)]
+        return len(traits), reused, failed
 
     @staticmethod
-    def _needs_traits(video: VideoRecord, existing: Mapping[str, ThumbnailTraits]) -> bool:
+    def _needs_traits(
+        video: VideoRecord, existing: Mapping[str, ThumbnailTraits], scope: frozenset[str]
+    ) -> bool:
         # traits are immutable per thumbnail; 02 flags a swapped thumbnail and a version bump recomputes
         current = existing.get(video.video_id)
         return (
             current is None
             or current.traits_version != TRAITS_VERSION
             or "thumbnail_changed" in video.quality_flags
+            or (video.video_id in scope and not has_text_traits(current))
         )
 
     @staticmethod
@@ -236,7 +288,7 @@ class AnalyticsStage:
     async def run(self, ctx: RunContext[AnalyticsDeps]) -> StageResult[AnalyticsResult]:
         deps = ctx.deps
         settings = AnalyticsEngineSettings.from_settings(deps.settings)
-        inputs = await deps.analytics_inputs.load(analysis_request(ctx))
+        inputs = await deps.analytics_inputs.load(await analysis_request(ctx))
         await ctx.checkpoint()
         result = await asyncio.to_thread(AnalyticsEngine(settings).run, inputs, ctx.as_of)
         await ctx.reporter.step(

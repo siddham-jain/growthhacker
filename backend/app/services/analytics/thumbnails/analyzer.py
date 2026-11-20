@@ -7,11 +7,19 @@ from app.services.analytics.thumbnails.fetch import FetchedThumbnail
 from app.services.analytics.thumbnails.pixels import PixelStats, decode_rgb, pixel_stats
 from app.services.analytics.thumbnails.text import (
     OcrPage,
+    TextSummary,
     ThumbnailTextAnalyzer,
     ThumbnailTextReader,
 )
 
 TRAITS_VERSION = "thumb-2026.11.1"
+# pixel-only rows: text fields are placeholders and their text is unknown, never "no text"
+OCR_SKIPPED = "skipped"
+PIXEL_ONLY_TEXT = TextSummary(False, None, None, 0, 0.0, 0.0, False, "unknown", None)
+
+
+def has_text_traits(traits: ThumbnailTraits) -> bool:
+    return traits.ocr_engine != OCR_SKIPPED
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,7 +27,7 @@ class ReadThumbnail:
     fetched: FetchedThumbnail
     width: int
     height: int
-    page: OcrPage
+    page: OcrPage | None
     pixels: PixelStats
 
 
@@ -31,12 +39,14 @@ class ThumbnailTraitBuilder:
         self.settings = settings
         self.text = ThumbnailTextAnalyzer(reader, settings)
 
-    def read(self, fetched: FetchedThumbnail, devanagari_hint: bool) -> ReadThumbnail | None:
+    def read(
+        self, fetched: FetchedThumbnail, devanagari_hint: bool, ocr: bool = True
+    ) -> ReadThumbnail | None:
         rgb = decode_rgb(fetched.data)
         if rgb is None:
             return None
         stats = pixel_stats(rgb, self.settings)
-        page = self.text.read(stats.cropped, devanagari_hint)
+        page = self.text.read(stats.cropped, devanagari_hint) if ocr else None
         return ReadThumbnail(
             fetched=fetched, width=rgb.shape[1], height=rgb.shape[0], page=page, pixels=stats
         )
@@ -50,7 +60,9 @@ class ThumbnailTraitBuilder:
         computed_at: datetime,
     ) -> ThumbnailTraits:
         stats = read.pixels
-        summary = self.text.summarise(read.page, recurring, brand_tokens)
+        summary = (
+            PIXEL_ONLY_TEXT if read.page is None else self.text.summarise(read.page, recurring, brand_tokens)
+        )
         return ThumbnailTraits(
             video_id=video_id,
             source_key=read.fetched.source_key,
@@ -67,8 +79,8 @@ class ThumbnailTraitBuilder:
             largest_text_height_ratio=summary.largest_text_height_ratio,
             brand_text_only=summary.brand_text_only,
             script_detected=summary.script_detected,
-            ocr_engine=self.reader.engine,
-            ocr_model=self.reader.model,
+            ocr_engine=OCR_SKIPPED if read.page is None else self.reader.engine,
+            ocr_model="" if read.page is None else self.reader.model,
             ocr_confidence_mean=summary.confidence_mean,
             brightness=stats.brightness,
             brightness_band=stats.brightness_band,
