@@ -1,4 +1,5 @@
 import re
+from dataclasses import replace
 from datetime import timedelta
 from decimal import Decimal
 from typing import Any
@@ -25,10 +26,11 @@ from app.services.website_intel.models import InventoryUrl, NavItem, PageType, P
 from app.services.website_intel.profile.builder import ProfileBuilder
 from app.services.website_intel.profile.claims import ClaimFactory, confidence
 from app.services.website_intel.profile.deterministic import DeterministicFactBuilder, cta_group_key
-from app.services.website_intel.profile.enrichers import site_change_stats, site_signal
+from app.services.website_intel.profile.enrichers import FreshnessProfiler, site_change_stats, site_signal
 from app.services.website_intel.profile.evidence import EvidenceVerifier, FactStore
 from app.services.website_intel.profile.industry import REFRESH_POLICIES, bucket, normalise_industry
 from app.services.website_intel.profile.llm import LlmGateway
+from app.services.website_intel.profile.market import MarketInference
 from app.services.website_intel.profile.page_facts import PageFactExtractor, llm_view
 from app.services.website_intel.profile.quality import profile_quality
 from app.services.website_intel.profile.schemas import PageFactsOutput
@@ -406,7 +408,7 @@ def synthesis_context(store: FactStore, tables: Any, pages: list[Any]) -> Synthe
         site=APOLLO,
         located=None,
         claims=claims,
-        country_hint="IN",
+        market=MarketInference("IN", "user"),
     )
 
 
@@ -750,3 +752,82 @@ async def test_builder_falls_back_to_deterministic_draft_when_the_budget_runs_ou
     assert RunNoticeCode.llm_fallback in {notice.code for notice in result.notices}
     assert result.llm_usage["cost_usd"] <= 0.10
     assert any("budget_exceeded" in error for error in result.llm_usage["errors"])  # type: ignore[attr-defined]
+
+
+async def test_builder_infers_the_market_and_parses_phones_in_it(clock: Any) -> None:
+    home = home_page()
+    page = home.model_copy(
+        update={
+            "page": home.page.model_copy(
+                update={
+                    "text": home.page.text + " Emergency +91 88000 01068. International desk +91 73929 57060."
+                }
+            ),
+            "details": home.details.model_copy(
+                update={"ctas": [*home.details.ctas, cta("call", "tel:18008913100", HOME, "1800 891 3100")]}
+            ),
+        }
+    )
+    llm = FakeLLMClient(default=lambda call: LLMError(LLMErrorKind.server_error, "down"))
+    result = await builder(llm, clock).build(
+        client_id=CLIENT_ID,
+        outcome=outcome_for([page]),
+        located=LOCATED,
+        reporter=RecordingReporter(),
+        version=1,
+    )
+    identity = result.profile.identity
+    assert (identity.country, identity.timezone, identity.primary_markets) == ("IN", "Asia/Kolkata", ["IN"])
+    calls = {
+        action.target: action.label for action in result.profile.conversion_actions if action.type == "call"
+    }
+    assert calls["tel:+9118008913100"] == "+91 1800 891 3100"
+    assert "tel:+18008913100" not in calls
+
+
+async def test_reduce_moves_cta_offerings_to_conversions_and_merges_variants() -> None:
+    page = home_page()
+    store = FactStore()
+    tables = DeterministicFactBuilder().build([page], store, inventory=[], templates=[])
+
+    def reply(call: FakeCall) -> dict[str, Any]:
+        out = r1_reply(call)
+        if call.system.prompt_id != "website_profile_claims":
+            evidence = fact_ids(call, "offering")[:1]
+            out["offerings"] += [
+                offering_item("cardiology", "department", evidence),
+                offering_item(
+                    "Request An Estimate", "service", evidence, url=HOME + "departments/cardiology"
+                ),
+            ]
+        return out
+
+    llm = FakeLLMClient({TaskId.website_profile_reduce: reply})
+    bundle = await ProfileSynthesizer(
+        LlmGateway(llm, client_id=CLIENT_ID, run_id=None), token_cap=120_000
+    ).synthesize(synthesis_context(store, tables, [page]))
+    names = [offering.name for offering in bundle.offerings]
+    assert names.count("Cardiology") == 1 and "cardiology" not in names
+    estimate = [action for action in bundle.conversion_actions if action.label == "Request An Estimate"]
+    assert estimate and estimate[0].type == "quote_request"
+    assert estimate[0].target == HOME + "departments/cardiology"
+
+
+async def test_only_regulated_industries_set_the_regulated_flag() -> None:
+    page = home_page()
+    store = FactStore()
+    tables = DeterministicFactBuilder().build([page], store, inventory=[], templates=[])
+    failing = FakeLLMClient(default=lambda call: LLMError(LLMErrorKind.server_error, "down"))
+    core = await ProfileSynthesizer(
+        LlmGateway(failing, client_id=CLIENT_ID, run_id=None), token_cap=120_000
+    ).synthesize(synthesis_context(store, tables, [page]))
+    claims = ClaimFactory(version=1, now=NOW, home_urls=frozenset({HOME}), stale_after=timedelta(days=548))
+    stats = site_change_stats([page], [], NOW)
+    # the reply says "healthcare" because the packaging firm serves pharma customers
+    llm = FakeLLMClient({TaskId.website_freshness_profile: r3_reply})
+    profiler = FreshnessProfiler(LlmGateway(llm, client_id=CLIENT_ID, run_id=None))
+    for industry, regulated in (("manufacturing", False), ("healthcare_hospital", True), ("other", True)):
+        bundle = replace(core, identity=core.identity.model_copy(update={"industry": industry}))
+        freshness = await profiler.profile(store=store, core=bundle, claims=claims, stats=stats)
+        assert freshness.regulated_domain is regulated, industry
+        assert (freshness.domain_kind == "healthcare") is regulated

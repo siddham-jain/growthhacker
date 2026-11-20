@@ -15,6 +15,7 @@ from app.services.website_intel.acquisition.cascade import CascadeOutcome
 from app.services.website_intel.acquisition.coverage import SITE_SOURCES
 from app.services.website_intel.crawl.scoring import TYPE_WEIGHT
 from app.services.website_intel.extract.boilerplate import CrossPageBoilerplateRemover
+from app.services.website_intel.extract.cta import localise_calls
 from app.services.website_intel.identity.locator import LocatedBusinessDetail
 from app.services.website_intel.identity.related_brands import RelatedBrandDetector
 from app.services.website_intel.models import ExtractedPage, PageType
@@ -29,6 +30,7 @@ from app.services.website_intel.profile.enrichers import (
 )
 from app.services.website_intel.profile.evidence import EvidenceVerifier, FactStore
 from app.services.website_intel.profile.llm import LlmGateway
+from app.services.website_intel.profile.market import MarketInference, MarketInferrer
 from app.services.website_intel.profile.merger import ProfileMerger, Tombstone
 from app.services.website_intel.profile.page_facts import MapCache, MapReport, PageFactExtractor
 from app.services.website_intel.profile.quality import coverage_report, profile_quality
@@ -104,8 +106,12 @@ class ProfileBuilder:
         country_hint: str | None = None,
     ) -> BuildResult:
         now = self._clock.now()
-        pages = outcome.pages
         site = located.site if located else None
+        # country_hint is the user's explicit market; anything else is inferred from the site's evidence
+        market = MarketInferrer().infer(
+            user_country=country_hint, site=site, pages=outcome.pages, knowledge=outcome.knowledge_entity
+        )
+        pages = self._localised(outcome.pages, market)
         claims = ClaimFactory(
             version=version,
             now=now,
@@ -153,7 +159,7 @@ class ProfileBuilder:
                 located=located,
                 claims=claims,
                 brand_signals=brand_signals,
-                country_hint=country_hint,
+                market=market,
                 coverage_notes=outcome.notes[:10],
             )
         )
@@ -259,6 +265,17 @@ class ProfileBuilder:
             llm_usage=self._llm.usage.as_dict(),
             notices=notices,
         )
+
+    @staticmethod
+    def _localised(pages: Sequence[ExtractedPage], market: MarketInference) -> list[ExtractedPage]:
+        """national phone numbers kept by a crawl without a known market are parsed in the inferred one."""
+        result = []
+        for page in pages:
+            ctas = localise_calls(page.details.ctas, market.country)
+            if ctas != page.details.ctas:
+                page = page.model_copy(update={"details": page.details.model_copy(update={"ctas": ctas})})
+            result.append(page)
+        return result
 
     def _boilerplate_free(self, pages: Sequence[ExtractedPage]) -> dict[UUID, str]:
         site_pages = [page for page in pages if page.page.source_kind in SITE_SOURCES]

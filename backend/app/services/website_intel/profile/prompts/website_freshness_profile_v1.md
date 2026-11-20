@@ -11,4 +11,4 @@ Also return:
 - `event_types`, `seasonality` (months 1–12, with the facts they rest on), `suggested_sources`
 - `regulated_domain`, `domain_kind`, `evergreen_expected` and `excluded_topics`
 
-Be conservative. Health, finance and legal businesses are regulated domains.
+Be conservative. Health, finance and legal businesses are regulated domains. A business that only serves regulated customers (packaging for pharma companies, software for banks) is not.

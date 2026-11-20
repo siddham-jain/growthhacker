@@ -3,7 +3,6 @@ from collections import Counter
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
-from importlib import resources
 from typing import Any, get_args
 
 from rapidfuzz import fuzz
@@ -28,7 +27,7 @@ from app.domain.profile import (
     StatedAudience,
     ValueProposition,
 )
-from app.domain.web import SiteRef
+from app.domain.web import ExtractionKind, SiteRef
 from app.ports.llm import PayloadClass, PromptInput, TaskId, TrustedBlock, UntrustedBlock
 from app.services.website_intel.extract.contact import meaningful_address
 from app.services.website_intel.extract.injection import contains_instruction
@@ -36,11 +35,21 @@ from app.services.website_intel.identity.locator import LocatedBusinessDetail
 from app.services.website_intel.identity.related_brands import BrandSignal
 from app.services.website_intel.inputs.urls import InvalidUrlError, normalize_url, path_of
 from app.services.website_intel.models import ExtractedPage, NavItem, TemplateSummary
+from app.services.website_intel.profile.canonical import (
+    brand_tokens,
+    merge_conversions,
+    merge_locations,
+    merge_offerings,
+    merge_value_props,
+)
 from app.services.website_intel.profile.claims import ClaimFactory, normalise_name, stable_id
 from app.services.website_intel.profile.deterministic import DeterministicTables
 from app.services.website_intel.profile.evidence import FactStore, numbers_in
 from app.services.website_intel.profile.industry import industry_from_text, normalise_industry
 from app.services.website_intel.profile.llm import LlmGateway
+from app.services.website_intel.profile.market import COUNTRY_TIMEZONES, MarketInference
+from app.services.website_intel.profile.non_offerings import cta_type, non_offering_reason
+from app.services.website_intel.profile.places import foreign_mentions, physical_sites
 from app.services.website_intel.profile.prompts import PROFILE_CLAIMS_PROMPT
 from app.services.website_intel.profile.schemas import (
     AudienceKind,
@@ -114,21 +123,6 @@ CLAIM_KINDS = (
 )
 
 
-def _country_timezones() -> dict[str, str]:
-    table = resources.files("tzdata").joinpath("zoneinfo/zone1970.tab").read_text(encoding="utf-8")
-    zones: dict[str, str] = {}
-    for line in table.splitlines():
-        if line.startswith("#") or not line.strip():
-            continue
-        codes, _, zone = line.split("\t")[:3]
-        for code in codes.split(","):
-            zones.setdefault(code, zone)
-    return zones
-
-
-COUNTRY_TIMEZONES = _country_timezones()
-
-
 @dataclass
 class SynthesisContext:
     store: FactStore
@@ -141,7 +135,7 @@ class SynthesisContext:
     located: LocatedBusinessDetail | None
     claims: ClaimFactory
     brand_signals: Sequence[BrandSignal] = ()
-    country_hint: str | None = None
+    market: MarketInference = MarketInference(None)
     coverage_notes: Sequence[str] = ()
 
 
@@ -219,7 +213,7 @@ class ProfileSynthesizer:
             text=(
                 f"Website: {ctx.site.canonical_origin if ctx.site else 'none'}\n"
                 f"Name guess: {ctx.located.business_name if ctx.located and ctx.located.business_name else 'unknown'}\n"
-                f"Country hint: {ctx.country_hint or 'unknown'}\n"
+                f"Market: {ctx.market.country or 'unknown'}\n"
                 f"Coverage notes: {'; '.join(ctx.coverage_notes) or 'none'}"
             ),
         )
@@ -330,8 +324,12 @@ class DeterministicDraft:
             or self._role("channel_title")
         )
 
-    def locations(self) -> list[LlmLocation]:
-        return [_location(fact) for fact in self._ctx.store.of_kind(FactKind.location)]
+    def locations(self, *, structured_only: bool = False) -> list[LlmLocation]:
+        return [
+            _location(fact)
+            for fact in self._ctx.store.of_kind(FactKind.location)
+            if not structured_only or fact.extraction is not ExtractionKind.page_text
+        ]
 
     def build(self) -> Draft:
         store = self._ctx.store
@@ -419,16 +417,26 @@ class CoreBinder:
     def bind(self, pair: Draft, *, used_llm: bool) -> CoreBundle:
         draft, claims = pair.core, pair.claims
         warnings: list[str] = []
-        offerings = self._offerings(draft.offerings)
-        by_name = {normalise_name(offering.name): offering.id for offering in offerings}
         identity = self._identity(draft, warnings)
+        brands = brand_tokens(
+            [identity.name, *(term.term for term in draft.brand_terms if term.kind == "company")]
+        )
+        offerings = self._offerings(draft.offerings, brands)
+        by_name = {
+            normalise_name(name): offering.id
+            for offering in offerings
+            for name in (offering.name, *offering.aliases)
+        }
+        # the reduce step already read the page-text location facts; only structured ones are added back
+        extra = DeterministicDraft(self._ctx).locations(structured_only=used_llm)
+        locations, reach = self._locations([*claims.locations, *extra], brands, identity.name)
         bundle = CoreBundle(
             identity=identity,
             offerings=offerings,
-            value_propositions=self._value_props(claims, by_name),
+            value_propositions=merge_value_props([*self._value_props(claims, by_name), *reach]),
             target_customers=self._audiences(claims),
-            locations=self._locations([*claims.locations, *DeterministicDraft(self._ctx).locations()]),
-            conversion_actions=self._conversions(draft.conversions, by_name),
+            locations=locations,
+            conversion_actions=self._conversions(draft.conversions, by_name, offerings, brands),
             brand_terms=self._brands(draft.brand_terms),
             competitor_hints=[],
             used_llm=used_llm,
@@ -464,9 +472,8 @@ class CoreBinder:
         primary_language = (
             (languages.most_common(1)[0][0] if languages else None) or draft.primary_language or "en"
         )
-        country = (draft.country or ctx.country_hint or "").upper()[:2] or None
-        if country is not None and not re.fullmatch(r"[A-Z]{2}", country):
-            country = None
+        # evidence decides the market (user, cctld, phones, addresses, currency, language, kb); never a guess
+        country = ctx.market.country
         site = ctx.site
         located = ctx.located
         channel = None
@@ -511,7 +518,7 @@ class CoreBinder:
             related_brands=related,
         )
 
-    def _offerings(self, items: Sequence[LlmOffering]) -> list[Offering]:
+    def _offerings(self, items: Sequence[LlmOffering], brands: frozenset[str]) -> list[Offering]:
         result: dict[str, Offering] = {}
         parents: dict[str, str] = {}
         for item in items[: CAPS["offerings"]]:
@@ -544,12 +551,19 @@ class CoreBinder:
             )
             if item.parent_name:
                 parents[offering_id] = normalise_name(item.parent_name)
-        by_name = {normalise_name(offering.name): offering.id for offering in result.values()}
+        merged, remap = merge_offerings(list(result.values()), brands)
+        kept = {offering.id: offering for offering in merged}
+        by_name = {
+            normalise_name(name): offering.id
+            for offering in merged
+            for name in (offering.name, *offering.aliases)
+        }
         for offering_id, parent in parents.items():
+            child_id = remap.get(offering_id, offering_id)
             parent_id = by_name.get(parent)
-            if parent_id and parent_id != offering_id:
-                result[offering_id] = result[offering_id].model_copy(update={"parent_id": parent_id})
-        return list(result.values())
+            if parent_id and parent_id != child_id and kept[child_id].parent_id is None:
+                kept[child_id] = kept[child_id].model_copy(update={"parent_id": parent_id})
+        return list(kept.values())
 
     def _price(self, price_id: str) -> PriceSignal:
         row = self._ctx.tables.prices[price_id]
@@ -588,7 +602,7 @@ class CoreBinder:
                     meta=self._claims.evidenced(evidence),
                 )
             )
-        return result
+        return merge_value_props(result)
 
     def _audiences(self, draft: ClaimsOutput) -> list[StatedAudience]:
         result = []
@@ -611,7 +625,9 @@ class CoreBinder:
             )
         return result
 
-    def _locations(self, items: Sequence[LlmLocation]) -> LocationSummary:
+    def _locations(
+        self, items: Sequence[LlmLocation], brands: frozenset[str], business_name: str
+    ) -> tuple[LocationSummary, list[ValueProposition]]:
         seen: dict[str, Location] = {}
         for item in items:
             evidence = self._evidence(item.evidence_ids)
@@ -632,16 +648,24 @@ class CoreBinder:
                 country=country,
                 meta=self._claims.evidenced(evidence),
             )
-        items_list = list(seen.values())
-        return LocationSummary(
+        candidates = foreign_mentions(list(seen.values()), self._ctx.market.country)
+        items_list, reach = physical_sites(merge_locations(candidates, brands), business_name=business_name)
+        summary = LocationSummary(
             count=len(items_list),
             cities=sorted({item.city for item in items_list if item.city}),
             regions=sorted({item.region for item in items_list if item.region}),
             countries=sorted({item.country for item in items_list if item.country}),
             items=items_list[: CAPS["locations"]],
         )
+        return summary, reach
 
-    def _conversions(self, items: Sequence[LlmConversion], by_name: dict[str, str]) -> list[ConversionAction]:
+    def _conversions(
+        self,
+        items: Sequence[LlmConversion],
+        by_name: dict[str, str],
+        offerings: Sequence[Offering],
+        brands: frozenset[str],
+    ) -> list[ConversionAction]:
         rows = {row.cta_id: row for row in self._ctx.tables.ctas.values()}
         bindings = {item.cta_id: item for item in items if item.cta_id in rows}
         ranked = sorted(
@@ -674,9 +698,37 @@ class CoreBinder:
                     meta=self._claims.evidenced(row.evidence, origin=ClaimOrigin.deterministic),
                 )
             )
+        result = merge_conversions([*result, *self._offering_ctas(offerings, brands)])[: CAPS["ctas"]]
         if result and not any(action.is_primary for action in result):
             primary = next((action for action in result if action.type in CTA_MEDIUM_PRIMARY), result[0])
             result = [action.model_copy(update={"is_primary": action.id == primary.id}) for action in result]
+        return result
+
+    def _offering_ctas(self, offerings: Sequence[Offering], brands: frozenset[str]) -> list[ConversionAction]:
+        """a reduce-step "offering" like "Request An Estimate" with its own page is a way to reach the
+        business; the non_offerings validator then drops it from offerings."""
+        home = self._claims.home_urls
+        result = []
+        for offering in offerings:
+            kind = cta_type(offering.name)
+            if offering.url is None or kind is None:
+                continue
+            if non_offering_reason(offering.name, offering.url, brands) != "call_to_action":
+                continue
+            pages = {item.source_url for item in offering.meta.evidence}
+            result.append(
+                ConversionAction(
+                    id=stable_id("cta", kind, offering.url),
+                    type=kind,
+                    label=offering.name,
+                    target=offering.url,
+                    medium="web",
+                    prominence=Prominence(
+                        pages_seen=len(pages), on_home=bool(pages & home), in_header=False, in_footer=False
+                    ),
+                    meta=offering.meta,
+                )
+            )
         return result
 
     def _brands(self, items: Sequence[LlmBrandTerm]) -> list[BrandTerm]:

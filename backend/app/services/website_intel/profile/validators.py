@@ -7,7 +7,9 @@ from app.core.registry import Registry
 from app.domain.profile import BusinessProfile
 from app.services.website_intel.extract.contact import contact_is_valid
 from app.services.website_intel.extract.injection import contains_instruction
+from app.services.website_intel.profile.canonical import brand_tokens
 from app.services.website_intel.profile.claims import normalise_name
+from app.services.website_intel.profile.non_offerings import business_words, non_offering_reason
 
 DEMOGRAPHIC = re.compile(
     r"\b(?:aged?\s*\d|\d{2}\s*[-–]\s*\d{2}\s*(?:years|yrs)|years? old|women|men|male|female|gender|income|"
@@ -106,6 +108,20 @@ class ContactActionValidator:
         ]
 
 
+@profile_validator_registry.register("non_offerings")
+class NonOfferingValidator:
+    # calls to action, app-store links and bare navigation headings are not things the business sells;
+    # the binder already moved real ctas into conversion actions
+    def validate(self, profile: BusinessProfile) -> list[Issue]:
+        brands = brand_tokens([profile.identity.name, *(term.term for term in profile.brand_terms)])
+        niche = business_words(profile.identity.niche)
+        return [
+            Issue("offerings", offering.id, reason, "drop")
+            for offering in profile.offerings
+            if (reason := non_offering_reason(offering.name, offering.url, brands, niche))
+        ]
+
+
 @profile_validator_registry.register("duplicate_items")
 class DuplicateValidator:
     def validate(self, profile: BusinessProfile) -> list[Issue]:
@@ -143,4 +159,22 @@ class ValidatorChain:
                 seen.add(item_key)
                 kept.append(item)
             update[collection] = kept
+        if "offerings" in update:
+            self._unlink(profile, update)
         return (profile.model_copy(update=update) if update else profile), issues
+
+    @staticmethod
+    def _unlink(profile: BusinessProfile, update: dict[str, Any]) -> None:
+        """children, value props and actions stop pointing at a dropped offering."""
+        kept = {offering.id for offering in update["offerings"]}
+        update["offerings"] = [
+            item
+            if item.parent_id in kept or item.parent_id is None
+            else item.model_copy(update={"parent_id": None})
+            for item in update["offerings"]
+        ]
+        for collection in ("value_propositions", "conversion_actions"):
+            update[collection] = [
+                item.model_copy(update={"offering_ids": [i for i in item.offering_ids if i in kept]})
+                for item in update.get(collection, getattr(profile, collection))
+            ]

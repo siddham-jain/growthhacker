@@ -388,6 +388,7 @@ class FreshnessProfiler:
             return [offering_by_name[name] for name in map(normalise_name, names) if name in offering_by_name]
 
         regulated_kind = REGULATED_INDUSTRIES.get(core.identity.industry)
+        unclassified = output is not None and core.identity.industry == "other"
         basis = [core.offerings[0].id] if core.offerings else ["identity"]
         entities: list[WatchEntity] = []
         drivers: list[FreshnessDriver] = []
@@ -470,9 +471,10 @@ class FreshnessProfiler:
             regions=[country] if country else [],
             languages=core.identity.languages,
             excluded_topics=output.excluded_topics[:20] if output is not None else [],
-            regulated_domain=bool(regulated_kind)
-            or (output.regulated_domain if output is not None else False),
-            domain_kind=regulated_kind or (output.domain_kind if output is not None else "none"),  # type: ignore[arg-type]
+            # the industry code decides; serving pharma or bank customers does not make a packaging firm regulated.
+            # the llm's call counts only when the industry could not be classified
+            regulated_domain=bool(regulated_kind) or (unclassified and output.regulated_domain),
+            domain_kind=regulated_kind or (output.domain_kind if unclassified else "none"),  # type: ignore[arg-type]
             evergreen_expected=output.evergreen_expected
             if output is not None
             else sensitivity.value in {"very_low", "low", "medium"},

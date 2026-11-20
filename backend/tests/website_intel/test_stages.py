@@ -11,6 +11,7 @@ from app.core.config import CrawlProfileSettings
 from app.core.db import SessionFactory, UnitOfWork
 from app.domain.runs import RunKind, RunNoticeCode, RunTrigger
 from app.models.runs import PipelineRun
+from app.models.tenancy import Client
 from app.models.website import BusinessProfile as ProfileRow
 from app.models.website import BuyerQuestion, CrawledPage, CrawlRun, ProfileDiff, Website
 from app.pipeline.context import RunBudgetLedger
@@ -165,6 +166,9 @@ def llm(client_class: type[FakeLLMClient] = FakeLLMClient) -> FakeLLMClient:
     )
 
 
+INDIA = Market(country="IN", language="en", timezone="Asia/Kolkata")
+
+
 async def run_onboarding_stages(
     session_factory: SessionFactory,
     clock: Any,
@@ -173,9 +177,19 @@ async def run_onboarding_stages(
     client: FakeLLMClient,
     budget: Any,
     slug: str,
+    market: Market = INDIA,
+    market_explicit: bool = True,
 ) -> tuple[Any, Artifacts, RecordingReporter, dict[str, Any]]:
     async with session_factory() as session:
-        scope = await create_tenant(session, slug, website_url=ORIGIN)
+        scope = await create_tenant(
+            session,
+            slug,
+            website_url=ORIGIN,
+            country=market.country,
+            language=market.language,
+            timezone=market.timezone,
+            settings={"market_explicit": market_explicit},
+        )
         run = await insert_row(session, PipelineRun.__table__, scope, {"kind": "onboarding"})
         await session.commit()
     results: dict[str, Any] = {}
@@ -197,7 +211,8 @@ async def run_onboarding_stages(
             window_days=30,
             topic_set_version=1,
             website_url="smiledental.in",
-            market=Market(country="IN", language="en", timezone="Asia/Kolkata"),
+            market=market,
+            market_explicit=market_explicit,
         )
         reporter = RecordingReporter()
         ctx = RunContext(
@@ -288,3 +303,44 @@ async def test_build_profile_degrades_instead_of_failing_when_llm_budget_runs_ou
     assert RunNoticeCode.llm_fallback in {notice.code for notice in result.notices}
     assert artifacts.values["business_profile"].identity.name == "Smile Dental Clinic"
     assert ledger.remaining(BudgetKind.llm_usd) == 0.0
+
+
+async def test_onboarding_replaces_a_browser_market_with_the_sites_evidence(
+    session_factory: SessionFactory, clock: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    browser = Market(country="US", language="en-US", timezone="Asia/Calcutta")
+    scope, artifacts, _, _ = await run_onboarding_stages(
+        session_factory,
+        clock,
+        monkeypatch,
+        client=llm(),
+        budget=UnlimitedLedger(),
+        slug="smile-us",
+        market=browser,
+        market_explicit=False,
+    )
+    assert artifacts.values["business_profile"].identity.country == "IN"
+    async with session_factory() as session:
+        client = await session.get(Client, scope.client_id)
+    assert (client.country, client.language, client.timezone) == ("IN", "en-IN", "Asia/Kolkata")
+    assert client.settings["config_version"] == 2 and not client.settings["market_explicit"]
+
+
+async def test_onboarding_keeps_a_market_the_user_picked(
+    session_factory: SessionFactory, clock: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    picked = Market(country="US", language="en-US", timezone="America/New_York")
+    scope, artifacts, _, _ = await run_onboarding_stages(
+        session_factory,
+        clock,
+        monkeypatch,
+        client=llm(),
+        budget=UnlimitedLedger(),
+        slug="smile-pick",
+        market=picked,
+        market_explicit=True,
+    )
+    assert artifacts.values["business_profile"].identity.country == "US"
+    async with session_factory() as session:
+        client = await session.get(Client, scope.client_id)
+    assert (client.country, client.timezone) == ("US", "America/New_York")
