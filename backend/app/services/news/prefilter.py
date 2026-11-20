@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 from app.core.config import NewsSettings
 from app.domain.news import NewsItem, NewsStory, SourceTier
 from app.services.news.context import NewsClientContext
-from app.services.news.text import contains_phrase, partial_ratio
+from app.services.news.text import contains_normalized, contains_phrase, normalize, partial_ratio_normalized
 from app.services.news.tiers import TIER1
 
 TIER_WEIGHT = {
@@ -41,12 +41,28 @@ class PrefilteredStory:
     competitor_hit: bool
 
 
-def _term_score(term: str, item: NewsItem) -> float:
-    if contains_phrase(item.title, term):
-        return 1.0
-    if contains_phrase(item.snippet, term):
-        return 0.6
-    return partial_ratio(term, item.title) / 100 * 0.4
+TITLE_HIT = 1.0
+SNIPPET_HIT = 0.6
+FUZZY_WEIGHT = 0.4
+
+
+def lexical_score(terms: Sequence[str], items: Sequence[NewsItem]) -> float:
+    # max over pairs of title phrase 1.0, snippet phrase 0.6 or fuzzy title x 0.4; pairs that cannot win are skipped
+    needles = [normalize(term) for term in terms]
+    texts = [(normalize(item.title), normalize(item.snippet)) for item in items]
+    phrase = 0.0
+    fuzzy = 0.0
+    for needle in needles:
+        for title, snippet in texts:
+            if contains_normalized(title, needle):
+                return TITLE_HIT
+            if phrase >= SNIPPET_HIT:
+                continue
+            if contains_normalized(snippet, needle):
+                phrase = SNIPPET_HIT
+                continue
+            fuzzy = max(fuzzy, partial_ratio_normalized(needle, title, fuzzy))
+    return max(phrase, fuzzy / 100 * FUZZY_WEIGHT)
 
 
 class RelevancePrefilter:
@@ -104,7 +120,7 @@ class RelevancePrefilter:
         for bundle in bundles:
             if not self.in_window(bundle, ctx, now) or not self.language_ok(bundle, ctx):
                 continue
-            lexical = max((_term_score(t, item) for t in terms for item in bundle.items), default=0.0)
+            lexical = lexical_score(terms, bundle.items)
             client_hit = any(
                 contains_phrase(f"{i.title} {i.snippet}", t) for t in brand_terms for i in bundle.items
             )
