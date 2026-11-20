@@ -15,19 +15,33 @@ const NOTICE_COPY: Record<string, { title: string; body?: string }> = {
 };
 
 const HANDLED_ELSEWHERE = new Set(["thin_data"]);
+// llm_fallback also comes from topic matching, where the card wording copy would be wrong
+const CARD_STAGES = new Set(["recommend", "write_cards"]);
+
+function noticeCopy(notice: RunNotice) {
+  if (notice.code === "llm_fallback" && notice.stage && !CARD_STAGES.has(notice.stage)) return undefined;
+  return NOTICE_COPY[notice.code];
+}
 
 export function NoticeList({ notices, className }: { notices: RunNotice[]; className?: string }) {
-  const shown = notices.filter((notice) => !HANDLED_ELSEWHERE.has(notice.code));
-  if (!shown.length) return null;
+  // several stages can raise the same notice; show each distinct line once
+  const lines = new Map<string, { notice: RunNotice; title: string; body: string }>();
+  for (const notice of notices) {
+    if (HANDLED_ELSEWHERE.has(notice.code)) continue;
+    const copy = noticeCopy(notice);
+    const title = copy?.title ?? "Done, with gaps.";
+    const body = copy?.body ?? notice.message;
+    if (!lines.has(`${title} ${body}`)) lines.set(`${title} ${body}`, { notice, title, body });
+  }
+  if (!lines.size) return null;
   return (
     <ul className={cx("flex flex-col gap-2", className)} aria-label="Notices">
-      {shown.map((notice) => {
-        const copy = NOTICE_COPY[notice.code];
+      {[...lines].map(([key, { notice, title, body }]) => {
         const warning = notice.level !== "info";
         const Icon = warning ? RiAlertLine : RiInformationLine;
         return (
           <li
-            key={`${notice.code}-${notice.message}`}
+            key={key}
             className={cx(
               "flex items-start gap-2.5 rounded-control px-3 py-2.5 text-body-regular",
               warning ? "bg-[color-mix(in_oklab,var(--warning)_10%,var(--card))] text-warning" : "bg-muted text-muted-foreground",
@@ -35,7 +49,7 @@ export function NoticeList({ notices, className }: { notices: RunNotice[]; class
           >
             <Icon aria-hidden className="mt-0.5 size-4 shrink-0" />
             <span>
-              <span className="font-medium">{copy?.title ?? "Done, with gaps."}</span> {copy?.body ?? notice.message}
+              <span className="font-medium">{title}</span> {body}
             </span>
           </li>
         );

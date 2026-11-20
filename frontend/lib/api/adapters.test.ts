@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { toGapMatrix, toProfilePatch, toRecommendation, toRecommendationPage, toRun, toScorecard, toThinWindowNotice } from "./adapters";
+import { subscriberBandLabel, toGapMatrix, toProfilePatch, toRecommendation, toRecommendationPage, toRun, toScorecard, toThinWindowNotice } from "./adapters";
 import type { components } from "./schema";
 
 type Wire = components["schemas"];
 
 describe("adapters", () => {
+  it("labels subscriber bands and passes unknown ones through", () => {
+    expect(subscriberBandLabel("lt_10k")).toBe("Under 10K subscribers");
+    expect(subscriberBandLabel("unknown_band")).toBe("unknown_band");
+  });
+
   it("renames run progress and keeps the window", () => {
     const run = toRun({ id: "r", client_id: "c", kind: "analysis", status: "running", progress_pct: 42, window_days: 90, notices: [] } as unknown as Wire["RunOut"]);
     expect(run).toMatchObject({ percent: 42, window_days: 90, notices: [], error: null });

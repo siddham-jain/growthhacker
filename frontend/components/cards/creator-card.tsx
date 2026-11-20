@@ -1,4 +1,5 @@
 import { CalcMark } from "@/components/ui/calc-mark";
+import { subscriberBandLabel } from "@/lib/api/adapters";
 import type { CreatorView } from "@/lib/api/types";
 import { formatCompact, formatDate, formatRatio } from "@/lib/format";
 import { ReferenceStrip } from "./reference-strip";
@@ -23,7 +24,7 @@ export function CreatorCard({ creator }: { creator: CreatorView }) {
         <div className="min-w-0">
           <h3 className="text-headline text-foreground">{title}</h3>
           <p className="text-caption-1-regular text-muted-foreground">
-            {[creator.channel.handle, creator.subscriber_band, `${creator.uploads_90d} uploads in 90 days`].filter(Boolean).join(" · ")}
+            {[creator.channel.handle, subscriberBandLabel(creator.subscriber_band), `${creator.uploads_90d} uploads in 90 days`].filter(Boolean).join(" · ")}
             <CalcMark />
           </p>
         </div>

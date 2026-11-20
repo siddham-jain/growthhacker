@@ -141,6 +141,10 @@ const BAND_LABELS: Record<Wire["SubscriberBand"], string> = {
   hidden: "Subscribers hidden",
 };
 
+export function subscriberBandLabel(band: string): string {
+  return BAND_LABELS[band as Wire["SubscriberBand"]] ?? band;
+}
+
 export function toVideo(summary: Wire["VideoSummary"] | undefined, outlier: Wire["OutlierRecord"]): VideoMetricsView {
   return {
     video_id: outlier.video_id,
