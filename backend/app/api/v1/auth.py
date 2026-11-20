@@ -1,8 +1,10 @@
+import hashlib
+
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse
 
 from app.api import ids
-from app.api.deps import Auth, State, ip_limited, limited
+from app.api.deps import Auth, State, ip_limited, limited, spend_limit
 from app.api.errors import PROBLEM_RESPONSES
 from app.api.schemas.admin import LoginIn, MeOut, MeUser, MeWorkspace, WorkspaceSwitchIn
 from app.api.schemas.common import StatusOut
@@ -17,8 +19,12 @@ router = APIRouter(tags=["auth"], responses=PROBLEM_RESPONSES)
     dependencies=[Depends(ip_limited("write"))],
 )
 async def auth_login(body: LoginIn, request: Request, state: State) -> JSONResponse:
+    email = body.email.lower()
+    # spread-out guessing against one account is capped too; the redis key holds a digest, not the address
+    account = hashlib.sha256(email.encode()).hexdigest()[:32]
+    await spend_limit(request, state, f"account:{account}", "login_account")
     issued = await state.authenticator.login(
-        body.email.lower(), body.password, user_agent=request.headers.get("user-agent")
+        email, body.password, user_agent=request.headers.get("user-agent")
     )
     response = JSONResponse(StatusOut(status="signed_in").model_dump())
     api = state.settings.api

@@ -8,7 +8,7 @@ from app.api.services import RECOMMENDATIONS
 from app.core.config import RecommendSettings
 from app.domain.card_copy import CardCopy
 from app.domain.confidence import ConfidenceBasis
-from app.domain.recommendations import NewsSubject, RecType
+from app.domain.recommendations import ASSIGNMENT_REC_TYPES, NewsSubject, RecType
 from app.domain.refresh import RefreshStatus
 from app.pipeline.stages.analytics import ANALYTICS_RESULT
 from app.pipeline.stages.cards import WRITTEN_CARDS
@@ -206,7 +206,14 @@ async def test_recommendations_overlay_written_copy_and_honour_feedback(
     strict = await harness.client.get(
         f"{owner.path}/recommendations", params={"format": "contract"}, headers=owner.headers
     )
-    contract = strict.json()["data"]["items"][0]
+    strict_data = strict.json()["data"]
+    assert any(card.type is RecType.news_opportunity for card in cards)
+    assert {item["type"] for item in strict_data["items"]} <= {kind.value for kind in ASSIGNMENT_REC_TYPES}
+    assert len(strict_data["items"]) == sum(card.type in ASSIGNMENT_REC_TYPES for card in cards)
+    assert strict_data["meta"]["excluded_types"] == ["description_refresh", "news_opportunity"]
+    assert "format=full" in strict_data["meta"]["note"]
+    assert full.json()["data"]["meta"]["format"] == "full"
+    contract = strict_data["items"][0]
     assert set(contract) == {
         "id",
         "type",
@@ -410,5 +417,5 @@ async def seed_refreshes(harness: Harness, owner: Tenant, run_id: uuid.UUID) -> 
             ]
         )
         repository = DescriptionRefreshRepository(session, owner.scope)
-        repository.save(keyword)
-        repository.save(rule)
+        await repository.save(keyword)
+        await repository.save(rule)

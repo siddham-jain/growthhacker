@@ -19,6 +19,7 @@ from app.api.schemas.results import (
     FeedbackOut,
     GapMatrixData,
     HygieneData,
+    ListingFormat,
     NewsOpportunityView,
     OutlierRow,
     OwnPerformanceData,
@@ -44,6 +45,7 @@ from app.api.v1.common import PAGING_PARAMS, json_response, only_params
 from app.core.tenancy import TenantScope
 from app.domain.analytics import TraitLift
 from app.domain.news import NewsSignal
+from app.domain.recommendations import ASSIGNMENT_REC_TYPES, RecType
 from app.domain.runs import RunKind, RunTrigger
 from app.models.tenancy import Client
 from app.pipeline.client_settings import read_settings
@@ -71,6 +73,21 @@ async def _published(state: State, scope: TenantScope, window_days: int | None) 
             client = await session.get(Client, scope.client_id)
         window_days = read_settings(client).window_days if client is not None else 30
     return await active_result(state.container.session_factory, scope, window_days)
+
+
+def listing_format(format: Literal["contract", "full"]) -> ListingFormat:
+    if format == "full":
+        return ListingFormat(format="full", types=list(RecType))
+    excluded = sorted(set(RecType) - ASSIGNMENT_REC_TYPES)
+    return ListingFormat(
+        format="contract",
+        types=sorted(ASSIGNMENT_REC_TYPES),
+        excluded_types=excluded,
+        note=(
+            f"Strict contract mode lists only the assignment's card types; {', '.join(excluded)} "
+            "cards are left out here and stay available with format=full."
+        ),
+    )
 
 
 def _wrap[T](state: State, data: T, active: ActiveResult) -> ResultEnvelope[T]:
@@ -293,7 +310,12 @@ async def recommendations_list(
         pending = CardsPending(window_days=active.window_days, cards_run=await present_run(state, result.run))
         return json_response(pending, 202)
     filters = RecommendationFilters(
-        type=type, lens=lens, buyer_question_id=buyer_question_id, confidence=confidence, status=status
+        type=type,
+        lens=lens,
+        buyer_question_id=buyer_question_id,
+        confidence=confidence,
+        status=status,
+        assignment_types_only=format == "contract",
     )
     etag = (
         '"'
@@ -317,6 +339,7 @@ async def recommendations_list(
     )
     data = RecommendationsData(
         items=items,
+        meta=listing_format(format),
         next_cursor=listing.next_cursor,
         limit=limit,
         notices=listing.notices,

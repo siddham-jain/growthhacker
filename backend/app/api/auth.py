@@ -37,6 +37,20 @@ class IssuedSession:
     expires_at: datetime
 
 
+def required_scope(method: str, route_path: str) -> str:
+    """the api key scope a request needs: read for safe methods, runs:write or clients:write for writes."""
+    if method in {"GET", "HEAD", "OPTIONS"}:
+        return "read"
+    return "runs:write" if "/runs" in route_path else "clients:write"
+
+
+def scope_allows(scopes: frozenset[str], required: str) -> bool:
+    # admin covers everything and any write scope also reads
+    if "admin" in scopes or required in scopes:
+        return True
+    return required == "read" and bool(WRITE_SCOPES & scopes)
+
+
 def role_for_scopes(scopes: list[str]) -> Role:
     if "admin" in scopes:
         return Role.owner
@@ -65,26 +79,58 @@ class Authenticator:
             raise InvalidCredentials("the api key is malformed") from None
         async with self._session_factory() as session, session.begin():
             now = await _now(session)
-            key = (
-                await session.execute(select(ApiKey).where(ApiKey.key_prefix == parsed.key_prefix))
-            ).scalar_one_or_none()
+            row = (
+                await session.execute(
+                    select(ApiKey, Workspace.deleted_at)
+                    .join(Workspace, Workspace.id == ApiKey.workspace_id)
+                    .where(ApiKey.key_prefix == parsed.key_prefix)
+                )
+            ).one_or_none()
+            key = row[0] if row is not None else None
             if key is None or not secrets_match(
                 parsed.secret, key.secret_hash, pepper=pepper.get_secret_value()
             ):
                 raise InvalidCredentials("the api key is not valid")
             if key.revoked_at is not None or (key.expires_at is not None and key.expires_at <= now):
                 raise InvalidCredentials("the api key was revoked or has expired")
-            if key.last_used_at is None or now - key.last_used_at > TOUCH_INTERVAL:
+            if row[1] is not None:
+                raise InvalidCredentials("the api key's workspace was deleted")
+            creator_role = await self._creator_role(session, key)
+            if creator_role is None:
+                # committed before refusing, so the key stays dead even if the creator rejoins
+                await session.execute(update(ApiKey).where(ApiKey.id == key.id).values(revoked_at=now))
+            elif key.last_used_at is None or now - key.last_used_at > TOUCH_INTERVAL:
                 await session.execute(update(ApiKey).where(ApiKey.id == key.id).values(last_used_at=now))
+        if creator_role is None:
+            raise InvalidCredentials("the api key was revoked because its creator left the workspace")
         scopes = list(key.scopes or [])
+        key_role = role_for_scopes(scopes)
         principal = Principal(
             kind="api_key",
             id=key.id,
             workspace_id=key.workspace_id,
-            role=role_for_scopes(scopes),
+            # a key never outranks the member who created it
+            role=key_role if creator_role.allows(key_role) else creator_role,
             scopes=frozenset(scopes),
         )
         return AuthContext(principal=principal, user_id=key.created_by_user_id)
+
+    @staticmethod
+    async def _creator_role(session, key: ApiKey) -> Role | None:
+        if key.created_by_user_id is None:
+            return None
+        role = (
+            await session.execute(
+                select(WorkspaceMember.role)
+                .join(User, User.id == WorkspaceMember.user_id)
+                .where(
+                    WorkspaceMember.user_id == key.created_by_user_id,
+                    WorkspaceMember.workspace_id == key.workspace_id,
+                    User.disabled_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+        return None if role is None else Role(role)
 
     async def session(self, token: str) -> AuthContext:
         idle = timedelta(hours=self._settings.security.session_idle_ttl_h)
@@ -188,8 +234,10 @@ class Authenticator:
     async def _membership(
         session, user_id: UUID, workspace_id: UUID | None, *, strict: bool = False
     ) -> tuple[UUID, Role] | None:
-        statement = select(WorkspaceMember.workspace_id, WorkspaceMember.role).where(
-            WorkspaceMember.user_id == user_id
+        statement = (
+            select(WorkspaceMember.workspace_id, WorkspaceMember.role)
+            .join(Workspace, Workspace.id == WorkspaceMember.workspace_id)
+            .where(WorkspaceMember.user_id == user_id, Workspace.deleted_at.is_(None))
         )
         if workspace_id is not None:
             row = (

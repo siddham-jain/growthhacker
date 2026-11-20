@@ -18,7 +18,7 @@ from app.api.ratelimit import ApiRateLimiter
 from app.api.signing import Signer
 from app.api.sse import PubSubHub
 from app.api.state import ApiState
-from app.api.v1 import admin, auth, clients, events, health, results, runs, setup
+from app.api.v1 import admin, answer_citations, auth, clients, events, health, results, runs, setup
 from app.api.v1 import settings as settings_routes
 from app.bootstrap import load_registrations
 from app.core.config import Settings, get_settings
@@ -154,6 +154,7 @@ def _v1() -> APIRouter:
         results.router,
         admin.router,
         settings_routes.router,
+        answer_citations.router,
     )
     for router in routers:
         v1.include_router(router, dependencies=[Depends(access)])

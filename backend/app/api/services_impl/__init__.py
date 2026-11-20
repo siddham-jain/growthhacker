@@ -2,6 +2,7 @@
 
 from app.api.services_impl import (  # noqa: F401
     analytics,
+    answer_citations,
     channels,
     competitors,
     creators,

@@ -1,13 +1,15 @@
+import json
 from datetime import date, datetime
 from typing import Annotated
 from urllib.parse import parse_qs, urlencode, urlparse
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.api import ids
+from app.api.auth import AuthContext
 from app.api.deps import Access, ClientScope, Owner, State, WorkspaceScope, limited, require_role
-from app.api.errors import PROBLEM_RESPONSES, Forbidden, NotFound
+from app.api.errors import PROBLEM_RESPONSES, Forbidden, InvalidCredentials, NotFound
 from app.api.pagination import Page, PageRequest
 from app.api.schemas.admin import (
     BacktestCreate,
@@ -31,7 +33,7 @@ from app.models.tenancy import Client
 from app.pipeline.runs import RunRequest
 
 router = APIRouter(responses=PROBLEM_RESPONSES)
-# google redirects the browser here; the single-use state is the credential
+# google redirects the browser here; the single-use state only works in the browser session that started it
 public_router = APIRouter(responses=PROBLEM_RESPONSES)
 
 Editor = Depends(require_role(Role.editor))
@@ -40,6 +42,22 @@ Editor = Depends(require_role(Role.editor))
 def _return_key(state: ApiState, token: str) -> str:
     # which client the browser returns to; 02 keeps the pkce state itself under its own key
     return f"{state.settings.redis.key_prefix}:oauth_return:{token}"
+
+
+async def _browser_session(request: Request, state: ApiState) -> AuthContext | None:
+    token = request.cookies.get(state.settings.api.session_cookie)
+    if not token:
+        return None
+    try:
+        return await state.authenticator.session(token)
+    except InvalidCredentials:
+        return None
+
+
+def _bound_to(binding: dict[str, str | None], session: AuthContext) -> bool:
+    # a flow started in a browser needs that same session back; one started with an api key needs its user
+    same_user = str(session.user_id) == binding["user_id"]
+    return same_user and binding["session_id"] in (None, str(session.session_id))
 
 
 def _frontend(state: ApiState, path: str, **params: str) -> RedirectResponse:
@@ -75,8 +93,13 @@ async def integrations_youtube_connect(
         raise Forbidden("connect YouTube from a signed-in session, not with an API key")
     url = await service.start(client_scope, context.user_id)
     token = parse_qs(urlparse(url).query).get("state", [""])[0]
+    binding = {
+        "client_id": client_id,
+        "user_id": str(context.user_id),
+        "session_id": None if context.session_id is None else str(context.session_id),
+    }
     await state.container.redis.set(
-        _return_key(state, token), client_id, ex=state.settings.api.oauth_state_ttl_s
+        _return_key(state, token), json.dumps(binding), ex=state.settings.api.oauth_state_ttl_s
     )
     if redirect:
         return RedirectResponse(url, status_code=302)
@@ -87,6 +110,7 @@ async def integrations_youtube_connect(
     "/integrations/youtube/callback", tags=["integrations"], operation_id="integrations_youtube_callback"
 )
 async def integrations_youtube_callback(
+    request: Request,
     state: State,
     state_token: Annotated[str, Query(alias="state", max_length=200)],
     code: Annotated[str | None, Query(max_length=2000)] = None,
@@ -96,11 +120,16 @@ async def integrations_youtube_callback(
     raw = await state.container.redis.getdel(_return_key(state, state_token))
     if raw is None:
         return _frontend(state, "/", oauth="error", reason="invalid_state")
-    target = f"/c/{raw.decode() if isinstance(raw, bytes) else raw}/settings"
+    binding = json.loads(raw)
+    target = f"/c/{binding['client_id']}/settings"
+    session = await _browser_session(request, state)
+    if session is None or session.user_id is None or not _bound_to(binding, session):
+        # a forged or forwarded callback link; the pending state is spent so it cannot be retried
+        return _frontend(state, target, tab="integrations", oauth="error", reason="session_mismatch")
     if error is not None or code is None:
         # the user declined on google's consent screen; 02's pending state simply expires
         return _frontend(state, target, tab="integrations", oauth="error", reason="access_denied")
-    outcome = await service.complete(state_token, code)
+    outcome = await service.complete(state_token, code, user_id=session.user_id)
     if outcome.status != "connected":
         return _frontend(state, target, tab="integrations", oauth="error", reason=outcome.status)
     return _frontend(state, target, tab="integrations", oauth="connected")

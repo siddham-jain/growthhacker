@@ -5,13 +5,14 @@ from pydantic import AwareDatetime, BaseModel, Field
 from app.api.schemas.clients import ChannelRef
 from app.api.schemas.common import ApiModel, WindowDays
 from app.api.schemas.runs import RunOut
+from app.domain.common import SubscriberBand
 from app.domain.competitors import (
-    BusinessRelevance,
     CandidateRole,
     CandidateStatus,
     ChannelEvidence,
     CompetitorRelation,
-    YouTubeRelevance,
+    OfferingMatch,
+    TopicUploadMatch,
 )
 from app.domain.profile import BusinessProfile, BuyerQuestionSourceKind, FunnelStage
 from app.domain.web import SourceKind
@@ -111,6 +112,24 @@ class CompetitorEvidence(BaseModel):
     text: str
 
 
+class ChannelRelevanceView(BaseModel):
+    # raw facts only; the overlap and activity scores order candidates internally and never leave the api
+    matching_uploads: int | None = None
+    uploads_checked: int | None = None
+    matching_uploads_label: str | None = None
+    matched_topic_refs: list[TopicUploadMatch] = []
+    size_band: Literal["peer", "larger", "much_larger", "smaller", "much_smaller", "unknown"]
+    subscriber_band: SubscriberBand
+
+
+class BusinessFactsView(BaseModel):
+    # web-derived facts and the bucketed tier; the weighted overlap numbers stay internal
+    tier: Literal["high", "medium", "low"]
+    matched_offerings: list[OfferingMatch] = []
+    matched_offerings_count: int
+    geo_basis: str
+
+
 class CompetitorChannelView(BaseModel):
     # raw public stats and the ownership verdict for one linked channel; no score or rank (99 C4)
     channel: ChannelRef
@@ -118,7 +137,7 @@ class CompetitorChannelView(BaseModel):
     tracked: bool
     ownership: OwnershipVerdict
     evidence: ChannelEvidence
-    relevance: YouTubeRelevance
+    relevance: ChannelRelevanceView
     preview_video_ids: list[str] = []
     flags: list[str] = []
 
@@ -136,7 +155,7 @@ class CompetitorView(BaseModel):
     sources: list[str] = []
     evidence: list[CompetitorEvidence] = []
     evidence_summary: str = ""
-    business: BusinessRelevance
+    business: BusinessFactsView
     flags: list[str] = []
     reject_reason: str | None = None
     added_by: Literal["system", "user"]

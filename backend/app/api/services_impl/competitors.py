@@ -16,6 +16,8 @@ from app.api.errors import (
 from app.api.pagination import Page, PageRequest
 from app.api.schemas.clients import ChannelRef
 from app.api.schemas.setup import (
+    BusinessFactsView,
+    ChannelRelevanceView,
     CompetitorAddIn,
     CompetitorChannelView,
     CompetitorEvidence,
@@ -28,7 +30,13 @@ from app.api.services_impl.common import ServiceBase, channel_refs
 from app.api.services_impl.profile import ProfileEdits, ProfileMissing
 from app.core.container import Container
 from app.core.tenancy import TenantScope
-from app.domain.competitors import CandidateRole, CandidateStatus, CompetitorCandidate
+from app.domain.competitors import (
+    BusinessRelevance,
+    CandidateRole,
+    CandidateStatus,
+    CompetitorCandidate,
+    YouTubeRelevance,
+)
 from app.domain.youtube import OwnershipLabel
 from app.models.competitors import CompetitorCandidate as CandidateRow
 from app.models.tenancy import Client
@@ -60,6 +68,29 @@ def set_error(error: SetValidationError) -> AppError:
     )
 
 
+def relevance_view(relevance: YouTubeRelevance) -> ChannelRelevanceView:
+    matching = getattr(relevance, "matching_uploads", None)
+    checked = getattr(relevance, "uploads_checked", None)
+    label = f"matching uploads: {matching} of last {checked}" if matching is not None and checked else None
+    return ChannelRelevanceView(
+        matching_uploads=matching,
+        uploads_checked=checked,
+        matching_uploads_label=label,
+        matched_topic_refs=relevance.matched_topic_refs,
+        size_band=relevance.size_band,
+        subscriber_band=relevance.subscriber_band,
+    )
+
+
+def business_view(business: BusinessRelevance) -> BusinessFactsView:
+    return BusinessFactsView(
+        tier=business.tier,
+        matched_offerings=business.matched_offerings,
+        matched_offerings_count=len(business.matched_offerings),
+        geo_basis=business.geo_basis,
+    )
+
+
 def candidate_view(
     candidate: CompetitorCandidate, refs: dict[str, ChannelRef], tracked: set[str]
 ) -> CompetitorView:
@@ -77,7 +108,7 @@ def candidate_view(
             tracked=match.channel_id in tracked,
             ownership=match.ownership,
             evidence=match.youtube,
-            relevance=match.youtube_relevance,
+            relevance=relevance_view(match.youtube_relevance),
             preview_video_ids=list(match.youtube.recent_upload_ids[:3]),
             flags=list(match.flags),
         )
@@ -111,7 +142,7 @@ def candidate_view(
         sources=kinds,
         evidence=evidence,
         evidence_summary=candidate.evidence_summary,
-        business=candidate.business,
+        business=business_view(candidate.business),
         flags=candidate.flags,
         reject_reason=candidate.rejection_reason,
         added_by="user" if "user" in kinds or candidate.status is CandidateStatus.user_added else "system",

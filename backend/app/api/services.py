@@ -185,6 +185,7 @@ class RecommendationFilters:
     buyer_question_id: str | None = None
     confidence: str | None = None
     status: str | None = None
+    assignment_types_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -271,7 +272,7 @@ class YouTubeOAuthService(Protocol):
     # 02 owns google, pkce state, tokens and the ownership check; the api maps results to redirects
     async def start(self, scope: TenantScope, user_id: UUID) -> str: ...
 
-    async def complete(self, state: str, code: str) -> OAuthOutcome: ...
+    async def complete(self, state: str, code: str, *, user_id: UUID) -> OAuthOutcome: ...
 
     async def disconnect(self, scope: TenantScope) -> bool: ...
 

@@ -1,6 +1,7 @@
 import base64
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import UUID
 
 import anyio
@@ -29,6 +30,12 @@ from app.core.container import Container
 from app.core.security import InvalidBindingError, InvalidCiphertextError, SecretCipher
 from app.core.tenancy import TenantScope
 from app.models.tenancy import Workspace
+from app.services.website_intel.inputs.ssrf import (
+    DnsLookupError,
+    SsrfGuard,
+    UnsafeTargetError,
+    is_public_address,
+)
 
 LLM_KEY = "llm"
 PROVIDERS: tuple[ProviderName, ...] = ("anthropic", "openai_compat")
@@ -44,6 +51,7 @@ OPENAI_FIELDS = (
 )
 TIER_FIELDS = ("model", "max_tokens", "timeout_s", "max_retries", "effort")
 TEST_TIMEOUT_S = 30
+LOCAL_SUFFIXES = (".localhost", ".local", ".internal", ".lan", ".home.arpa")
 
 
 def binding(workspace_id: UUID, provider: str) -> str:
@@ -70,6 +78,26 @@ def overlay(
     return env.model_copy(update=changes)
 
 
+def custom_base_url(env: LLMProviderSettings, own: dict[str, Any]) -> bool:
+    return own.get("base_url") is not None and own["base_url"] != env.base_url
+
+
+def base_url_problem(base_url: str, dev_hosts: frozenset[str]) -> str | None:
+    """why a workspace base_url is refused without a lookup; dns answers are the ssrf guard's job."""
+    parts = urlsplit(base_url)
+    host = (parts.hostname or "").lower()
+    if host in dev_hosts:
+        return None
+    if parts.scheme != "https":
+        return "base_url must use https"
+    if host == "localhost" or host.endswith(LOCAL_SUFFIXES):
+        return "base_url must be a public host"
+    try:
+        return None if is_public_address(host) else "base_url must be a public host"
+    except ValueError:
+        return None
+
+
 def overridden(own: dict[str, Any]) -> list[str]:
     paths = [name for name in (*PROVIDER_FIELDS, *OPENAI_FIELDS, "enabled", "api_key") if name in own]
     for tier, values in own.get("tiers", {}).items():
@@ -85,6 +113,27 @@ def tier_view(provider: LLMProviderSettings) -> TiersOut:
 
 class LLMConfigService(ServiceBase):
     """per-workspace llm provider overrides on top of the deployment settings; keys are write-only."""
+
+    guard: SsrfGuard = SsrfGuard()
+
+    def _dev_hosts(self) -> frozenset[str]:
+        return frozenset(host.lower() for host in self.settings.llm.workspace_base_url_dev_hosts)
+
+    async def _unusable_base_url(self, env: LLMProviderSettings, own: dict[str, Any]) -> str | None:
+        if not custom_base_url(env, own):
+            return None
+        base_url = own["base_url"]
+        if urlsplit(base_url).hostname in self._dev_hosts():
+            return None
+        problem = base_url_problem(base_url, self._dev_hosts())
+        if problem is not None:
+            return problem
+        try:
+            await self.guard.check(base_url)
+        except (UnsafeTargetError, DnsLookupError):
+            # the resolved address is not echoed back, so this cannot map the internal network
+            return "base_url must resolve to a public address on port 443"
+        return None
 
     def cipher(self) -> SecretCipher:
         try:
@@ -110,9 +159,9 @@ class LLMConfigService(ServiceBase):
             env = base.provider(name)
             own = stored.get("providers", {}).get(name, {})
             provider = overlay(env, own)
-            key_source = (
-                "workspace" if "api_key" in own else "environment" if env.api_key is not None else None
-            )
+            # the deployment key never travels to a workspace-chosen host
+            environment_key = env.api_key is not None and not custom_base_url(env, own)
+            key_source = "workspace" if "api_key" in own else "environment" if environment_key else None
             openai = None
             if isinstance(provider, OpenAICompatSettings):
                 openai = OpenAICompatOptions(**provider.model_dump(include=set(OPENAI_FIELDS)))
@@ -207,6 +256,15 @@ class LLMConfigService(ServiceBase):
                 change.api_key.get_secret_value().encode(), binding=binding(workspace_id, name)
             )
             own["api_key"] = {"kid": kid, "ciphertext": base64.b64encode(ciphertext).decode()}
+        if "base_url" in sent and custom_base_url(env, own):
+            problem = base_url_problem(own["base_url"], self._dev_hosts())
+            if problem is not None:
+                raise invalid(problem, f"{field}.base_url")
+            if "api_key" not in own:
+                raise invalid(
+                    "a custom base_url needs this workspace's own api_key; the deployment key is not sent there",
+                    f"{field}.api_key",
+                )
         has_key = "api_key" in own or env.api_key is not None
         if env.kind == "openai_compatible" and has_key and own.get("base_url", env.base_url) is None:
             raise invalid("an OpenAI-compatible provider needs a base_url", f"{field}.base_url")
@@ -214,7 +272,13 @@ class LLMConfigService(ServiceBase):
 
     async def effective(self, workspace_id: UUID) -> LLMSettings:
         """the deployment llm settings with this workspace's overrides and decrypted keys applied."""
-        return self._effective(workspace_id, await self._stored(workspace_id))
+        stored = await self._stored(workspace_id)
+        for name in PROVIDERS:
+            own = stored.get("providers", {}).get(name, {})
+            problem = await self._unusable_base_url(self.settings.llm.provider(name), own)
+            if problem is not None:
+                raise Unavailable(f"the {name} {problem}; fix it in the LLM settings")
+        return self._effective(workspace_id, stored)
 
     def _effective(self, workspace_id: UUID, stored: dict[str, Any]) -> LLMSettings:
         base = self.settings.llm
@@ -228,7 +292,10 @@ class LLMConfigService(ServiceBase):
                 key = (
                     SecretStr(self._decrypt(workspace_id, name, own["api_key"])) if "api_key" in own else None
                 )
-                update[name] = overlay(base.provider(name), own, key)
+                provider = overlay(base.provider(name), own, key)
+                if key is None and custom_base_url(base.provider(name), own):
+                    provider = provider.model_copy(update={"api_key": None})
+                update[name] = provider
         order = [
             name for name in stored.get("provider_order", base.provider_order) if name in enabled_providers
         ]
@@ -239,10 +306,16 @@ class LLMConfigService(ServiceBase):
     async def test(self, scope: TenantScope, provider: ProviderName | None) -> LLMTestOut:
         """checks each saved route's key and model ids against the provider; spends no tokens."""
         # disabled providers are checked too, so a gateway can be verified before it is switched on
-        effective = self._effective(scope.workspace_id, await self._stored(scope.workspace_id))
+        stored = await self._stored(scope.workspace_id)
+        effective = self._effective(scope.workspace_id, stored)
         checks: list[LLMRouteCheck] = []
         for name in [provider] if provider else list(PROVIDERS):
             settings = effective.provider(name)
+            own = stored.get("providers", {}).get(name, {})
+            problem = await self._unusable_base_url(self.settings.llm.provider(name), own)
+            if problem is not None:
+                checks.append(LLMRouteCheck(provider=name, model=None, status="failed", detail=problem))
+                continue
             if not settings.configured:
                 detail = "add an API key" if settings.api_key is None else "add a base URL"
                 checks.append(

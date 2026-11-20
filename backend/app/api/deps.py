@@ -6,7 +6,7 @@ from fastapi import Depends, Header, Path, Request
 from sqlalchemy import select
 
 from app.api import ids
-from app.api.auth import AuthContext
+from app.api.auth import AuthContext, required_scope, scope_allows
 from app.api.errors import Forbidden, IdempotencyKeyRequired, InvalidCredentials, NotFound, RateLimited
 from app.api.idempotency import IdempotentRequest, claim, parse_key
 from app.api.state import ApiState
@@ -66,9 +66,15 @@ async def spend_limit(request: Request, state: ApiState, subject: str, bucket: s
 
 
 async def access(request: Request, state: State, context: Auth) -> AuthContext:
-    """router-wide: viewers may only read; every call spends the read or write bucket."""
-    if request.method not in SAFE_METHODS and not context.principal.role.allows(Role.editor):
+    """router-wide: viewers may only read, api keys only within their scopes; every call spends a bucket."""
+    principal = context.principal
+    if request.method not in SAFE_METHODS and not principal.role.allows(Role.editor):
         raise Forbidden("viewers can only read")
+    if principal.kind == "api_key":
+        route = request.scope.get("route")
+        needed = required_scope(request.method, getattr(route, "path", request.url.path))
+        if not scope_allows(principal.scopes, needed):
+            raise Forbidden(f"this api key lacks the {needed} scope")
     await spend_limit(
         request, state, _subject(context), "read" if request.method in SAFE_METHODS else "write"
     )
@@ -139,9 +145,11 @@ def ip_limited(bucket: str) -> Callable[..., Any]:
 
 
 async def run_start_limit(request: Request, state: State, scope: WorkspaceScope) -> None:
+    # the client must belong to the caller before its bucket is charged, or anyone could drain it
     client = request.path_params.get("client_id")
     if client:
-        await spend_limit(request, state, f"client:{client}", "run_start_client")
+        client_scoped = await client_scope(state, scope, client)
+        await spend_limit(request, state, f"client:{client_scoped.client_id}", "run_start_client")
     await spend_limit(request, state, f"workspace:{scope.workspace_id}", "run_start_workspace")
 
 
@@ -159,13 +167,13 @@ def idempotency(*, required_for_api_keys: bool) -> Callable[..., Any]:
             return
         if context.principal.workspace_id is None:
             raise Forbidden("you are not a member of any workspace")
-        route = request.scope.get("route")
         guard = await claim(
             state.container.session_factory,
             workspace_id=context.principal.workspace_id,
             key=parse_key(idempotency_key),
             method=request.method,
-            route=getattr(route, "path", request.url.path),
+            # the concrete path, so one key reused for another client is a conflict rather than a replay
+            path=request.url.path,
             body=await request.body(),
             ttl=timedelta(hours=state.settings.api.idempotency_ttl_h),
             max_body_bytes=state.settings.api.idempotency_max_body_bytes,

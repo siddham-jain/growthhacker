@@ -1,5 +1,6 @@
 import json
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import AwareDatetime, BaseModel, Field, SecretStr, field_validator
 
@@ -30,11 +31,22 @@ MAX_EXTRA_BYTES = 4000
 
 
 def _valid_base_url(value: str | None) -> str | None:
+    # structure only; https and public-address rules need the deployment settings, so the service applies them
     if value is None:
         return None
-    local = value.startswith(("http://localhost", "http://127.0.0.1"))
-    if not (value.startswith("https://") or local):
-        raise ValueError("base_url must use https (plain http only for localhost)")
+    if any(char.isspace() or char == "\\" for char in value):
+        raise ValueError("base_url must not contain spaces or backslashes")
+    parts = urlsplit(value)
+    if parts.scheme not in {"https", "http"} or not parts.hostname:
+        raise ValueError("base_url must be an absolute https URL")
+    if "@" in parts.netloc:
+        raise ValueError("base_url must not contain credentials")
+    if parts.query or parts.fragment:
+        raise ValueError("base_url must not carry a query string or fragment")
+    try:
+        parts.port  # noqa: B018  (raises on an out-of-range port)
+    except ValueError:
+        raise ValueError("base_url has an invalid port") from None
     return value.rstrip("/")
 
 

@@ -19,6 +19,7 @@ from app.core.container import Container
 from app.core.tenancy import TenantScope
 from app.domain.card_copy import CardCopy
 from app.domain.recommendations import (
+    ASSIGNMENT_REC_TYPES,
     FeedbackStatus,
     Recommendation,
     RecommendationFeedback,
@@ -179,6 +180,8 @@ class RecommendationReadService(ServiceBase):
             row = feedback.get(card.extras.stable_key)
             status = FeedbackStatus(row.status) if row is not None and row.status else None
             if filters.type is not None and card.type != filters.type:
+                return False
+            if filters.assignment_types_only and card.type not in ASSIGNMENT_REC_TYPES:
                 return False
             if filters.lens is not None and filters.lens not in card.lens:
                 return False

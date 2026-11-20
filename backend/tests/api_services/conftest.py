@@ -12,6 +12,7 @@ from sqlalchemy import delete, insert
 
 import app.api.services_impl  # noqa: F401  (registers the service implementations)
 from app.api import ids
+from app.api.services_impl.settings import LLMConfigService
 from app.core.tenancy import TenantScope
 from app.domain.profile import BusinessProfile
 from app.domain.runs import RunStatus
@@ -20,6 +21,7 @@ from app.models.runs import ActiveResultSet
 from app.models.youtube_cache import YtChannel
 from app.pipeline.artifacts import ArtifactExpiry, PgArtifactStore
 from app.ports.artifacts import ArtifactKey
+from app.services.website_intel.inputs.ssrf import SsrfGuard
 from app.services.website_intel.persistence import WebsiteIntelStore
 from tests.api.conftest import (  # noqa: F401  (fixtures shared with 11's api tests)
     Account,
@@ -128,3 +130,13 @@ async def seed_profile(harness: Harness, scope: TenantScope, profile: BusinessPr
             stored, created_by="system", llm_usage={}, prompt_versions={}
         )
     return stored
+
+
+async def public_resolver(host: str, port: int) -> list[str]:
+    return ["93.184.216.34"]
+
+
+@pytest.fixture(autouse=True)
+def _public_llm_base_urls(monkeypatch: pytest.MonkeyPatch) -> None:
+    # workspace base_urls are ssrf-checked; the example gateway hosts must not need real dns here
+    monkeypatch.setattr(LLMConfigService, "guard", SsrfGuard(public_resolver))

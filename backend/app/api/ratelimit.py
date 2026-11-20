@@ -64,6 +64,7 @@ def buckets(settings: ApiRateLimitSettings) -> dict[str, Bucket]:
         "run_start_workspace": Bucket("run_start_workspace", settings.run_start_per_hour_workspace, 3600),
         "sse_open": Bucket("sse_open", settings.sse_open_per_min, 60),
         "oauth": Bucket("oauth", settings.oauth_per_min, 60),
+        "login_account": Bucket("login_account", settings.login_per_hour_account, 3600),
     }
 
 

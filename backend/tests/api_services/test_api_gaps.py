@@ -14,7 +14,7 @@ from app.services.analytics.settings import AnalyticsEngineSettings
 from tests.analytics.apollo_fixture import APOLLO, COMPETITORS
 from tests.analytics.factories import AS_OF as ANALYTICS_AS_OF
 from tests.analytics.test_golden import COST_QUESTION, KNEE, build_inputs
-from tests.api.conftest import Harness
+from tests.api.conftest import PASSWORD, Harness
 from tests.api_services import test_results
 from tests.api_services.conftest import tenant
 from tests.api_services.test_results import published
@@ -260,7 +260,7 @@ class FakeOAuth:
     async def start(self, scope, user_id) -> str:
         return "https://accounts.google.com/o/oauth2/v2/auth?state=tok123&client_id=x"
 
-    async def complete(self, state: str, code: str) -> OAuthOutcome:
+    async def complete(self, state: str, code: str, *, user_id) -> OAuthOutcome:
         self.completed.append((state, code))
         return OAuthOutcome(status="connected")
 
@@ -269,14 +269,21 @@ class FakeOAuth:
         return True
 
 
+async def sign_in(harness: Harness, owner) -> None:
+    # google returns the browser to the callback, so it must carry the session that started the flow
+    login = await harness.client.post(
+        "/api/v1/auth/login", json={"email": owner.account.email, "password": PASSWORD}
+    )
+    assert login.status_code == 200, login.text
+
+
 async def test_youtube_oauth_round_trip_redirects_to_the_client(harness: Harness) -> None:
     owner = await tenant(harness, "oauthon")
     fake = FakeOAuth()
     harness.state.override_service(YOUTUBE_OAUTH, fake)
+    await sign_in(harness, owner)
     connect = await harness.client.get(
-        "/api/v1/integrations/youtube/connect",
-        params={"client_id": owner.client["id"]},
-        headers=owner.headers,
+        "/api/v1/integrations/youtube/connect", params={"client_id": owner.client["id"]}
     )
     assert connect.status_code == 200, connect.text
     assert parse_qs(urlparse(connect.json()["authorization_url"]).query)["state"] == ["tok123"]
@@ -305,11 +312,8 @@ async def test_youtube_oauth_round_trip_redirects_to_the_client(harness: Harness
 async def test_youtube_callback_reports_a_declined_consent(harness: Harness) -> None:
     owner = await tenant(harness, "oauthno")
     harness.state.override_service(YOUTUBE_OAUTH, FakeOAuth())
-    await harness.client.get(
-        "/api/v1/integrations/youtube/connect",
-        params={"client_id": owner.client["id"]},
-        headers=owner.headers,
-    )
+    await sign_in(harness, owner)
+    await harness.client.get("/api/v1/integrations/youtube/connect", params={"client_id": owner.client["id"]})
     declined = await harness.client.get(
         "/api/v1/integrations/youtube/callback",
         params={"state": "tok123", "error": "access_denied"},

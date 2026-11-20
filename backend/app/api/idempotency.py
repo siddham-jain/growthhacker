@@ -27,13 +27,13 @@ def parse_key(header: str) -> str:
     return value
 
 
-def request_fingerprint(method: str, route: str, workspace_id: UUID, body: bytes) -> str:
+def request_fingerprint(method: str, path: str, workspace_id: UUID, body: bytes) -> str:
     try:
         canonical: Any = json.loads(body) if body else None
         encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
     except ValueError:
         encoded = body.decode("latin-1")
-    return hashlib.sha256(f"{method}\n{route}\n{workspace_id}\n{encoded}".encode()).hexdigest()
+    return hashlib.sha256(f"{method}\n{path}\n{workspace_id}\n{encoded}".encode()).hexdigest()
 
 
 class IdempotentRequest:
@@ -104,12 +104,12 @@ async def claim(
     workspace_id: UUID,
     key: str,
     method: str,
-    route: str,
+    path: str,
     body: bytes,
     ttl: timedelta,
     max_body_bytes: int,
 ) -> IdempotentRequest:
-    fingerprint = request_fingerprint(method, route, workspace_id, body)
+    fingerprint = request_fingerprint(method, path, workspace_id, body)
     async with session_factory() as session, session.begin():
         now = (await session.execute(text("SELECT now()"))).scalar_one()
         await session.execute(
@@ -127,7 +127,7 @@ async def claim(
                     key=key,
                     fingerprint=fingerprint,
                     method=method,
-                    path=route,
+                    path=path,
                     status=IN_PROGRESS,
                     expires_at=now + ttl,
                 )

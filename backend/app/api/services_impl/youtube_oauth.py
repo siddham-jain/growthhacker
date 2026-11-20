@@ -38,10 +38,10 @@ class YouTubeOAuthBridge:
     async def start(self, scope: TenantScope, user_id: UUID) -> str:
         return await self._connections().start(scope, user_id)
 
-    async def complete(self, state: str, code: str) -> OAuthOutcome:
+    async def complete(self, state: str, code: str, *, user_id: UUID) -> OAuthOutcome:
         connections = self._connections()
         try:
-            result = await connections.complete(state, code)
+            result = await connections.complete(state, code, user_id=user_id)
         except InvalidGrant as error:
             logger.info("oauth.callback_invalid_grant", reason=str(error)[:200])
             return OAuthOutcome(status="failed", message="Google did not grant access. Please try again.")

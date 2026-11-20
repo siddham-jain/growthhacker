@@ -237,7 +237,12 @@ class ProfileEdits:
         if self._topics is None:
             container = self.container
             self._topics = TopicEngine(
-                container.settings, container.clock, container.uow, router=None, llm=None
+                container.settings,
+                container.clock,
+                container.uow,
+                router=None,
+                llm=None,
+                locks=container.lock_manager,
             )
         return self._topics
 

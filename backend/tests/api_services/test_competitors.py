@@ -68,6 +68,13 @@ async def test_competitor_set_edits_freeze_after_every_decision(harness: Harness
     assert set(items) >= EXPECTED_COMPETITORS
     sheet = items[MAX]
     assert "score" not in sheet and sheet["business"]["tier"] in {"high", "medium", "low"}
+    # raw facts only: no overlap, activity or agreement numbers leave the api
+    assert set(sheet["business"]) == {"tier", "matched_offerings", "matched_offerings_count", "geo_basis"}
+    relevance = sheet["channels"][0]["relevance"]
+    assert "content_overlap" not in relevance and "activity" not in relevance
+    assert relevance["matching_uploads_label"] == (
+        f"matching uploads: {relevance['matching_uploads']} of last {relevance['uploads_checked']}"
+    )
     assert sheet["channels"][0]["ownership"]["label"] and sheet["evidence"]
 
     for channel_id in sorted(EXPECTED_COMPETITORS - {MAX}):

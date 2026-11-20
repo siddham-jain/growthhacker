@@ -25,6 +25,7 @@ from app.domain.recommendations import (
     InsufficiencyNotice,
     Recommendation,
     RecommendationFeedback,
+    RecType,
     ReferenceVideo,
     StrictRecommendation,
     WhiteSpaceNote,
@@ -134,8 +135,17 @@ class RecommendationOut(BaseModel):
     feedback: RecommendationFeedback | None = None
 
 
+class ListingFormat(BaseModel):
+    # strict contract mode keeps only the assignment's five card types; full mode keeps every surface
+    format: Literal["contract", "full"]
+    types: list[RecType]
+    excluded_types: list[RecType] = []
+    note: str | None = None
+
+
 class RecommendationsData(BaseModel):
     items: list[RecommendationOut] | list[StrictRecommendation]
+    meta: ListingFormat | None = None
     next_cursor: str | None = None
     limit: int
     notices: list[InsufficiencyNotice] = []
