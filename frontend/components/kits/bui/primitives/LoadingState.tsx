@@ -76,17 +76,19 @@ export default function LoadingState({
   label,
   variant = "Drive",
   startedAt,
+  showGrid = true,
 }: {
   label?: string;
   variant?: string;
   startedAt?: number;
+  showGrid?: boolean;
 }) {
   const elapsed = useElapsed(startedAt);
   const { delays, dur, round } = PATTERNS[variant] ?? PATTERNS.Drive;
 
   return (
     <div role="status" className="flex w-fit items-center gap-2.5">
-      <LoaderGrid delays={delays} dur={dur} round={round} />
+      {showGrid ? <LoaderGrid delays={delays} dur={dur} round={round} /> : null}
       <span
         className="bg-clip-text text-[13px] font-medium text-transparent"
         style={{

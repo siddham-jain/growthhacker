@@ -135,7 +135,7 @@ export function LiveAnalysis({ runId, step, headline, subtitle, doneHref, doneLa
                   {finished ? (
                     <p className="text-body-medium text-foreground">{state.latestMessage}</p>
                   ) : (
-                    <LoadingState label={state.latestMessage ?? "Starting"} startedAt={state.startedAt ? Date.parse(state.startedAt) : undefined} />
+                    <LoadingState label={state.latestMessage ?? "Starting"} showGrid={false} startedAt={state.startedAt ? Date.parse(state.startedAt) : undefined} />
                   )}
                 </div>
                 <span className="text-caption-1-medium text-muted-foreground tabular-nums">{shownPercent}%</span>
