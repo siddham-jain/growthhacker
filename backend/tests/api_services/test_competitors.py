@@ -121,6 +121,9 @@ async def test_competitor_set_edits_freeze_after_every_decision(harness: Harness
 async def test_adding_a_competitor_resolves_the_channel_and_marks_it_user_added(harness: Harness) -> None:
     owner = await discovered(harness, "addrival")
     fake_ports(harness)
+    before = (
+        await harness.client.get(f"{owner.path}/competitors", params={"limit": 100}, headers=owner.headers)
+    ).json()["items"]
     added = await harness.client.post(
         f"{owner.path}/competitors",
         json={"channel_ref": f"https://www.youtube.com/channel/{MAX}", "role": "niche_set"},
@@ -130,6 +133,24 @@ async def test_adding_a_competitor_resolves_the_channel_and_marks_it_user_added(
     body = added.json()
     assert body["status"] == "user_added" and body["role"] == "niche_set" and body["added_by"] == "user"
     assert body["channel"]["channel_id"] == MAX
+    # a channel we already hold is moved, not re-discovered, so no other suggestion changes set
+    after = (
+        await harness.client.get(f"{owner.path}/competitors", params={"limit": 100}, headers=owner.headers)
+    ).json()["items"]
+    roles = {item["id"]: (item["role"], item["status"]) for item in before if item["id"] != body["id"]}
+    assert {item["id"]: (item["role"], item["status"]) for item in after if item["id"] in roles} == roles
+    other = next(
+        item
+        for item in before
+        if item["id"] != body["id"]
+        and item["role"] != "competitor_set"
+        and item["relation"] not in {"self", "subsidiary", "parent"}
+    )
+    by_name = await harness.client.post(
+        f"{owner.path}/competitors", json={"channel_ref": other["name"].upper()}, headers=owner.headers
+    )
+    assert by_name.status_code == 201, by_name.text
+    assert (by_name.json()["id"], by_name.json()["role"]) == (other["id"], "competitor_set")
 
     unknown = await harness.client.post(
         f"{owner.path}/competitors", json={"channel_ref": "@definitely-not-a-channel"}, headers=owner.headers

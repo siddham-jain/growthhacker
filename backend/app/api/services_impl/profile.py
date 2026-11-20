@@ -1,11 +1,13 @@
+import re
 import uuid
 from collections import Counter
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 from pydantic import ValidationError
-from sqlalchemy import select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.errors import FieldError, NotFound, PreconditionFailed, ValidationFailed
@@ -14,20 +16,34 @@ from app.api.services import PROFILE, api_service_registry
 from app.api.services_impl.common import ServiceBase
 from app.core.container import Container
 from app.core.tenancy import TenantScope
-from app.domain.profile import BusinessProfile, ClaimMeta, ClaimOrigin, ClaimStatus
+from app.domain.profile import BusinessProfile, ClaimMeta, ClaimOrigin, ClaimStatus, Location, LocationSummary
 from app.models.tenancy import Client
 from app.models.website import BusinessProfile as ProfileRow
-from app.models.website import ProfileEdit
+from app.models.website import ProfileEdit, ProfileTombstone
 from app.pipeline.client_settings import merged, read_settings, write_settings
 from app.services.topics.engine import TopicEngine
 from app.services.website_intel.persistence import WebsiteIntelStore
-from app.services.website_intel.profile.merger import MERGEABLE, EditOp, ProfileEditor, Tombstone
+from app.services.website_intel.profile.claims import normalise_name
+from app.services.website_intel.profile.market import market_timezone
+from app.services.website_intel.profile.merger import KEYED, MERGEABLE, EditOp, ProfileEditor, Tombstone
 
 USER = "user"
-IDENTITY_FIELDS = {"name": "name_meta", "one_liner": "one_liner_meta", "industry": "industry_meta"}
+# identity field -> its claim meta; the country carries none and also sets the client's market
+IDENTITY_FIELDS = {
+    "name": "name_meta",
+    "one_liner": "one_liner_meta",
+    "industry": "industry_meta",
+    "country": None,
+}
+COUNTRY = re.compile(r"^[A-Z]{2}$")
 # collections 05 reads when it builds the client's topic universe
 TOPIC_SOURCES = frozenset({"offerings", "niche_keywords", "brand_terms"})
 PROTECTED_FIELDS = frozenset({"meta"})
+# locations live inside the location summary, which 03's editor does not address, so they are edited here
+LOCATIONS = "locations"
+PHONE = re.compile(r"^\+?[\d\s().-]{7,20}$")
+EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+NO_PROMINENCE = {"pages_seen": 0, "on_home": False, "in_header": False, "in_footer": False}
 
 
 class ProfileMissing(NotFound):
@@ -48,6 +64,96 @@ class LoadedProfile:
     tombstones: list[Tombstone]
 
 
+def contact_target(label: str) -> dict[str, str] | None:
+    """a label that is itself a phone number, email or link says where the action goes."""
+    text = label.strip()
+    if EMAIL.match(text):
+        return {"type": "email", "medium": "email", "target": f"mailto:{text}"}
+    if PHONE.match(text) and sum(char.isdigit() for char in text) >= 7:
+        return {"type": "call", "medium": "phone", "target": "tel:" + re.sub(r"[^\d+]", "", text)}
+    if text.startswith(("http://", "https://")):
+        return {"type": "other", "medium": "web", "target": text}
+    return None
+
+
+def contact_defaults(fields: dict[str, Any]) -> dict[str, Any]:
+    label = str(fields.get("label", ""))
+    target = contact_target(label) or {"type": "other", "medium": "web", "target": label}
+    return {**target, "prominence": NO_PROMINENCE}
+
+
+def kind_other(fields: dict[str, Any]) -> dict[str, Any]:
+    return {"kind": "other"}
+
+
+# a user adds an item as one line of text; these fill the fields that line cannot carry
+ITEM_DEFAULTS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
+    "offerings": kind_other,
+    "value_propositions": kind_other,
+    "target_customers": kind_other,
+    "conversion_actions": contact_defaults,
+    LOCATIONS: kind_other,
+}
+
+
+def stone_key(collection: str, item: dict[str, Any]) -> tuple[str, str]:
+    key, text = KEYED[collection]
+    value = str(item.get(key, ""))
+    return (normalise_name(value) if key in {"term", "name"} else value), str(item.get(text, ""))
+
+
+def edit_locations(
+    profile: BusinessProfile, ops: Sequence[EditOp], now: datetime
+) -> tuple[BusinessProfile, list[Tombstone]]:
+    if not ops:
+        return profile, []
+    summary = profile.locations
+    items = list(summary.items)
+    stones: list[Tombstone] = []
+    for op in ops:
+        if op.op == "add":
+            meta = ClaimMeta(
+                origin=ClaimOrigin.user,
+                status=ClaimStatus.confirmed,
+                confidence=1.0,
+                locked=True,
+                first_seen_version=profile.version,
+                updated_at=now,
+            )
+            items.append(Location.model_validate({**(op.item or {}), "meta": meta}))
+            continue
+        index = next((i for i, item in enumerate(items) if item.id == op.item_id), None)
+        if index is None:
+            raise invalid(f"locations.{op.item_id} does not exist", f"locations.{op.item_id}")
+        item = items[index]
+        if op.op == "reject":
+            stones.append(Tombstone(LOCATIONS, item.id, item.name))
+            items.pop(index)
+            continue
+        status = ClaimStatus.confirmed if op.op == "confirm" else ClaimStatus.edited
+        edited = item.model_copy(update=op.fields or {})
+        items[index] = edited.model_copy(
+            update={
+                "meta": item.meta.model_copy(update={"status": status, "locked": True, "updated_at": now})
+            }
+        )
+    return profile.model_copy(update={"locations": location_summary(summary, items)}), stones
+
+
+def location_summary(summary: LocationSummary, items: list[Location]) -> LocationSummary:
+    kept = {item.city for item in items if item.city}
+    dropped = {item.city for item in summary.items if item.city} - kept
+    cities = [city for city in summary.cities if city not in dropped]
+    cities += sorted(city for city in kept if city not in cities)
+    return summary.model_copy(
+        update={
+            "items": items,
+            "count": max(len(items), summary.count + len(items) - len(summary.items)),
+            "cities": cities,
+        }
+    )
+
+
 def keep_nulls_merge(target: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     # unlike rfc 7386, null is kept: in overrides it records a rejection that must outlive re-crawls
     merged_value = dict(target)
@@ -66,6 +172,11 @@ class ProfileEdits:
         self.container = container
         self.editor = ProfileEditor()
         self._topics: TopicEngine | None = None
+
+    @staticmethod
+    async def lock(session: AsyncSession, scope: TenantScope) -> None:
+        # edits read the newest version and write the next one, so two at once must queue on the client row
+        await session.get(Client, scope.client_id, with_for_update={"key_share": True})
 
     async def load(self, session: AsyncSession, scope: TenantScope) -> LoadedProfile:
         rows = (
@@ -111,13 +222,14 @@ class ProfileEdits:
             if collection == "identity":
                 identity = self._identity_changes(changes)
                 continue
-            if collection not in MERGEABLE:
-                editable = ", ".join(["identity", *MERGEABLE])
+            if collection not in KEYED:
+                editable = ", ".join(["identity", *KEYED])
                 raise invalid(f"'{collection}' cannot be edited; editable fields: {editable}", collection)
             if not isinstance(changes, dict) or not changes:
                 raise invalid(f"'{collection}' must map item ids to changes", collection)
-            key = MERGEABLE[collection][0]
-            existing = {str(getattr(item, key)) for item in getattr(profile, collection)}
+            key = KEYED[collection][0]
+            items = profile.locations.items if collection == LOCATIONS else getattr(profile, collection)
+            existing = {str(getattr(item, key)) for item in items}
             for item_id, change in changes.items():
                 ops.append(self._op(collection, key, item_id, change, item_id in existing))
         return ops, identity
@@ -129,6 +241,8 @@ class ProfileEdits:
         unknown = sorted(set(changes) - set(IDENTITY_FIELDS))
         if unknown or any(not isinstance(value, str) or not value.strip() for value in changes.values()):
             raise invalid(f"identity accepts text edits of {', '.join(IDENTITY_FIELDS)}", "identity")
+        if "country" in changes and not COUNTRY.match(changes["country"].strip().upper()):
+            raise invalid("country must be a two-letter region code such as IN", "identity.country")
         return changes
 
     @staticmethod
@@ -149,10 +263,14 @@ class ProfileEdits:
         if not exists:
             if status == "rejected":
                 raise invalid(f"{location} does not exist", location)
-            return EditOp(op="add", collection=collection, item={key: item_id, **fields})
+            defaults = ITEM_DEFAULTS.get(collection)
+            item = {**(defaults(fields) if defaults else {}), **fields}
+            return EditOp(op="add", collection=collection, item={key: item_id, **item})
         if status == "rejected":
             return EditOp(op="reject", collection=collection, item_id=item_id)
         if fields:
+            if collection == "conversion_actions" and "label" in fields and "target" not in fields:
+                fields = {**(contact_target(str(fields["label"])) or {}), **fields}
             return EditOp(op="edit", collection=collection, item_id=item_id, fields=fields)
         if status == "confirmed":
             return EditOp(op="confirm", collection=collection, item_id=item_id)
@@ -169,12 +287,17 @@ class ProfileEdits:
         now: datetime,
     ) -> BusinessProfile:
         base = loaded.effective
+        location_ops = [op for op in ops if op.collection == LOCATIONS]
         try:
-            edited, stones = self.editor.apply(base, ops, now=now)
+            edited, stones = self.editor.apply(
+                base, [op for op in ops if op.collection != LOCATIONS], now=now
+            )
+            edited, location_stones = edit_locations(edited, location_ops, now)
         except KeyError as error:
             raise invalid(str(error).strip("'\""), "body") from None
         except (ValueError, ValidationError) as error:
             raise invalid(str(error)[:300], "body") from None
+        stones += location_stones
         if identity:
             edited = edited.model_copy(update={"identity": self._edit_identity(edited, identity, now)})
         try:
@@ -198,6 +321,7 @@ class ProfileEdits:
             .values(status="superseded")
         )
         await store.save_profile(profile, created_by=USER, llm_usage={}, prompt_versions={})
+        await self.lift_tombstones(session, scope, ops)
         await store.add_tombstones(stones)
         session.add(
             ProfileEdit(
@@ -211,8 +335,30 @@ class ProfileEdits:
         client = await session.get(Client, scope.client_id, with_for_update={"key_share": True})
         if client is not None:
             settings = read_settings(client)
-            write_settings(client, merged(settings, config_version=settings.config_version + 1))
+            changes: dict[str, Any] = {"config_version": settings.config_version + 1}
+            if country := profile.identity.country if "country" in identity else None:
+                # the user's market wins over what later crawls infer from the site
+                client.country = country
+                client.timezone = market_timezone(country, client.timezone) or client.timezone
+                changes.update(market_explicit=True, version=settings.version + 1)
+            write_settings(client, merged(settings, **changes))
         return profile
+
+    @staticmethod
+    async def lift_tombstones(session: AsyncSession, scope: TenantScope, ops: Sequence[EditOp]) -> None:
+        # adding back a rejected item (an undo) lifts its tombstone so the next crawl may keep it
+        for op in ops:
+            if op.op != "add" or not op.item:
+                continue
+            key, text = stone_key(op.collection, op.item)
+            await session.execute(
+                delete(ProfileTombstone).where(
+                    ProfileTombstone.workspace_id == scope.workspace_id,
+                    ProfileTombstone.client_id == scope.client_id,
+                    ProfileTombstone.collection == op.collection,
+                    or_(ProfileTombstone.item_key == key, ProfileTombstone.text == text),
+                )
+            )
 
     @staticmethod
     def _edit_identity(profile: BusinessProfile, changes: dict[str, Any], now: datetime):
@@ -220,6 +366,9 @@ class ProfileEdits:
         update_values: dict[str, Any] = {}
         for field, value in changes.items():
             meta_field = IDENTITY_FIELDS[field]
+            if meta_field is None:
+                update_values[field] = value.strip().upper()
+                continue
             meta: ClaimMeta = getattr(identity, meta_field)
             update_values[field] = value.strip()
             update_values[meta_field] = meta.model_copy(
@@ -303,6 +452,7 @@ class ProfileReadService(ServiceBase):
         if not merge_patch:
             raise invalid("send at least one change", "body")
         async with self.session_factory() as session, session.begin():
+            await self.edits.lock(session, scope)
             loaded = await self.edits.load(session, scope)
             if loaded.effective.version != expected_version:
                 raise PreconditionFailed(

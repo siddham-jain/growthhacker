@@ -47,8 +47,10 @@ from app.services.competitors.edits import (
     CandidateNotFound,
     CompetitorEditService,
 )
+from app.services.competitors.identity.normalize import normalize_name
 from app.services.competitors.model import UserCompetitorInput
 from app.services.competitors.repository import ROLE_TO_DB, CompetitorRepository
+from app.services.competitors.resolve.youtube_url import NameRef, WebsiteRef, YouTubeRef, parse_youtube_url
 from app.services.competitors.runner import DiscoveryRequest
 from app.services.competitors.select.validation import SetValidationError
 
@@ -150,6 +152,28 @@ def candidate_view(
     )
 
 
+def known_candidate(views: list[CompetitorView], raw: str) -> CompetitorView | None:
+    """the candidate a pasted channel link, handle, website or exact name already points at."""
+    parsed = parse_youtube_url(raw)
+
+    def matches(view: CompetitorView) -> bool:
+        channels = [channel.channel for channel in view.channels]
+        match parsed:
+            case YouTubeRef(kind="channel_id", value=value):
+                return any(channel.channel_id == value for channel in channels)
+            case YouTubeRef(kind="handle", value=value):
+                return any(
+                    (channel.handle or "").casefold() == f"@{value}".casefold() for channel in channels
+                )
+            case WebsiteRef(domain=domain):
+                return view.official_domain == domain
+            case NameRef(name=name):
+                return normalize_name(view.name) == normalize_name(name)
+        return False
+
+    return next((view for view in views if matches(view)), None)
+
+
 class CompetitorReadService(ServiceBase):
     """04's candidates with every decision stamped by the user; the frozen set follows each edit."""
 
@@ -167,6 +191,12 @@ class CompetitorReadService(ServiceBase):
 
     async def add(self, scope: TenantScope, body: CompetitorAddIn) -> CompetitorView:
         client = await self.client(scope)
+        known = known_candidate(await self._views(scope), body.channel_ref)
+        if known is not None:
+            # a candidate we already hold is moved to the user's set; a new discovery run would re-judge it
+            return await self._take(
+                scope, client, ids.decode(ids.COMPETITOR, known.id), CandidateRole(body.role)
+            )
         try:
             async with self.session_factory() as session:
                 profile = (await self.edits.load(session, scope)).effective
@@ -197,10 +227,24 @@ class CompetitorReadService(ServiceBase):
         if added is None:
             raise ChannelUnresolvable("no YouTube channel matched; paste the channel URL or its UC id")
         primary = next((channel for channel in added.channels if channel.is_primary), added.channels[0])
-        role = CandidateRole(body.role)
 
+        async def find(service: CompetitorEditService) -> uuid.UUID:
+            return (await self._row_for_channel(service.repository, primary.channel_id)).id
+
+        return await self._take(scope, client, find, CandidateRole(body.role))
+
+    async def _take(
+        self,
+        scope: TenantScope,
+        client: Client,
+        candidate: uuid.UUID | Callable[[CompetitorEditService], Awaitable[uuid.UUID]],
+        role: CandidateRole,
+    ) -> CompetitorView:
         async def decide(service: CompetitorEditService, session: AsyncSession) -> uuid.UUID:
-            row = await self._row_for_channel(service.repository, primary.channel_id)
+            candidate_id = candidate if isinstance(candidate, uuid.UUID) else await candidate(service)
+            row = await service.repository.candidates.get(candidate_id)
+            if row is None:
+                raise CandidateNotFound(str(candidate_id))
             if row.relation in OWN_GROUP_RELATIONS:
                 raise SetValidationError("own_channel", "That looks like your own channel.")
             if role is CandidateRole.competitor_set:

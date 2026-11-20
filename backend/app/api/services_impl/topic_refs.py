@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +23,6 @@ from app.core.tenancy import TenantScope
 from app.domain.profile import BusinessProfile, ClaimMeta, ClaimOrigin, ClaimStatus, NicheKeyword
 from app.models.website import BuyerQuestion as QuestionRow
 from app.models.website import Keyword as KeywordRow
-from app.models.website import ProfileTombstone
 from app.services.website_intel.persistence import BuyerQuestionRepository
 from app.services.website_intel.profile.claims import normalise_name, stable_id
 from app.services.website_intel.profile.merger import EditOp
@@ -135,22 +133,6 @@ class KeywordBook:
             ),
             None,
         )
-
-    @staticmethod
-    async def clear_tombstones(session: AsyncSession, scope: TenantScope, ops: list[EditOp]) -> None:
-        # re-adding a rejected keyword lifts its tombstone so the merger stops filtering it
-        added = [op.item for op in ops if op.op == "add" and op.item]
-        if added:
-            keys = [str(item["id"]) for item in added]
-            terms = [str(item["term"]) for item in added]
-            await session.execute(
-                delete(ProfileTombstone).where(
-                    ProfileTombstone.workspace_id == scope.workspace_id,
-                    ProfileTombstone.client_id == scope.client_id,
-                    ProfileTombstone.collection == KEYWORDS,
-                    ProfileTombstone.item_key.in_(keys) | ProfileTombstone.text.in_(terms),
-                )
-            )
 
     @staticmethod
     async def mirror(
@@ -284,9 +266,9 @@ class TopicRefReadService(ServiceBase):
 
     async def _edit_keywords(self, scope: TenantScope, build) -> list[str]:
         async with self.session_factory() as session, session.begin():
+            await self.edits.lock(session, scope)
             loaded = await self.edits.load(session, scope)
             ops: list[EditOp] = build(loaded)
-            await KeywordBook.clear_tombstones(session, scope, ops)
             patch = {KEYWORDS: {self._op_key(op): self._op_patch(op) for op in ops}}
             profile = await self.edits.commit(session, scope, loaded, ops, {}, patch, self.clock.now())
             await KeywordBook.mirror(session, scope, loaded.effective, profile, ops)

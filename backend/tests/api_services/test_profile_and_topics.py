@@ -1,7 +1,10 @@
+import asyncio
+
 import pytest
 from sqlalchemy import func, select
 
-from app.domain.profile import ClaimStatus, FunnelStage, ReviewStatus
+from app.domain.profile import ClaimStatus, FunnelStage, Location, LocationSummary, ReviewStatus
+from app.models.tenancy import Client
 from app.models.topics import TopicRef as TopicRefRow
 from app.models.topics import TopicUniverse
 from app.models.website import Keyword as KeywordRow
@@ -10,7 +13,7 @@ from app.services.website_intel.profile.merger import ProfileMerger
 from app.services.website_intel.questions.service import normalise_question
 from tests.api.conftest import Harness
 from tests.api_services.conftest import Tenant, seed_profile, tenant
-from tests.topics.fixtures import keyword, offering, profile, question
+from tests.topics.fixtures import keyword, meta, offering, profile, question
 
 pytestmark = pytest.mark.db
 
@@ -113,10 +116,89 @@ async def test_profile_edits_override_and_rejections_survive_a_recrawl(harness: 
 
     unknown = await harness.client.patch(
         f"{owner.path}/profile",
-        json={"locations": {}},
+        json={"freshness": {}},
         headers={**owner.headers, **MERGE_PATCH, "If-Match": '"2"'},
     )
     assert unknown.status_code == 422 and unknown.json()["code"] == "validation_failed"
+
+
+async def test_onboarding_corrections_cover_locations_contacts_country_and_undo(harness: Harness) -> None:
+    owner = await tenant(harness, "corrections")
+    machine = profile(
+        owner.scope.client_id, name="LeRoy", offerings=[offering("off_box", "Corrugated boxes")]
+    )
+    locations = [
+        Location(id="loc_hq", name="Hoshiarpur office", kind="office", city="Hoshiarpur", meta=meta()),
+        Location(id="loc_bienne", name="Bienne, Switzerland", kind="branch", city="Bienne", meta=meta()),
+    ]
+    machine = machine.model_copy(
+        update={"locations": LocationSummary(count=2, cities=["Hoshiarpur", "Bienne"], items=locations)}
+    )
+    await seed_profile(harness, owner.scope, machine)
+
+    async def patch(body: dict, version: int) -> dict:
+        response = await harness.client.patch(
+            f"{owner.path}/profile",
+            json=body,
+            headers={**owner.headers, **MERGE_PATCH, "If-Match": f'"{version}"'},
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    body = await patch(
+        {
+            "locations": {
+                "loc_bienne": None,
+                "loc_hq": {"name": "Head office, Hoshiarpur"},
+                "user_ludhiana": {"name": "Ludhiana depot", "city": "Ludhiana"},
+            },
+            "conversion_actions": {"user_call": {"label": "+91 97809 00339"}},
+            "offerings": {"user_cartons": {"name": "Folding cartons"}},
+            "identity": {"country": "in"},
+        },
+        1,
+    )
+    effective = body["effective"]
+    summary = effective["locations"]
+    assert [(item["id"], item["name"]) for item in summary["items"]] == [
+        ("loc_hq", "Head office, Hoshiarpur"),
+        ("user_ludhiana", "Ludhiana depot"),
+    ]
+    assert summary["cities"] == ["Hoshiarpur", "Ludhiana"] and summary["count"] == 2
+    assert summary["items"][0]["meta"]["locked"] is True
+    call = effective["conversion_actions"][0]
+    assert (call["type"], call["medium"], call["target"]) == ("call", "phone", "tel:+919780900339")
+    assert effective["offerings"][1] == {
+        **effective["offerings"][1],
+        "name": "Folding cartons",
+        "kind": "other",
+    }
+    assert effective["identity"]["country"] == "IN"
+    async with harness.container.session_factory() as session:
+        client = await session.get(Client, owner.scope.client_id)
+        assert client is not None and client.country == "IN" and client.timezone == "Asia/Kolkata"
+        assert client.settings["market_explicit"] is True
+        stones = await WebsiteIntelStore(session, owner.scope).tombstones()
+        current = await WebsiteIntelStore(session, owner.scope).latest_profile()
+    assert [(stone.collection, stone.item_key) for stone in stones] == [("locations", "loc_bienne")]
+
+    recrawled = machine.model_copy(update={"version": 3})
+    merged = ProfileMerger().merge(current, recrawled, stones)
+    assert [item.name for item in merged.locations.items] == ["Head office, Hoshiarpur", "Ludhiana depot"]
+
+    restored = await patch(
+        {"locations": {"loc_bienne": {"name": "Bienne, Switzerland", "kind": "branch"}}}, 2
+    )
+    assert "loc_bienne" in {item["id"] for item in restored["effective"]["locations"]["items"]}
+    async with harness.container.session_factory() as session:
+        assert await WebsiteIntelStore(session, owner.scope).tombstones() == []
+
+    bad = await harness.client.patch(
+        f"{owner.path}/profile",
+        json={"identity": {"country": "India"}},
+        headers={**owner.headers, **MERGE_PATCH, "If-Match": '"3"'},
+    )
+    assert bad.status_code == 422
 
 
 async def test_keywords_use_review_statuses_and_rejected_ones_stay_rejected(harness: Harness) -> None:
@@ -180,6 +262,16 @@ async def test_keywords_use_review_statuses_and_rejected_ones_stay_rejected(harn
         f"{owner.path}/keywords", params={"status": "active"}, headers=owner.headers
     )
     assert old.status_code == 422
+
+    # corrections arrive in bursts; each writes the next profile version, so they queue instead of colliding
+    burst = await asyncio.gather(
+        *(
+            harness.client.post(f"{owner.path}/keywords", json={"text": text}, headers=owner.headers)
+            for text in ("folding cartons", "mono cartons", "rigid boxes")
+        ),
+        harness.client.delete(f"{owner.path}/keywords/kw_knee", headers=owner.headers),
+    )
+    assert [response.status_code for response in burst] == [201, 201, 201, 204]
 
 
 async def test_buyer_questions_create_edit_and_delete_keep_user_decisions(harness: Harness) -> None:

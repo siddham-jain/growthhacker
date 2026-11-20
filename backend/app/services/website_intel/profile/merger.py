@@ -21,6 +21,8 @@ MERGEABLE: dict[str, tuple[str, str]] = {
     "competitor_hints": ("name", "name"),
     "content_pillars": ("id", "name"),
 }
+# locations sit inside the location summary; they merge like the lists above but are edited by the api
+KEYED: dict[str, tuple[str, str]] = {**MERGEABLE, "locations": ("id", "name")}
 IDENTITY_SCALARS = (("name", "name_meta"), ("one_liner", "one_liner_meta"), ("industry", "industry_meta"))
 
 
@@ -41,13 +43,13 @@ class EditOp:
 
 
 def item_key(item: BaseModel, collection: str) -> str:
-    attribute = MERGEABLE[collection][0]
+    attribute = KEYED[collection][0]
     value = str(getattr(item, attribute))
     return normalise_name(value) if attribute in {"term", "name"} else value
 
 
 def item_text(item: BaseModel, collection: str) -> str:
-    return str(getattr(item, MERGEABLE[collection][1]))
+    return str(getattr(item, KEYED[collection][1]))
 
 
 def _locked(item: BaseModel) -> bool:
@@ -76,26 +78,25 @@ class ProfileMerger:
     def merge(
         self, current: BusinessProfile | None, incoming: BusinessProfile, tombstones: Sequence[Tombstone]
     ) -> BusinessProfile:
-        update: dict[str, Any] = {}
-        for collection in MERGEABLE:
-            theirs = [
-                item for item in getattr(incoming, collection) if not tombstoned(collection, item, tombstones)
-            ]
-            if current is None:
-                update[collection] = theirs
-                continue
-            theirs_by_key = {item_key(item, collection): item for item in theirs}
-            merged: list[BaseModel] = []
-            seen: set[str] = set()
-            for item in getattr(current, collection):
-                key = item_key(item, collection)
-                if not _locked(item):
-                    continue
-                seen.add(key)
-                # a user-confirmed item the crawl no longer finds stays, marked stale for review
-                merged.append(item if key in theirs_by_key else _with_meta(item, status=ClaimStatus.stale))
-            merged.extend(item for key, item in theirs_by_key.items() if key not in seen)
-            update[collection] = merged
+        update: dict[str, Any] = {
+            collection: self._items(
+                collection,
+                getattr(current, collection) if current else None,
+                getattr(incoming, collection),
+                tombstones,
+            )
+            for collection in MERGEABLE
+        }
+        summary = incoming.locations
+        locations = self._items(
+            "locations", current.locations.items if current else None, summary.items, tombstones
+        )
+        update["locations"] = summary.model_copy(
+            update={
+                "items": locations,
+                "count": max(len(locations), summary.count - len(summary.items) + len(locations)),
+            }
+        )
         identity = incoming.identity
         if current is not None:
             changes: dict[str, Any] = {}
@@ -106,6 +107,29 @@ class ProfileMerger:
                     changes[meta_field] = ours_meta
             identity = identity.model_copy(update=changes)
         return incoming.model_copy(update={**update, "identity": identity})
+
+    @staticmethod
+    def _items(
+        collection: str,
+        current: Sequence[BaseModel] | None,
+        incoming: Sequence[BaseModel],
+        tombstones: Sequence[Tombstone],
+    ) -> list[BaseModel]:
+        theirs = [item for item in incoming if not tombstoned(collection, item, tombstones)]
+        if current is None:
+            return theirs
+        theirs_by_key = {item_key(item, collection): item for item in theirs}
+        merged: list[BaseModel] = []
+        seen: set[str] = set()
+        for item in current:
+            key = item_key(item, collection)
+            if not _locked(item):
+                continue
+            seen.add(key)
+            # a user-confirmed item the crawl no longer finds stays, marked stale for review
+            merged.append(item if key in theirs_by_key else _with_meta(item, status=ClaimStatus.stale))
+        merged.extend(item for key, item in theirs_by_key.items() if key not in seen)
+        return merged
 
 
 class ProfileEditor:
