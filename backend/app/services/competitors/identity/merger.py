@@ -229,7 +229,7 @@ class EntityMerger:
         domain = registrable_domain(raw.domain)
         if not domain:
             return
-        if raw.source.kind == "llm":
+        if raw.source.kind == "llm" or not raw.domain_grounded:
             if entity.official_domain is None:
                 entity.official_domain = domain
                 entity.flags.add("domain_unverified")

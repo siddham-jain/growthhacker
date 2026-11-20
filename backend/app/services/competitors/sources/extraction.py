@@ -6,6 +6,7 @@ from app.domain.competitors import CandidateSource
 from app.ports.llm import PromptInput, TaskId, TrustedBlock, UntrustedBlock
 from app.ports.search import WebSearchHit
 from app.services.competitors.context import DiscoveryContext
+from app.services.competitors.identity.normalize import registrable_domain
 from app.services.competitors.model import RawCandidate
 from app.services.competitors.providers import structured
 from app.services.competitors.sources.base import SourceDeps
@@ -33,6 +34,15 @@ def squash(text: str) -> str:
 
 def quote_is_verbatim(quote: str, text: str) -> bool:
     return squash(quote) in squash(text)
+
+
+def checked_domain(domain: str | None, hit: WebSearchHit) -> tuple[str | None, bool]:
+    """the model's domain as a public registrable domain, and whether the result itself links or names it."""
+    claimed = registrable_domain(domain)
+    if claimed is None:
+        return None, False
+    shown = registrable_domain(hit.url) == claimed or claimed in squash(f"{hit.title} {hit.snippet}")
+    return claimed, shown
 
 
 class SearchEntityExtractor:
@@ -80,13 +90,16 @@ class SearchEntityExtractor:
             text = f"{hit.title} {hit.snippet}"
             if not quote_is_verbatim(entity.quote, text) or squash(entity.name) not in squash(text):
                 continue
+            # snippet text steers the model, so a domain the result never showed stays unverified like a guess
+            domain, grounded = checked_domain(entity.domain, hit)
             candidates.append(
                 RawCandidate(
                     name=entity.name,
                     source=CandidateSource(
                         kind=kind, ref=hit.url, snippet=entity.quote[:500], retrieved_at=ctx.now
                     ),
-                    domain=entity.domain,
+                    domain=domain,
+                    domain_grounded=grounded,
                 )
             )
         return candidates[:cap]

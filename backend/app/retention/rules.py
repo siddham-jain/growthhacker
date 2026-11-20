@@ -56,6 +56,9 @@ class RetentionRule:
     condition: str | None = None
     redact_set: dict[str, str] = field(default_factory=dict)
     parent: str | None = None
+    id_columns: tuple[str, ...] = ()
+    id_source: str | None = None
+    id_arrays: bool = False
     note: str = ""
 
     def __post_init__(self) -> None:
@@ -70,6 +73,8 @@ class RetentionRule:
             raise ValueError(f"{self.name}: '{self.action}' rules need a clock")
         if self.action is RetentionAction.redact and not (self.redact_set and self.condition):
             raise ValueError(f"{self.name}: redact rules need redact_set and a pending-row condition")
+        if self.action is RetentionAction.reverify_ids and not (self.id_columns and self.id_source):
+            raise ValueError(f"{self.name}: id re-verification rules name their id columns and source table")
 
     @property
     def policy_bound(self) -> bool:
@@ -129,9 +134,26 @@ def _rules() -> list[RetentionRule]:
     ) -> RetentionRule:
         return rule(table, data_class, A.redact, clock=clock, redact_set=sets, condition=pending, **kwargs)
 
-    def reverify(table: str, clock: str = "ids_verified_at") -> RetentionRule:
+    def reverify(
+        table: str,
+        source: str,
+        columns: tuple[str, ...],
+        *,
+        arrays: bool = False,
+        clock: str = "ids_verified_at",
+        sets: dict[str, str] | None = None,
+    ) -> RetentionRule:
+        # gone ids are removed from arrays; a scalar id is nulled via sets, or its row is deleted
         return rule(
-            table, DC.tenant_derived_from_api, A.reverify_ids, clock=clock, note="d-pol-11 id re-verification"
+            table,
+            DC.tenant_derived_from_api,
+            A.reverify_ids,
+            clock=clock,
+            id_columns=columns,
+            id_source=source,
+            id_arrays=arrays,
+            redact_set=sets or {},
+            note="d-pol-11 id re-verification",
         )
 
     return [
@@ -259,8 +281,19 @@ def _rules() -> list[RetentionRule]:
             {"youtube_evidence": "NULL", "youtube_fetched_at": "NULL"},
             "youtube_evidence IS NOT NULL",
         ),
-        reverify("competitor_sets"),
-        keep("competitor_drift_events"),
+        reverify(
+            "competitor_sets",
+            "yt_channels",
+            (
+                "competitor_channel_ids",
+                "niche_channel_ids",
+                "benchmark_channel_ids",
+                "creator_seed_channel_ids",
+            ),
+            arrays=True,
+        ),
+        # events quote channel titles, handles and upload dates read from the api
+        delete("competitor_drift_events", DC.tenant_derived_from_api, "detected_at"),
         keep("topic_universes"),
         expire("topic_refs", DC.tenant_owned),
         keep("topic_aliases"),
@@ -268,14 +301,14 @@ def _rules() -> list[RetentionRule]:
         expire("topic_matches", DC.tenant_derived_from_api),
         expire("answer_directness", DC.tenant_derived_from_api),
         expire("llm_adjudications", DC.tenant_derived_from_api),
-        reverify("topic_match_overrides"),
+        reverify("topic_match_overrides", "yt_videos", ("video_id",)),
         rule(
             "topic_review_items",
             DC.tenant_derived_from_api,
             A.delete,
             condition="video_id NOT IN (SELECT video_id FROM yt_videos)",
         ),
-        reverify("topic_eval_labels"),
+        reverify("topic_eval_labels", "yt_videos", ("video_id",)),
         redact(
             "recommendations",
             DC.tenant_derived_from_api,
@@ -298,7 +331,13 @@ def _rules() -> list[RetentionRule]:
         ),
         delete("recommendation_notices", DC.tenant_derived_from_api, "created_at"),
         delete("white_space_notes", DC.tenant_derived_from_api, "created_at"),
-        reverify("recommendation_feedback", "linked_video_verified_at"),
+        reverify(
+            "recommendation_feedback",
+            "yt_videos",
+            ("linked_video_id",),
+            clock="linked_video_verified_at",
+            sets={"linked_video_id": "NULL", "linked_video_verified_at": "NULL"},
+        ),
         redact(
             "recommendation_outcomes",
             DC.tenant_derived_from_api,

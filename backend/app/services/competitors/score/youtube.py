@@ -14,6 +14,12 @@ YouTubeTier = Literal["high", "medium", "low"]
 MAX_COVERAGE_REFS = 20
 
 
+class YouTubeRelevanceFacts(YouTubeRelevance):
+    # raw counts behind content_overlap, so the api can state facts instead of the internal score
+    matching_uploads: int | None = None
+    uploads_checked: int | None = None
+
+
 @dataclass(frozen=True)
 class YouTubeAssessment:
     # api-derived only; tier and the raw matching-upload count are kept apart from web relevance
@@ -61,7 +67,7 @@ class YouTubeRelevanceScorer:
         denominator = min(MAX_COVERAGE_REFS, self.matcher.size)
         coverage = min(len(per_ref) / denominator, 1.0) if denominator else 0.0
         activity = min(1.0, evidence.uploads_90d / self.settings.activity_target_uploads_90d)
-        relevance = YouTubeRelevance(
+        relevance = YouTubeRelevanceFacts(
             activity=round(activity, 4),
             content_overlap=round(0.5 * share + 0.5 * coverage, 4),
             matched_topic_refs=[
@@ -70,6 +76,8 @@ class YouTubeRelevanceScorer:
             ],
             size_band=size_band(evidence.subscriber_count, self.client_subscribers),
             subscriber_band=subscriber_band(evidence.subscriber_count),
+            matching_uploads=matching,
+            uploads_checked=len(uploads),
         )
         return YouTubeAssessment(
             evidence=evidence,

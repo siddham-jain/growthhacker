@@ -95,6 +95,8 @@ class RawCandidate(DomainModel):
     name: str = Field(min_length=1, max_length=200)
     source: CandidateSource
     domain: str | None = None
+    # false when the domain came from a model reading untrusted text that never showed it
+    domain_grounded: bool = True
     relation_guess: RelationGuess = "unknown"
     aliases: list[str] = []
     geography: list[GeoRef] = []

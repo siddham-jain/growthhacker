@@ -23,7 +23,6 @@ from app.domain.competitors import (
     DriftEvent,
     GeoRef,
     OwnerKind,
-    YouTubeRelevance,
 )
 from app.domain.youtube import OwnershipLabel, OwnershipSignal, OwnershipVerdict
 from app.models.competitors import BrandChannelResolution
@@ -36,6 +35,7 @@ from app.models.competitors import CompetitorSet as SetRow
 from app.repositories.tenant.base import TenantRepository
 from app.services.competitors.model import DiscoveryResult, DiscoveryUsage, DiscoveryWarning, KnownCandidate
 from app.services.competitors.resolve.resolution_cache import CachedResolution, KeyType
+from app.services.competitors.score.youtube import YouTubeRelevanceFacts
 
 ROLE_TO_DB = {
     CandidateRole.competitor_set: "competitor",
@@ -182,7 +182,7 @@ def channel_from_row(match: MatchRow) -> ChannelMatch | None:
             llm_reason=match.llm_reason,
         ),
         youtube=ChannelEvidence.model_validate(payload["evidence"]),
-        youtube_relevance=YouTubeRelevance.model_validate(payload["relevance"]),
+        youtube_relevance=YouTubeRelevanceFacts.model_validate(payload["relevance"]),
         flags=list(match.flags),
     )
 

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import CompetitorSettings
 from app.core.tenancy import TenantScope
-from app.domain.competitors import CandidateStatus, DriftEvent, YouTubeRelevance
+from app.domain.competitors import CandidateStatus, DriftEvent
 from app.domain.topics import TopicRef
 from app.domain.youtube import OwnershipSignal
 from app.models.competitors import CompetitorCandidateSource as SourceRow
@@ -16,6 +16,7 @@ from app.services.competitors.drift.detector import MARKER_PREFIX, DriftDetector
 from app.services.competitors.drift.rules import ChannelSnapshot, DriftContext, TrackedChannel
 from app.services.competitors.repository import CompetitorRepository
 from app.services.competitors.score.topics import PhraseTopicMatcher
+from app.services.competitors.score.youtube import YouTubeRelevanceFacts
 
 CLOSED = frozenset({CandidateStatus.rejected.value, CandidateStatus.excluded.value})
 RECENT_UPLOADS = 50
@@ -82,7 +83,7 @@ class CompetitorDriftMonitor:
             handle=payload.get("handle"),
             official_domain=domain,
             signals=tuple(OwnershipSignal.model_validate(signal) for signal in match.ownership_signals),
-            relevance=YouTubeRelevance.model_validate(relevance) if relevance else None,
+            relevance=YouTubeRelevanceFacts.model_validate(relevance) if relevance else None,
             flags=frozenset(match.flags),
             niche_queries_recent=niche_queries,
         )

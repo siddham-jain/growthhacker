@@ -97,7 +97,7 @@ class RetentionSweeper:
             case RetentionAction.verify_authorization:
                 return TableOutcome(redacted=await self._invalidate_unverified_tokens(rule))
             case RetentionAction.reverify_ids:
-                return TableOutcome(due=await self._count(rule, rule.cutoff(self._now, self._policy)))
+                return await self._reverify_ids(rule)
             case _:
                 return TableOutcome()
 
@@ -184,6 +184,59 @@ class RetentionSweeper:
             )
         return result.rowcount
 
+    async def _reverify_ids(self, rule: RetentionRule) -> TableOutcome:
+        """re-verified ids keep their row; unverifiable ones are refreshed, and redacted at the hard limit."""
+        cutoff = rule.cutoff(self._now, self._policy)
+        hard_limit = rule.hard_limit(self._policy)
+        hard_cutoff = self._now - hard_limit if hard_limit is not None else cutoff
+        key = REFRESHABLE_KEYS[rule.id_source]
+        verified = (
+            f"SELECT {key} FROM {rule.id_source} WHERE availability = 'available' "
+            f"AND LEAST(metadata_fetched_at, stats_fetched_at) >= :cutoff"
+        )
+        if rule.id_arrays:
+            refs = " || ".join(rule.id_columns)
+            unverified = f"SELECT ref.id FROM unnest({refs}) AS ref(id) WHERE ref.id NOT IN ({verified})"
+            all_verified = f"NOT EXISTS ({unverified})"
+            unverified_ids = f"SELECT DISTINCT ref.id FROM {rule.table}, unnest({refs}) AS ref(id)"
+            unverified_ids += f" WHERE ({rule.clock}) < :cutoff AND ref.id NOT IN ({verified})"
+            kept = ", ".join(
+                f"{column} = ARRAY(SELECT ref FROM unnest({column}) AS ref WHERE ref IN ({verified}))"
+                for column in rule.id_columns
+            )
+            redact = f"UPDATE {rule.table} SET {kept}, {rule.clock} = :now WHERE ({rule.clock}) < :hard"
+        else:
+            (column,) = rule.id_columns
+            all_verified = f"{column} IN ({verified})"
+            unverified_ids = (
+                f"SELECT DISTINCT {column} FROM {rule.table} "
+                f"WHERE ({rule.clock}) < :cutoff AND {column} NOT IN ({verified})"
+            )
+            gone = f"({rule.clock}) < :hard AND {column} NOT IN ({verified})"
+            if rule.redact_set:
+                assignments = ", ".join(f"{name} = {value}" for name, value in rule.redact_set.items())
+                redact = f"UPDATE {rule.table} SET {assignments} WHERE {gone}"
+            else:
+                redact = f"DELETE FROM {rule.table} WHERE {gone}"
+        params = {"cutoff": cutoff, "hard": hard_cutoff, "now": self._now}
+        outcome = TableOutcome(due=await self._count(rule, cutoff))
+        async with self._session_factory() as session, session.begin():
+            await session.execute(
+                text(
+                    f"UPDATE {rule.table} SET {rule.clock} = :now "
+                    f"WHERE ({rule.clock}) < :cutoff AND {all_verified}"
+                ),
+                params,
+            )
+            outcome.redacted = (await session.execute(text(redact), params)).rowcount
+            pending = [row[0] for row in await session.execute(text(unverified_ids), params)]
+        if self._refresher is not None and pending:
+            size = self._settings.refresh_batch_size
+            for start in range(0, len(pending), size):
+                await self._refresher.schedule(rule.id_source, pending[start : start + size])
+            outcome.refresh_scheduled = len(pending)
+        return outcome
+
     async def _count(self, rule: RetentionRule, cutoff: datetime) -> int:
         async with self._session_factory() as session:
             return (
@@ -198,7 +251,7 @@ class RetentionSweeper:
         async with self._session_factory() as session:
             for rule in rules:
                 limit = rule.hard_limit(self._policy)
-                if limit is None or rule.action is RetentionAction.reverify_ids:
+                if limit is None:
                     continue
                 age = await self._oldest_age(session, rule)
                 if age is None:
