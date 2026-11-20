@@ -8,6 +8,7 @@ from app.domain.competitors import (
     BusinessRelevance,
     CandidateRole,
     CandidateSource,
+    CandidateStatus,
     ChannelEvidence,
     CompetitorRelation,
     GeoRef,
@@ -187,6 +188,69 @@ def test_proposal_caps_and_ordering():
     assert items[0].channel_id in proposal.niche_channel_ids
     excluded = {items[-1].channel_id, items[-2].channel_id}
     assert not excluded & {*proposal.competitor_channel_ids, *proposal.niche_channel_ids}
+
+
+def test_default_proposal_fills_up_to_ten_competitors_and_keeps_verification():
+    items = [assessed(f"direct{index:02d}", matching=index) for index in range(12)]
+    blocked = [
+        assessed("uncertain", label=OwnershipLabel.uncertain, matching=99),
+        assessed("inactive", uploads_90d=0, matching=99),
+        assessed("sister", matching=99),
+    ]
+    blocked[-1].entity.status = CandidateStatus.excluded
+    proposal = SetProposer(CompetitorSettings()).propose(uuid.uuid4(), [*items, *blocked])
+    assert len(proposal.competitor_channel_ids) == 10 and proposal.ready
+    assert {items[0].channel_id, items[1].channel_id} <= set(proposal.niche_channel_ids)
+    proposed = {*proposal.competitor_channel_ids, *proposal.niche_channel_ids}
+    assert not proposed & {item.channel_id for item in blocked}
+
+
+@pytest.mark.parametrize(("size", "expected"), [(1, 3), (15, 10)])
+def test_proposal_size_is_clamped_to_three_to_ten(size, expected):
+    items = [assessed(f"direct{index:02d}") for index in range(12)]
+    proposal = SetProposer(CompetitorSettings(proposal_size=size)).propose(uuid.uuid4(), items)
+    assert len(proposal.competitor_channel_ids) == expected
+
+
+def with_web_evidence(item, sources, offerings, geo, domain=None):
+    target = item.entity
+    target.official_domain = domain
+    target.geography = geo
+    target.sources = [CandidateSource(kind=kind, ref=ref, retrieved_at=NOW) for kind, ref in sources]
+    target.offering_matches = [
+        OfferingMatch(offering_id=oid, verdict="yes", quote="q", source_url="u") for oid in offerings
+    ]
+    item.business = BusinessRelevanceScorer(apollo_profile(), SETTINGS).score(target)
+    return item
+
+
+def test_national_rival_named_by_several_sources_outranks_a_small_regional_channel():
+    national = with_web_evidence(
+        assessed("national", label=OwnershipLabel.likely, matching=12, band="much_larger"),
+        [
+            ("llm", "profile"),
+            ("web_search", "https://groww.in/stocks/client/peer-comparison"),
+            ("web_search", "https://tavily.com/knowledge/company/abc"),
+        ],
+        ["o1"],
+        [GeoRef(city="Bengaluru", country_iso2="IN")],
+    )
+    regional = with_web_evidence(
+        assessed("regional", matching=20, band="much_smaller"),
+        [("llm", "profile"), ("web_search", "https://www.regional-hospital.in/about")],
+        ["o1", "o2"],
+        [GeoRef(city="Chennai", country_iso2="IN")],
+        domain="regional-hospital.in",
+    )
+    assert national.entity.independent_sources == 3 and regional.entity.independent_sources == 1
+    assert national.business.source_agreement == 1 and national.business.tier == "high"
+    assert regional.business.offering_overlap > national.business.offering_overlap
+    others = [assessed(f"other{index}") for index in range(2)]
+    proposal = SetProposer(CompetitorSettings(proposal_size=3)).propose(
+        uuid.uuid4(), [regional, *others, national]
+    )
+    assert proposal.competitor_channel_ids[0] == national.channel_id
+    assert regional.channel_id in proposal.niche_channel_ids
 
 
 def test_few_directs_fill_with_content_competitors():

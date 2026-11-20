@@ -17,6 +17,7 @@ from app.domain.competitors import (
 )
 from app.domain.youtube import ChannelRecord, OwnershipLabel, OwnershipVerdict, VideoRecord
 from app.ports.youtube import PlaylistItem
+from app.services.competitors.identity.normalize import registrable_domain
 from app.services.youtube.ownership import LINK_SIGNALS
 
 ResolutionMethod = Literal[
@@ -44,6 +45,7 @@ RelationGuess = Literal[
     "unknown",
 ]
 DIRECT_RELATIONS = frozenset({CompetitorRelation.direct, CompetitorRelation.direct_public})
+WEB_SOURCE_KINDS = frozenset({"web_search", "rediscovery_news"})
 
 
 class UserCompetitorInput(DomainModel):
@@ -179,6 +181,18 @@ class CandidateEntity:
     @property
     def source_kinds(self) -> set[str]:
         return {source.kind for source in self.sources}
+
+    @property
+    def independent_sources(self) -> int:
+        # each web domain naming the brand counts once and its own site never does; other kinds count once each
+        origins: set[str] = set()
+        for source in self.sources:
+            domain = registrable_domain(source.ref) if source.kind in WEB_SOURCE_KINDS else None
+            if domain is None:
+                origins.add(source.kind)
+            elif domain != self.official_domain:
+                origins.add(domain)
+        return len(origins)
 
     @property
     def is_user(self) -> bool:

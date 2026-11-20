@@ -1,7 +1,13 @@
+import re
 from uuid import UUID
 
-from app.domain.competitors import CandidateRole, CandidateStatus, GeoRef
-from app.services.competitors.identity.normalize import normalize_name, registrable_domain, token_set_ratio
+from app.domain.competitors import CandidateRole, CandidateSource, CandidateStatus, GeoRef
+from app.services.competitors.identity.normalize import (
+    normalize_name,
+    normalize_text,
+    registrable_domain,
+    token_set_ratio,
+)
 from app.services.competitors.model import CandidateEntity, KnownCandidate, LeadRef, RawCandidate
 
 # the display name comes from the most trustworthy source that named the entity
@@ -13,6 +19,19 @@ NAME_PRIORITY = {
     "llm": 4,
     "niche_search": 5,
 }
+
+
+LEGAL_NAME_LINE = re.compile(r"^\s*legal name:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+
+
+def declared_legal_name(source: CandidateSource, names: list[str]) -> str | None:
+    # company-profile pages state the registered name of the one brand they describe
+    snippet = source.snippet or ""
+    declared = LEGAL_NAME_LINE.findall(snippet)
+    text = normalize_text(snippet)
+    if len(declared) != 1 or not any(normalize_text(name) in text for name in names):
+        return None
+    return declared[0]
 
 
 def _countries(geography: list[GeoRef]) -> set[str]:
@@ -82,6 +101,7 @@ class EntityMerger:
                 )
                 entities.append(entity)
             self._absorb(entity, raw)
+        entities = self.fold_declared_names(entities)
         matched: set[UUID] = set()
         for entity in entities:
             entity.known = self._match_known(entity, known)
@@ -111,6 +131,40 @@ class EntityMerger:
             self._fold(target, entity)
         return survivors
 
+    def fold_declared_names(self, entities: list[CandidateEntity]) -> list[CandidateEntity]:
+        # a brand named once by its trade name and once by its legal name is one business
+        folded: set[int] = set()
+        for entity in entities:
+            if id(entity) in folded:
+                continue
+            legal = {
+                normalize_name(name)
+                for source in entity.sources
+                if (name := declared_legal_name(source, entity.names))
+            } - {entity.normalized_name}
+            if not legal:
+                continue
+            for other in entities:
+                if (
+                    other is entity
+                    or id(other) in folded
+                    or not legal & {normalize_name(name) for name in other.names}
+                    or not self._compatible(entity, other)
+                ):
+                    continue
+                self._fold(entity, other)
+                folded.add(id(other))
+        return [entity for entity in entities if id(entity) not in folded]
+
+    @staticmethod
+    def _compatible(entity: CandidateEntity, other: CandidateEntity) -> bool:
+        domains = {
+            item.official_domain
+            for item in (entity, other)
+            if item.official_domain and "domain_unverified" not in item.flags
+        }
+        return len(domains) <= 1 and geography_compatible(entity.geography, other.geography)
+
     def _find(self, entities: list[CandidateEntity], raw: RawCandidate) -> CandidateEntity | None:
         domain = registrable_domain(raw.domain)
         name = normalize_name(raw.name)
@@ -133,7 +187,7 @@ class EntityMerger:
     def _absorb(self, entity: CandidateEntity, raw: RawCandidate) -> None:
         kinds_before = entity.source_kinds
         entity.sources.append(raw.source)
-        if self._takes_name(raw.source.kind, kinds_before):
+        if self._takes_name(entity, raw, kinds_before):
             if entity.brand_name != raw.name.strip():
                 entity.aliases.add(entity.brand_name)
             entity.brand_name = raw.name.strip()
@@ -159,10 +213,15 @@ class EntityMerger:
             entity.flags.discard("llm_only")
 
     @staticmethod
-    def _takes_name(kind: str, kinds_before: set[str]) -> bool:
+    def _takes_name(entity: CandidateEntity, raw: RawCandidate, kinds_before: set[str]) -> bool:
         if not kinds_before:
             return True
+        kind = raw.source.kind
         best_before = min(NAME_PRIORITY.get(existing, 9) for existing in kinds_before)
+        current, offered = set(entity.normalized_name.split()), set(normalize_name(raw.name).split())
+        # a bare mention ("Max") never replaces the fuller brand name ("Max Healthcare"); user names still win
+        if "user" not in {kind, *kinds_before} and (offered < current or current < offered):
+            return current < offered
         return NAME_PRIORITY.get(kind, 9) < best_before
 
     @staticmethod
@@ -184,6 +243,9 @@ class EntityMerger:
         target.aliases.update({other.brand_name, *other.aliases} - {target.brand_name})
         target.geography.extend(geo for geo in other.geography if geo not in target.geography)
         target.relation_guesses.extend(other.relation_guesses)
+        for channel_id, record in other.channel_hints.items():
+            target.channel_hints.setdefault(channel_id, record)
+        target.lead_refs.extend(ref for ref in other.lead_refs if ref not in target.lead_refs)
         target.query_hits = max(target.query_hits, other.query_hits)
         target.total_hits = max(target.total_hits, other.total_hits)
         target.flags.update(other.flags - {"llm_only", "domain_unverified"})

@@ -5,10 +5,12 @@ from app.core.clock import FrozenClock
 from app.core.config import CompetitorSettings
 from app.domain.competitors import CandidateSource, CompetitorRelation
 from app.domain.web import FetchOutcome
+from app.domain.youtube import OwnershipLabel, OwnershipVerdict
 from app.ports.crawler import FetchContext
-from app.services.competitors.model import CandidateEntity, ChannelLead
+from app.services.competitors.model import CandidateEntity, ChannelLead, LeadRef
 from app.services.competitors.resolve.chain import ResolutionChain
 from app.services.competitors.resolve.legacy_and_handle import UsernameHandleResolver
+from app.services.competitors.resolve.materialise import LeadMaterialiser
 from app.services.competitors.resolve.site_link import refs_from_page
 from app.services.competitors.service import resolution_batch
 from app.services.competitors.site_fetcher import CompetitorSiteFetcher
@@ -160,3 +162,26 @@ async def test_site_fetcher_respects_robots():
         "https://fortishealthcare.com/", FetchContext(client_id=None, run_id=None)
     )
     assert page.outcome is FetchOutcome.robots_disallowed
+
+
+async def test_unchecked_search_guesses_do_not_evict_a_checked_known_channel():
+    target = entity("Max Healthcare", domain="maxhealthcare.in")
+    known = ChannelLead(
+        "UCBKpVvogr2lH2y5IDEJWuFw",
+        "resolution_cache",
+        record=channel("UCBKpVvogr2lH2y5IDEJWuFw", "Max Healthcare"),
+        verdict=OwnershipVerdict(label=OwnershipLabel.uncertain, method=None, score=0.45, signals=[]),
+    )
+    target.leads[known.channel_id] = known
+    guesses = [
+        LeadRef(
+            kind="channel_id",
+            value=f"UCrandomMaxChannel0000{index}{index}",
+            method="search_list",
+            guessed=True,
+        )
+        for index in range(3)
+    ]
+    await LeadMaterialiser(None, SETTINGS).apply([(target, guesses)])
+    assert len(target.leads) == SETTINGS.max_leads_per_entity
+    assert known.channel_id in target.leads

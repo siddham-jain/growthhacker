@@ -14,7 +14,8 @@ EVIDENCE_PRIORITY = {
 }
 
 
-LABEL_PRIORITY = {OwnershipLabel.verified: 0, OwnershipLabel.likely: 1, None: 2, OwnershipLabel.uncertain: 3}
+# a checked uncertain lead outranks an unchecked one, so a later guess cannot evict a channel already in hand
+LABEL_PRIORITY = {OwnershipLabel.verified: 0, OwnershipLabel.likely: 1, OwnershipLabel.uncertain: 2, None: 3}
 
 
 def lead_priority(lead: ChannelLead) -> tuple[int, int, int]:

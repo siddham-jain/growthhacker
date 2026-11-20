@@ -54,7 +54,7 @@ class BusinessRelevanceScorer:
         )
         offering_overlap = self.offering_overlap(entity)
         geo_overlap, geo_basis = self.geo_overlap(entity)
-        agreement = min(1.0, len(entity.source_kinds) / 3)
+        agreement = min(1.0, entity.independent_sources / 3)
         points = (
             weights.offering * offering_overlap + weights.geo * geo_overlap + weights.agreement * agreement
         )

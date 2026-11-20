@@ -85,6 +85,73 @@ def test_merge_by_domain_name_and_channel():
     assert "Narayana Health" in narayana.aliases
 
 
+PROFILE_PAGE = (
+    "# Narayana Health\nWebsite: www.narayanahealth.org\nLegal name: Narayana Hrudayalaya Ltd.\n"
+    "Headquarters: Bangalore, Karnataka, India"
+)
+
+
+def sourced(name, kind, ref, snippet=None):
+    return RawCandidate(
+        name=name, source=CandidateSource(kind=kind, ref=ref, snippet=snippet, retrieved_at=NOW)
+    )
+
+
+@pytest.mark.parametrize("peer_list_first", [False, True])
+def test_declared_legal_name_folds_trade_and_legal_names(peer_list_first):
+    peer = sourced("Narayana Hrudayalaya", "web_search", "https://groww.in/stocks/apollo/peer-comparison")
+    raws = [
+        sourced("Narayana Health", "llm", "profile"),
+        sourced("Narayana Health", "web_search", "https://tavily.com/knowledge/company/x", PROFILE_PAGE),
+    ]
+    raws = [peer, *raws] if peer_list_first else [*raws, peer]
+    [entity] = EntityMerger(92).merge(raws, [])
+    assert entity.brand_name == "Narayana Health" and "Narayana Hrudayalaya" in entity.aliases
+    assert entity.independent_sources == 3
+
+
+@pytest.mark.parametrize(
+    "snippet",
+    [
+        "# Max Healthcare\nLegal name: Narayana Hrudayalaya Ltd.",
+        "# Narayana Health\nLegal name: Narayana Hrudayalaya Ltd.\nLegal name: Other Ltd.",
+        "Narayana Health and Narayana Hrudayalaya are listed peers.",
+    ],
+)
+def test_legal_name_fold_needs_one_declaration_about_the_brand(snippet):
+    raws = [
+        sourced("Narayana Health", "web_search", "https://tavily.com/knowledge/company/x", snippet),
+        sourced("Narayana Hrudayalaya", "web_search", "https://groww.in/peers"),
+    ]
+    assert len(EntityMerger(92).merge(raws, [])) == 2
+
+
+def test_legal_name_fold_respects_conflicting_verified_domains():
+    raws = [
+        sourced("Narayana Health", "web_search", "https://tavily.com/knowledge/company/x", PROFILE_PAGE),
+        RawCandidate(
+            name="Narayana Hrudayalaya",
+            domain="other-narayana.com",
+            source=CandidateSource(kind="website_hint", ref="https://other-narayana.com", retrieved_at=NOW),
+        ),
+        RawCandidate(
+            name="Narayana Health",
+            domain="narayanahealth.org",
+            source=CandidateSource(kind="website_hint", ref="https://narayanahealth.org", retrieved_at=NOW),
+        ),
+    ]
+    assert len(EntityMerger(92).merge(raws, [])) == 2
+
+
+@pytest.mark.parametrize("mention_first", [False, True])
+def test_bare_mention_never_replaces_the_fuller_brand_name(mention_first):
+    mention = raw("Max", "web_search")
+    full = raw("Max Healthcare", "llm")
+    [entity] = EntityMerger(92).merge([mention, full] if mention_first else [full, mention], [])
+    assert entity.brand_name == "Max Healthcare" and entity.normalized_name == "max healthcare"
+    assert "Max" in entity.aliases
+
+
 def test_llm_domain_stays_unverified_until_another_source_names_it():
     merger = EntityMerger(92)
     [entity] = merger.merge([raw("Zenith", "llm", "zenith.in")], [])

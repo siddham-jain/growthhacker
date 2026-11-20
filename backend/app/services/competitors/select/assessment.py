@@ -68,9 +68,13 @@ class AssessedCandidate:
         return assessment.relevance.size_band if assessment is not None else "unknown"
 
     def rank_key(self) -> tuple:
-        # lexicographic: web tier, then youtube tier, then one raw count; no blended score exists
+        # lexicographic: web tier and raw web evidence, then youtube tier and one raw count; nothing is blended
+        business = self.business
         return (
-            TIER_RANK[self.business.tier],
+            TIER_RANK[business.tier],
+            -self.entity.independent_sources,
+            -business.offering_overlap,
+            -business.geo_overlap,
             TIER_RANK[self.youtube_tier],
             -self.matching_uploads,
             LABEL_RANK.get(self.primary.label if self.primary else None, 3),
