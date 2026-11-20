@@ -4,6 +4,7 @@ import { RiArrowDownSLine } from "@remixicon/react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { LensChip, TypeChip } from "@/components/ui/chips";
+import { CalcMark } from "@/components/ui/calc-mark";
 import { ConfidenceMeter } from "@/components/ui/confidence-meter";
 import type { FeedbackIn, LensFilter, RecommendationOut } from "@/lib/api/types";
 import { cx } from "@/lib/cx";
@@ -85,7 +86,14 @@ export function RecommendationCard({ recommendation: rec, lensFilter, defaultExp
           </p>
           <p className="text-body-regular text-foreground">
             <span className="text-muted-foreground">Expected: </span>
-            {rec.expected_range_vs_baseline ?? "Not enough comparable videos for a range."}
+            {rec.expected_range_vs_baseline ? (
+              <>
+                {rec.expected_range_vs_baseline}
+                <CalcMark />
+              </>
+            ) : (
+              "Not enough comparable videos for a range."
+            )}
           </p>
           {rec.confidence.caps_applied?.length ? (
             <p className="text-caption-1-regular text-muted-foreground">{rec.confidence.caps_applied.join(" · ")}</p>

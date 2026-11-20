@@ -5,6 +5,7 @@ import { CreatorCard } from "@/components/cards/creator-card";
 import { FreshnessLine } from "@/components/shell/freshness-line";
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState, ErrorState, LoadingBlock } from "@/components/states/states";
+import { CalcNote } from "@/components/ui/calc-mark";
 import { creatorsQuery } from "@/lib/api/queries";
 import type { CreatorView } from "@/lib/api/types";
 import { useViewParams } from "@/lib/url-state";
@@ -65,6 +66,7 @@ export default function CreatorsPage() {
                   <CreatorCard key={creator.channel.channel_id} creator={creator} />
                 ))}
               </div>
+              <CalcNote />
             </section>
           );
         })}

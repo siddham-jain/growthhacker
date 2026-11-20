@@ -48,7 +48,7 @@ export function SourceKindChip({ kind, className }: { kind: ContextSourceKind; c
 }
 
 // youtube-derived, website and news numbers are never merged; every metric names its origin
-export function OriginChip({ origin }: { origin: "YouTube public" | "YouTube Analytics (owner)" | "Website" | "News" }) {
+export function OriginChip({ origin }: { origin: "YouTube public" | "YouTube Analytics (owner)" | "Website" | "News" | "Web answer search" }) {
   return (
     <Chip variant="caption" color="soft">
       {origin}

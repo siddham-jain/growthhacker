@@ -1,3 +1,4 @@
+import { plural } from "@/lib/format";
 import type { RecommendationPage } from "./contract";
 import type { components } from "./schema";
 import type {
@@ -101,12 +102,20 @@ export function toRecommendation(item: Wire["RecommendationOut"]): Recommendatio
   };
 }
 
+// the server sends a reason code and counts; the ui needs a sentence and the window to widen to
+export function toThinWindowNotice(notice: Wire["InsufficiencyNotice"]): RunNotice {
+  const { found, required, window_days: days, suggestion } = notice;
+  const widenTo = suggestion.action === "widen_window" ? suggestion.widen_to : null;
+  const message = `Not enough outliers in the last ${days} days (${plural(found.outliers, "outlier")} found across ${plural(found.channels, "channel")}; we need ${required.outliers}+).`;
+  return { code: "thin_data", message, suggest: widenTo ? { widen_window_to: widenTo } : null };
+}
+
 export function toRecommendationPage(envelope: Wire["ResultEnvelope_RecommendationsData_"]): RecommendationPage {
   const items = (envelope.data.items as Wire["RecommendationOut"][]).filter((item) => "recommendation" in item).map(toRecommendation);
   const thin = (envelope.data.notices ?? []).filter((notice) => notice.kind === "thin_window");
   const notices = [
     ...(envelope.notices ?? []).map(toNotice),
-    ...thin.map((notice): RunNotice => ({ code: "thin_data", message: notice.reason_code, suggest: notice.suggestion as RunNotice["suggest"] })),
+    ...thin.map(toThinWindowNotice),
   ];
   return {
     ...envelope,

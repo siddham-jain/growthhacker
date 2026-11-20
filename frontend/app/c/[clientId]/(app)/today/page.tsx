@@ -11,10 +11,12 @@ import { FreshnessLine } from "@/components/shell/freshness-line";
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState, ErrorState, LoadingBlock } from "@/components/states/states";
 import { ThinDataPrompt } from "@/components/states/thin-data-prompt";
+import { CalcNote } from "@/components/ui/calc-mark";
 import { Eyebrow } from "@/components/ui/surface";
 import { clientQuery, newsQuery, outliersQuery, ownPerformanceQuery, recommendationsQuery, refreshQuery } from "@/lib/api/queries";
 import { BRIEF_CONFIG, composeBrief } from "@/lib/brief";
 import { formatRatio } from "@/lib/format";
+import { CALC_MARK } from "@/lib/labels";
 import { useViewParams } from "@/lib/url-state";
 import { useClientId } from "@/lib/use-client-id";
 
@@ -65,7 +67,7 @@ export default function TodayPage() {
       <PageHeader
         eyebrow={<Eyebrow className="mb-2">{briefEyebrow(now)}</Eyebrow>}
         title={<span className="text-greeting">{title}</span>}
-        subtitle={`${brief.length} ${brief.length === 1 ? "action" : "actions"}. Evidence from ${channelsSeen} channels in the last ${windowDays} days.`}
+        subtitle={`${brief.length} ${brief.length === 1 ? "action" : "actions"}. Evidence from ${channelsSeen}${CALC_MARK} channels in the last ${windowDays} days.`}
       />
       <FreshnessLine envelope={envelope} />
       {envelope ? <NoticeList notices={envelope.notices} className="mb-5" /> : null}
@@ -88,6 +90,7 @@ export default function TodayPage() {
           <ChangeTile origin="YouTube public" label="Competitor outliers" value={outliers.data?.data.total ?? "–"} comparison={`in the last ${windowDays} days`} />
           <ChangeTile origin="News" label="Open opportunities" value={openNews ?? "–"} comparison="closing within the week" />
         </div>
+        <CalcNote className="mt-2" />
       </section>
 
       <section aria-labelledby="next-steps">
@@ -97,6 +100,7 @@ export default function TodayPage() {
         {recommendations.isPending ? <LoadingBlock /> : null}
         {recommendations.error ? <ErrorState error={recommendations.error} onRetry={() => recommendations.refetch()} /> : null}
         {brief.length ? <BriefList items={brief} now={now} /> : null}
+        {brief.length ? <CalcNote className="mt-2" /> : null}
         {envelope && !brief.length && !thinNotice ? (
           <EmptyState
             title="Nothing met our evidence bar"

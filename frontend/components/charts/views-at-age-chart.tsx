@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { CalcNote } from "@/components/ui/calc-mark";
 import { ChartCard, ChartPlot } from "@/components/ui/primitives";
 import { MethodBadge } from "@/components/ui/chips";
 import type { ViewsAtAgeCurve } from "@/lib/api/types";
 import { formatCompact, formatExact, formatRatio } from "@/lib/format";
-import { METHOD_LABELS } from "@/lib/labels";
+import { CALC_MARK, METHOD_LABELS } from "@/lib/labels";
 import { ChartTableToggle, DataTable } from "./chart-table-toggle";
 import { linear, niceCeiling, PLOT_PADDING, ticks } from "./scale";
 
@@ -83,7 +84,7 @@ export function ViewsAtAgeChart({ curves, title, baseline, baselineLabel }: View
       value={hovered ? (dayValue(hovered, 7)?.views ?? hovered.points.at(-1)?.views ?? 0) : (baseline?.views ?? 0)}
       formatValue={(value) => formatCompact(value)}
       pulseKey={active}
-      caption={hovered ? `views at day 7 · ${formatRatio(hovered.outlier_ratio)} its channel's normal` : baselineLabel}
+      caption={`${hovered ? `views at day 7 · ${formatRatio(hovered.outlier_ratio)} its channel's normal` : baselineLabel} ${CALC_MARK}`}
       legend={[
         { label: "Measured", color: "var(--chart-1)" },
         { label: "Proxy", color: "var(--subtle-foreground)", dashed: true },
@@ -116,6 +117,7 @@ export function ViewsAtAgeChart({ curves, title, baseline, baselineLabel }: View
           </li>
         ))}
       </ol>
+      <CalcNote className="mt-2" />
     </ChartCard>
   );
 }

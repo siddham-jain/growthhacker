@@ -245,6 +245,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/clients/{client_id}/answer-citations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Answer Citations */
+        get: operations["answer_citations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/clients/{client_id}/buyer-questions": {
         parameters: {
             query?: never;
@@ -1248,6 +1265,55 @@ export interface components {
          * @enum {string}
          */
         AgeMethod: "observed" | "interpolated" | "owner_analytics" | "age_band_proxy" | "pending" | "unavailable";
+        /** AnswerCitationCounts */
+        AnswerCitationCounts: {
+            /** Cite Competitors */
+            cite_competitors: number;
+            /** Cite You */
+            cite_you: number;
+            /** Competitor Only */
+            competitor_only: number;
+            /** No Tracked Channel */
+            no_tracked_channel: number;
+            /** Questions Checked */
+            questions_checked: number;
+        };
+        /** AnswerCitationsData */
+        AnswerCitationsData: {
+            /** Competitors */
+            competitors: components["schemas"]["ChannelCitations"][];
+            counts: components["schemas"]["AnswerCitationCounts"];
+            /**
+             * Disclosure
+             * @default Calculated by GrowthHacker, not a YouTube metric
+             */
+            disclosure: string;
+            /** Last Checked At */
+            last_checked_at: string | null;
+            /**
+             * Lens
+             * @default conversion
+             * @constant
+             */
+            lens: "conversion";
+            /** Own Channel Id */
+            own_channel_id: string | null;
+            /** Questions */
+            questions: components["schemas"]["QuestionCitations"][];
+            /**
+             * Signal
+             * @default cited_in_ai_answers
+             * @constant
+             */
+            signal: "cited_in_ai_answers";
+            /**
+             * Source Label
+             * @default Web answer search (Tavily), videos resolved with the YouTube Data API
+             */
+            source_label: string;
+            /** Window Days */
+            window_days: number;
+        };
         /** BacktestCreate */
         BacktestCreate: {
             /** Client Id */
@@ -1289,6 +1355,23 @@ export interface components {
              * @enum {string}
              */
             status: "confirmed" | "rejected";
+        };
+        /** BusinessFactsView */
+        BusinessFactsView: {
+            /** Geo Basis */
+            geo_basis: string;
+            /**
+             * Matched Offerings
+             * @default []
+             */
+            matched_offerings: components["schemas"]["OfferingMatch"][];
+            /** Matched Offerings Count */
+            matched_offerings_count: number;
+            /**
+             * Tier
+             * @enum {string}
+             */
+            tier: "high" | "medium" | "low";
         };
         /** BusinessIdentity */
         BusinessIdentity: {
@@ -1481,27 +1564,6 @@ export interface components {
             /** Version */
             version: number;
         };
-        /** BusinessRelevance */
-        BusinessRelevance: {
-            /** Geo Basis */
-            geo_basis: string;
-            /** Geo Overlap */
-            geo_overlap: number;
-            /**
-             * Matched Offerings
-             * @default []
-             */
-            matched_offerings: components["schemas"]["OfferingMatch"][];
-            /** Offering Overlap */
-            offering_overlap: number;
-            /** Source Agreement */
-            source_agreement: number;
-            /**
-             * Tier
-             * @enum {string}
-             */
-            tier: "high" | "medium" | "low";
-        };
         /** BuyerQuestionCreate */
         BuyerQuestionCreate: {
             funnel_stage?: components["schemas"]["FunnelStage"] | null;
@@ -1665,6 +1727,15 @@ export interface components {
             /** Ownership Evidence */
             ownership_evidence: string[];
         };
+        /** ChannelCitations */
+        ChannelCitations: {
+            /** Buyer Question Ids */
+            buyer_question_ids: string[];
+            /** Channel Id */
+            channel_id: string;
+            /** Channel Title */
+            channel_title: string | null;
+        };
         /** ChannelEvidence */
         ChannelEvidence: {
             /** Country */
@@ -1722,6 +1793,26 @@ export interface components {
             verified: boolean;
             /** Verified By */
             verified_by?: ("website_link" | "channel_link" | "oauth" | "manual") | null;
+        };
+        /** ChannelRelevanceView */
+        ChannelRelevanceView: {
+            /**
+             * Matched Topic Refs
+             * @default []
+             */
+            matched_topic_refs: components["schemas"]["TopicUploadMatch"][];
+            /** Matching Uploads */
+            matching_uploads?: number | null;
+            /** Matching Uploads Label */
+            matching_uploads_label?: string | null;
+            /**
+             * Size Band
+             * @enum {string}
+             */
+            size_band: "peer" | "larger" | "much_larger" | "smaller" | "much_smaller" | "unknown";
+            subscriber_band: components["schemas"]["SubscriberBand"];
+            /** Uploads Checked */
+            uploads_checked?: number | null;
         };
         /** ChannelResolveIn */
         ChannelResolveIn: {
@@ -1839,6 +1930,22 @@ export interface components {
              * @enum {integer}
              */
             window_days: 7 | 30 | 90;
+        };
+        /** CitedVideo */
+        CitedVideo: {
+            /**
+             * Cited In
+             * @enum {string}
+             */
+            cited_in: "result" | "answer";
+            /**
+             * Owner
+             * @enum {string}
+             */
+            owner: "own" | "competitor" | "other";
+            /** Position */
+            position: number | null;
+            video: components["schemas"]["VideoSummary"];
         };
         /**
          * ClaimLevel
@@ -2127,7 +2234,7 @@ export interface components {
              * @default []
              */
             preview_video_ids: string[];
-            relevance: components["schemas"]["YouTubeRelevance"];
+            relevance: components["schemas"]["ChannelRelevanceView"];
             /** Tracked */
             tracked: boolean;
         };
@@ -2223,7 +2330,7 @@ export interface components {
              * @enum {string}
              */
             added_by: "system" | "user";
-            business: components["schemas"]["BusinessRelevance"];
+            business: components["schemas"]["BusinessFactsView"];
             channel: components["schemas"]["ChannelRef"] | null;
             /**
              * Channels
@@ -3507,6 +3614,23 @@ export interface components {
          * @enum {string}
          */
         LiftScope: "competitor_set" | "niche" | "own" | "channel";
+        /** ListingFormat */
+        ListingFormat: {
+            /**
+             * Excluded Types
+             * @default []
+             */
+            excluded_types: components["schemas"]["RecType"][];
+            /**
+             * Format
+             * @enum {string}
+             */
+            format: "contract" | "full";
+            /** Note */
+            note?: string | null;
+            /** Types */
+            types: components["schemas"]["RecType"][];
+        };
         /** Location */
         Location: {
             /** Address */
@@ -4662,6 +4786,29 @@ export interface components {
             /** Pages Seen */
             pages_seen: number;
         };
+        /** QuestionCitations */
+        QuestionCitations: {
+            /** Buyer Question Id */
+            buyer_question_id: string;
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /** Funnel Stage */
+            funnel_stage: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "cites_you" | "competitor_only" | "others_only" | "no_youtube";
+            /** Text */
+            text: string;
+            /** Videos */
+            videos: components["schemas"]["CitedVideo"][];
+            /** Youtube Urls */
+            youtube_urls: number;
+        };
         /** QueueView */
         QueueView: {
             /** Depth */
@@ -4886,6 +5033,7 @@ export interface components {
             items: components["schemas"]["RecommendationOut"][] | components["schemas"]["StrictRecommendation"][];
             /** Limit */
             limit: number;
+            meta?: components["schemas"]["ListingFormat"] | null;
             /** Next Cursor */
             next_cursor?: string | null;
             /**
@@ -6910,24 +7058,6 @@ export interface components {
             units_limit: number;
             /** Units Used */
             units_used: number;
-        };
-        /** YouTubeRelevance */
-        YouTubeRelevance: {
-            /** Activity */
-            activity: number;
-            /** Content Overlap */
-            content_overlap: number;
-            /**
-             * Matched Topic Refs
-             * @default []
-             */
-            matched_topic_refs: components["schemas"]["TopicUploadMatch"][];
-            /**
-             * Size Band
-             * @enum {string}
-             */
-            size_band: "peer" | "larger" | "much_larger" | "smaller" | "much_smaller" | "unknown";
-            subscriber_band: components["schemas"]["SubscriberBand"];
         };
     };
     responses: never;
@@ -8963,6 +9093,129 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResultEnvelope_TrendingData_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    answer_citations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description cl_… id */
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnswerCitationsData"];
                 };
             };
             /** @description Bad Request */

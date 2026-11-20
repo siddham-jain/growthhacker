@@ -51,6 +51,119 @@
         "title": "AgeMethod",
         "type": "string"
       },
+      "AnswerCitationCounts": {
+        "properties": {
+          "cite_competitors": {
+            "title": "Cite Competitors",
+            "type": "integer"
+          },
+          "cite_you": {
+            "title": "Cite You",
+            "type": "integer"
+          },
+          "competitor_only": {
+            "title": "Competitor Only",
+            "type": "integer"
+          },
+          "no_tracked_channel": {
+            "title": "No Tracked Channel",
+            "type": "integer"
+          },
+          "questions_checked": {
+            "title": "Questions Checked",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "questions_checked",
+          "cite_you",
+          "cite_competitors",
+          "competitor_only",
+          "no_tracked_channel"
+        ],
+        "title": "AnswerCitationCounts",
+        "type": "object"
+      },
+      "AnswerCitationsData": {
+        "properties": {
+          "competitors": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelCitations"
+            },
+            "title": "Competitors",
+            "type": "array"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/AnswerCitationCounts"
+          },
+          "disclosure": {
+            "default": "Calculated by GrowthHacker, not a YouTube metric",
+            "title": "Disclosure",
+            "type": "string"
+          },
+          "last_checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Checked At"
+          },
+          "lens": {
+            "const": "conversion",
+            "default": "conversion",
+            "title": "Lens",
+            "type": "string"
+          },
+          "own_channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Own Channel Id"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionCitations"
+            },
+            "title": "Questions",
+            "type": "array"
+          },
+          "signal": {
+            "const": "cited_in_ai_answers",
+            "default": "cited_in_ai_answers",
+            "title": "Signal",
+            "type": "string"
+          },
+          "source_label": {
+            "default": "Web answer search (Tavily), videos resolved with the YouTube Data API",
+            "title": "Source Label",
+            "type": "string"
+          },
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window_days",
+          "own_channel_id",
+          "last_checked_at",
+          "counts",
+          "questions",
+          "competitors"
+        ],
+        "title": "AnswerCitationsData",
+        "type": "object"
+      },
       "BacktestCreate": {
         "additionalProperties": false,
         "properties": {
@@ -146,6 +259,42 @@
           "status"
         ],
         "title": "BulkStatusIn",
+        "type": "object"
+      },
+      "BusinessFactsView": {
+        "properties": {
+          "geo_basis": {
+            "title": "Geo Basis",
+            "type": "string"
+          },
+          "matched_offerings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/OfferingMatch"
+            },
+            "title": "Matched Offerings",
+            "type": "array"
+          },
+          "matched_offerings_count": {
+            "title": "Matched Offerings Count",
+            "type": "integer"
+          },
+          "tier": {
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Tier",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tier",
+          "matched_offerings_count",
+          "geo_basis"
+        ],
+        "title": "BusinessFactsView",
         "type": "object"
       },
       "BusinessIdentity": {
@@ -573,59 +722,6 @@
           "partial"
         ],
         "title": "BusinessProfileView",
-        "type": "object"
-      },
-      "BusinessRelevance": {
-        "additionalProperties": false,
-        "properties": {
-          "geo_basis": {
-            "title": "Geo Basis",
-            "type": "string"
-          },
-          "geo_overlap": {
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Geo Overlap",
-            "type": "number"
-          },
-          "matched_offerings": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/OfferingMatch"
-            },
-            "title": "Matched Offerings",
-            "type": "array"
-          },
-          "offering_overlap": {
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Offering Overlap",
-            "type": "number"
-          },
-          "source_agreement": {
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Source Agreement",
-            "type": "number"
-          },
-          "tier": {
-            "enum": [
-              "high",
-              "medium",
-              "low"
-            ],
-            "title": "Tier",
-            "type": "string"
-          }
-        },
-        "required": [
-          "offering_overlap",
-          "geo_overlap",
-          "geo_basis",
-          "source_agreement",
-          "tier"
-        ],
-        "title": "BusinessRelevance",
         "type": "object"
       },
       "BuyerQuestionCreate": {
@@ -1060,6 +1156,39 @@
         "title": "ChannelCandidate",
         "type": "object"
       },
+      "ChannelCitations": {
+        "properties": {
+          "buyer_question_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Buyer Question Ids",
+            "type": "array"
+          },
+          "channel_id": {
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "channel_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Title"
+          }
+        },
+        "required": [
+          "channel_id",
+          "channel_title",
+          "buyer_question_ids"
+        ],
+        "title": "ChannelCitations",
+        "type": "object"
+      },
       "ChannelEvidence": {
         "additionalProperties": false,
         "properties": {
@@ -1257,6 +1386,72 @@
           "verified"
         ],
         "title": "ChannelRef",
+        "type": "object"
+      },
+      "ChannelRelevanceView": {
+        "properties": {
+          "matched_topic_refs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TopicUploadMatch"
+            },
+            "title": "Matched Topic Refs",
+            "type": "array"
+          },
+          "matching_uploads": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matching Uploads"
+          },
+          "matching_uploads_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matching Uploads Label"
+          },
+          "size_band": {
+            "enum": [
+              "peer",
+              "larger",
+              "much_larger",
+              "smaller",
+              "much_smaller",
+              "unknown"
+            ],
+            "title": "Size Band",
+            "type": "string"
+          },
+          "subscriber_band": {
+            "$ref": "#/components/schemas/SubscriberBand"
+          },
+          "uploads_checked": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uploads Checked"
+          }
+        },
+        "required": [
+          "size_band",
+          "subscriber_band"
+        ],
+        "title": "ChannelRelevanceView",
         "type": "object"
       },
       "ChannelResolveIn": {
@@ -1604,6 +1799,49 @@
           "subscriber_band"
         ],
         "title": "ChannelScorecard",
+        "type": "object"
+      },
+      "CitedVideo": {
+        "properties": {
+          "cited_in": {
+            "enum": [
+              "result",
+              "answer"
+            ],
+            "title": "Cited In",
+            "type": "string"
+          },
+          "owner": {
+            "enum": [
+              "own",
+              "competitor",
+              "other"
+            ],
+            "title": "Owner",
+            "type": "string"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "video": {
+            "$ref": "#/components/schemas/VideoSummary"
+          }
+        },
+        "required": [
+          "video",
+          "owner",
+          "position",
+          "cited_in"
+        ],
+        "title": "CitedVideo",
         "type": "object"
       },
       "ClaimLevel": {
@@ -2410,7 +2648,7 @@
             "type": "array"
           },
           "relevance": {
-            "$ref": "#/components/schemas/YouTubeRelevance"
+            "$ref": "#/components/schemas/ChannelRelevanceView"
           },
           "tracked": {
             "title": "Tracked",
@@ -2686,7 +2924,7 @@
             "type": "string"
           },
           "business": {
-            "$ref": "#/components/schemas/BusinessRelevance"
+            "$ref": "#/components/schemas/BusinessFactsView"
           },
           "channel": {
             "anyOf": [
@@ -6240,6 +6478,50 @@
         "title": "LiftScope",
         "type": "string"
       },
+      "ListingFormat": {
+        "properties": {
+          "excluded_types": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RecType"
+            },
+            "title": "Excluded Types",
+            "type": "array"
+          },
+          "format": {
+            "enum": [
+              "contract",
+              "full"
+            ],
+            "title": "Format",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "types": {
+            "items": {
+              "$ref": "#/components/schemas/RecType"
+            },
+            "title": "Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "format",
+          "types"
+        ],
+        "title": "ListingFormat",
+        "type": "object"
+      },
       "Location": {
         "additionalProperties": false,
         "properties": {
@@ -9520,6 +9802,59 @@
         "title": "Prominence",
         "type": "object"
       },
+      "QuestionCitations": {
+        "properties": {
+          "buyer_question_id": {
+            "title": "Buyer Question Id",
+            "type": "string"
+          },
+          "checked_at": {
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "funnel_stage": {
+            "title": "Funnel Stage",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "cites_you",
+              "competitor_only",
+              "others_only",
+              "no_youtube"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "videos": {
+            "items": {
+              "$ref": "#/components/schemas/CitedVideo"
+            },
+            "title": "Videos",
+            "type": "array"
+          },
+          "youtube_urls": {
+            "title": "Youtube Urls",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "buyer_question_id",
+          "text",
+          "funnel_stage",
+          "checked_at",
+          "status",
+          "youtube_urls",
+          "videos"
+        ],
+        "title": "QuestionCitations",
+        "type": "object"
+      },
       "QueueView": {
         "properties": {
           "depth": {
@@ -10140,6 +10475,16 @@
           "limit": {
             "title": "Limit",
             "type": "integer"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ListingFormat"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "next_cursor": {
             "anyOf": [
@@ -15627,54 +15972,6 @@
         ],
         "title": "YouTubeQuota",
         "type": "object"
-      },
-      "YouTubeRelevance": {
-        "additionalProperties": false,
-        "properties": {
-          "activity": {
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Activity",
-            "type": "number"
-          },
-          "content_overlap": {
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Content Overlap",
-            "type": "number"
-          },
-          "matched_topic_refs": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/TopicUploadMatch"
-            },
-            "title": "Matched Topic Refs",
-            "type": "array"
-          },
-          "size_band": {
-            "enum": [
-              "peer",
-              "larger",
-              "much_larger",
-              "smaller",
-              "much_smaller",
-              "unknown"
-            ],
-            "title": "Size Band",
-            "type": "string"
-          },
-          "subscriber_band": {
-            "$ref": "#/components/schemas/SubscriberBand"
-          }
-        },
-        "required": [
-          "activity",
-          "content_overlap",
-          "size_band",
-          "subscriber_band"
-        ],
-        "title": "YouTubeRelevance",
-        "type": "object"
       }
     }
   },
@@ -18537,6 +18834,150 @@
           }
         },
         "summary": "Analytics Trending",
+        "tags": [
+          "results"
+        ]
+      }
+    },
+    "/api/v1/clients/{client_id}/answer-citations": {
+      "get": {
+        "operationId": "answer_citations",
+        "parameters": [
+          {
+            "description": "cl_\u2026 id",
+            "in": "path",
+            "name": "client_id",
+            "required": true,
+            "schema": {
+              "description": "cl_\u2026 id",
+              "title": "Client Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnswerCitationsData"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Too Many Requests"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Implemented"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Answer Citations",
         "tags": [
           "results"
         ]

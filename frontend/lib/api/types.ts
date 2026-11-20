@@ -551,6 +551,11 @@ export interface GapMatrixView {
   own: Record<string, number>;
 }
 
+// web answer citations per buyer question (conversion lens); counts are ours, not youtube's
+export type AnswerCitations = Wire["AnswerCitationsData"];
+export type QuestionCitations = Wire["QuestionCitations"];
+export type CitedVideo = Wire["CitedVideo"];
+
 export interface TrendingReport {
   items: (VideoMetricsView & { views_per_day: number })[];
   rising_topics: { topic_ref_id: string; label: string; uploads_prev: number; uploads_now: number; outliers_prev: number; outliers_now: number }[];

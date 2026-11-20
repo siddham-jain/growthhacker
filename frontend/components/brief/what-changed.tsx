@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { CalcMark } from "@/components/ui/calc-mark";
 import { OriginChip } from "@/components/ui/chips";
 
 interface TileProps {
@@ -8,7 +9,7 @@ interface TileProps {
   comparison: string;
 }
 
-// each tile is single-source; nothing here blends youtube numbers with other origins
+// each tile is single-source; nothing here blends youtube numbers with other origins, and every value is one we computed
 export function ChangeTile({ origin, label, value, comparison }: TileProps) {
   return (
     <div className="flex flex-col gap-2 rounded-card bg-card px-[18px] py-4 shadow-card">
@@ -16,7 +17,10 @@ export function ChangeTile({ origin, label, value, comparison }: TileProps) {
         <OriginChip origin={origin} />
       </span>
       <p className="text-body-regular text-muted-foreground">{label}</p>
-      <p className="text-metric text-foreground">{value}</p>
+      <p className="text-metric text-foreground">
+        {value}
+        {value === "–" ? null : <CalcMark />}
+      </p>
       <p className="text-caption-1-regular text-muted-foreground">{comparison}</p>
     </div>
   );

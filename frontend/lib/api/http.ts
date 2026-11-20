@@ -19,6 +19,11 @@ export interface HttpResponse<T> {
   headers: Headers;
 }
 
+// encodes every interpolated id, so a value with "/", "?" or "#" can't change which route is called
+export function apiPath(strings: TemplateStringsArray, ...segments: (string | number)[]): string {
+  return strings.reduce((path, part, index) => path + part + (index < segments.length ? encodeURIComponent(String(segments[index])) : ""), "");
+}
+
 export function buildUrl(path: string, query?: Query): string {
   const url = new URL(`${API_BASE}${path}`);
   for (const [key, value] of Object.entries(query ?? {})) {

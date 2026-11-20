@@ -3,6 +3,7 @@
 import { RiCloseLine, RiExternalLinkLine, RiTimeLine } from "@remixicon/react";
 import { InfoNote } from "@/components/states/states";
 import { Button } from "@/components/ui/button";
+import { CalcMark } from "@/components/ui/calc-mark";
 import { OriginChip } from "@/components/ui/chips";
 import { Chip } from "@/components/ui/primitives";
 import type { NewsOpportunityView } from "@/lib/api/types";
@@ -33,7 +34,14 @@ export function NewsCard({ opportunity, now, onDismiss }: { opportunity: NewsOpp
         <Chip variant="caption" color="orange">
           News
         </Chip>
-        {firstMover ? <FirstMoverLabel /> : <span className="text-caption-1-medium text-muted-foreground">{plural(opportunity.reference_count, "reference video")}</span>}
+        {firstMover ? (
+          <FirstMoverLabel />
+        ) : (
+          <span className="text-caption-1-medium text-muted-foreground">
+            {plural(opportunity.reference_count, "reference video")}
+            <CalcMark />
+          </span>
+        )}
         <span className="ml-auto inline-flex items-center gap-1.5 text-caption-1-medium text-muted-foreground">
           <RiTimeLine aria-hidden className="size-3.5" />
           {formatCountdown(opportunity.expires_at, now)}
@@ -59,6 +67,7 @@ export function NewsCard({ opportunity, now, onDismiss }: { opportunity: NewsOpp
           {opportunity.demand_check.youtube_results_7d === null
             ? "not checked today (data budget used up)"
             : `${plural(opportunity.demand_check.youtube_results_7d, "video")} in 7 days, ${plural(opportunity.demand_check.outliers ?? 0, "outlier")}`}
+          {opportunity.demand_check.youtube_results_7d === null ? null : <CalcMark />}
         </span>
         <OriginChip origin="YouTube public" />
       </p>

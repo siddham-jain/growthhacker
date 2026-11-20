@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { RefreshList } from "@/components/cards/refresh-list";
 import { VideoList } from "@/components/cards/video-list";
+import { YourAnswerCitations } from "@/components/citations/answer-citations";
 import { PerformanceChart, ViewsAtAgeChart } from "@/components/charts/lazy";
 import { VideoEvidenceDrawer } from "@/components/evidence/lazy-drawers";
 import { FreshnessLine } from "@/components/shell/freshness-line";
@@ -136,6 +137,7 @@ export default function ChannelPage() {
               <h3 className="text-body-medium text-foreground">Website actions</h3>
               <p className="text-body-regular text-muted-foreground">Bookings and calls happen on your site, not on YouTube. We list them in your profile but never mix them into video numbers.</p>
             </section>
+            <YourAnswerCitations clientId={clientId} />
           </div>
         </TabPanel>
       </Tabs>

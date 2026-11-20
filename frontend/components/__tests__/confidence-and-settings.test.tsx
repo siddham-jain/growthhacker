@@ -60,4 +60,15 @@ describe("safeNext", () => {
     expect(safeNext("https://evil.com")).toBeNull();
     expect(safeNext(null)).toBeNull();
   });
+
+  it("rejects backslashes, encoded separators and control characters", () => {
+    for (const next of ["/\\evil.com", "/%5Cevil.com", "/%255Cevil.com", "/%2F/evil.com", "%2F%2Fevil.com", "/\t/evil.com", "/%09/evil.com", "javascript:alert(1)", "evil.com", "/%E0%A4%A", ""]) {
+      expect(safeNext(next), next).toBeNull();
+    }
+  });
+
+  it("normalises dot segments and keeps the query and hash", () => {
+    expect(safeNext("/c/cl/../cl/today?w=30#top")).toBe("/c/cl/today?w=30#top");
+    expect(safeNext("/c/cl/today?q=a%26b")).toBe("/c/cl/today?q=a%26b");
+  });
 });

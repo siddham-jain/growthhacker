@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Fragment, useState } from "react";
+import { CalcNote } from "@/components/ui/calc-mark";
 import { CardSurface, ChartAxisLabel } from "@/components/ui/primitives";
 import { OriginChip } from "@/components/ui/chips";
 import type { GapMatrixView } from "@/lib/api/types";
@@ -103,6 +104,7 @@ export function GapMatrix({ matrix, clientId }: { matrix: GapMatrixView; clientI
         </Link>
         .
       </p>
+      <CalcNote />
     </CardSurface>
   );
 }

@@ -94,6 +94,9 @@ export const creatorsQuery = (clientId: string, windowDays: WindowDays, sort?: s
 
 export const meQuery = () => queryOptions({ queryKey: ["me"], queryFn: () => api.auth.me(), staleTime: 5 * MINUTE });
 
+export const answerCitationsQuery = (clientId: string) =>
+  queryOptions({ queryKey: [...clientKey(clientId), "answer-citations"], queryFn: () => api.analytics.answerCitations(clientId), staleTime: 10 * MINUTE });
+
 export const gapsQuery = (clientId: string, windowDays: WindowDays) =>
   queryOptions({
     queryKey: [...clientKey(clientId), "gaps", windowDays],

@@ -1,5 +1,5 @@
 import { api } from "@/lib/api";
-import { buildUrl } from "@/lib/api/http";
+import { apiPath, buildUrl } from "@/lib/api/http";
 import { subscribeMockRun } from "@/lib/api/mock/runs";
 import type { RunEvent, RunEventType } from "@/lib/api/types";
 import { API_MOCK } from "@/lib/env";
@@ -105,7 +105,7 @@ function openServerStream(runId: string, afterSeq: number, handlers: RunStreamHa
     if (closed) return;
     if (!polling) setConnection(failures === 0 ? "connecting" : "reconnecting");
     // the browser resends Last-Event-ID on its own reconnects; after_seq covers streams we reopen ourselves
-    source = new EventSource(buildUrl(`/runs/${runId}/events`, { after_seq: lastSeq }), { withCredentials: true });
+    source = new EventSource(buildUrl(apiPath`/runs/${runId}/events`, { after_seq: lastSeq }), { withCredentials: true });
     const onMessage = (message: MessageEvent<string>) => void receive(JSON.parse(message.data) as RunEvent);
     source.onopen = () => {
       failures = 0;

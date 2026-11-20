@@ -1,4 +1,5 @@
 import type {
+  AnswerCitations,
   BulkStatusIn,
   BusinessProfileView,
   BuyerQuestionItem,
@@ -146,6 +147,8 @@ export interface GrowthHackerApi {
     topics(clientId: string, windowDays: WindowDays): Promise<ResultEnvelope<TopicSummary[]>>;
     // buyer questions × tracked competitors, counts only
     gaps(clientId: string, windowDays: WindowDays): Promise<ResultEnvelope<GapMatrixView>>;
+    // which buyer questions' web answers cite your videos, a competitor's, or neither
+    answerCitations(clientId: string): Promise<AnswerCitations>;
   };
   recommendations: {
     list(clientId: string, query: RecommendationQuery): Promise<RecommendationsResult>;

@@ -20,6 +20,7 @@ import type {
   RefreshSuggestionView,
 } from "../types";
 import { channels, CLIENT_ID, daysAgo, envelope, NOW } from "./fixtures/base";
+import { answerCitations } from "./fixtures/citations";
 import { competitorDetail, competitorViews, gapMatrix, scorecards } from "./fixtures/competitors";
 import {
   creators,
@@ -340,6 +341,7 @@ export const mockApi: GrowthHackerApi = {
     },
     patterns: (_clientId, _scope, windowDays) => respond(envelope(competitorDetail(channels.fortis.channel_id)?.trait_lift ?? [], windowDays)),
     gaps: (_clientId, windowDays) => respond(envelope(gapMatrix(), windowDays)),
+    answerCitations: () => respond(answerCitations()),
     topics: (_clientId, windowDays) =>
       respond(envelope(buyerQuestions.map((item, index) => ({ topic_ref: { id: item.id, label: item.text }, own_videos: index % 3, competitor_videos: 6 - index, outliers: index % 2, review_flagged: 0 })), windowDays)),
   },

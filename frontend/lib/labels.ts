@@ -81,4 +81,7 @@ export const FEEDBACK_REASON_LABELS: Record<FeedbackReason, string> = {
   other: "Something else",
 };
 
-export const METRIC_DISCLOSURE = "Calculated by GrowthHacker from public YouTube data, not a YouTube metric.";
+export const METRIC_DISCLOSURE = "Calculated by GrowthHacker, not a YouTube metric.";
+
+// inline marker on a computed number; the section's footnote spells out METRIC_DISCLOSURE
+export const CALC_MARK = "†";

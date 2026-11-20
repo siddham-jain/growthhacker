@@ -17,9 +17,38 @@ import { API_MOCK } from "@/lib/env";
 
 type Method = "session" | "api_key";
 
-// only same-origin paths are honoured, so a crafted link can't bounce the user elsewhere
+const SENTINEL_ORIGIN = "https://growthhacker.invalid";
+const MAX_DECODE_PASSES = 3;
+const UNSAFE_PATH = /[\\\u0000-\u001f\u007f]/;
+
+function fullyDecoded(value: string): string | null {
+  let current = value;
+  for (let pass = 0; pass < MAX_DECODE_PASSES; pass += 1) {
+    let next: string;
+    try {
+      next = decodeURIComponent(current);
+    } catch {
+      return null;
+    }
+    if (next === current) return current;
+    current = next;
+  }
+  // still changing after several passes: treat as hostile rather than guess
+  return null;
+}
+
+function isRelativePath(path: string): boolean {
+  return path.startsWith("/") && !path.startsWith("//") && !UNSAFE_PATH.test(path);
+}
+
+// only same-origin relative paths are honoured, checked on the decoded form so encoded slashes and backslashes can't bounce the user elsewhere
 export function safeNext(next: string | null): string | null {
-  return next && next.startsWith("/") && !next.startsWith("//") ? next : null;
+  if (!next) return null;
+  const decoded = fullyDecoded(next);
+  if (decoded === null || !isRelativePath(next) || !isRelativePath(decoded)) return null;
+  const url = new URL(next, SENTINEL_ORIGIN);
+  if (url.origin !== SENTINEL_ORIGIN || url.pathname.startsWith("//")) return null;
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 function landingFor(me: Me): string {

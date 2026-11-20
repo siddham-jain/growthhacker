@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState, ErrorState, LoadingBlock } from "@/components/states/states";
 import { ThinDataPrompt } from "@/components/states/thin-data-prompt";
 import { Button } from "@/components/ui/button";
+import { CalcNote } from "@/components/ui/calc-mark";
 import { SegmentedControl, SegmentedControlItem, Tab, TabList, TabPanel, Tabs } from "@/components/ui/primitives";
 import { useRecommendationFeedback } from "@/lib/api/mutations";
 import { recommendationsQuery } from "@/lib/api/queries";
@@ -44,6 +45,7 @@ function UnansweredPanel({ notes }: { notes: WhiteSpaceNote[] }) {
           </span>
         </p>
       ))}
+      <CalcNote />
     </aside>
   );
 }
@@ -133,6 +135,7 @@ export default function IdeasPage() {
               Show {visibleByLens.length - INITIAL_VISIBLE} more
             </Button>
           ) : null}
+          {shown.length ? <CalcNote /> : null}
           {hiddenByLens ? (
             <p className="text-caption-1-regular text-muted-foreground">
               {hiddenByLens} {hiddenByLens === 1 ? "card is" : "cards are"} hidden by the {lens === "views" ? "Views" : "Conversion"} lens ·{" "}
