@@ -71,7 +71,7 @@ async def test_apollo_30_day_cards_meet_the_quality_bar(apollo_run) -> None:
         if expected is not None and expected.basis == "insufficient":
             assert card.confidence.label.value == "Low"
         elif expected is not None and expected.basis != "not_applicable":
-            assert card.expected_range_vs_baseline.endswith("(indicative)")
+            assert card.expected_range_vs_baseline.endswith("(indicative, calculated by GrowthHacker)")
 
 
 async def test_strict_contract_matches_the_assignment_shape_exactly(apollo_run) -> None:

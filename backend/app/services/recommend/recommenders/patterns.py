@@ -107,7 +107,8 @@ class PatternRecommender:
         return new_draft(
             ctx,
             self,
-            f"{self.kind}|{'|'.join(f'{key}={value}' for key, value in sorted(traits.items()))}|{lift.scope.value}",
+            # the scope can flip between runs as samples grow, so it stays out of the card's identity
+            f"{self.kind}|{'|'.join(f'{key}={value}' for key, value in sorted(traits.items()))}",
             subject=subject,
             topic_ids=sorted({topic for video in pool for topic in video.topic_ids}),
             reference_pool=[video.to_reference() for video in ranked],

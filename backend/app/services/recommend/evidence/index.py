@@ -8,6 +8,7 @@ from app.domain.analytics import (
     TRUE_AGE_METHODS,
     VALUELESS_AGE_METHODS,
     AgeMethod,
+    ChannelBaseline,
     MetricFlag,
     OutlierTier,
     OwnPerformanceReport,
@@ -29,6 +30,11 @@ ABOVE_NORMAL_TIERS = frozenset(
 )
 BREAKOUT_TIERS = frozenset({OutlierTier.breakout, OutlierTier.outlier, OutlierTier.strong_outlier})
 SECONDS_PER_DAY = 86_400
+
+
+def _baseline_rank(baseline: ChannelBaseline) -> tuple[bool, int, datetime, str]:
+    # true-age beats proxy, then the larger sample, then the newest; the id only breaks exact ties
+    return (baseline.method in TRUE_AGE_METHODS, baseline.n, baseline.as_of, baseline.baseline_id)
 
 
 @dataclass(frozen=True, slots=True)
@@ -375,9 +381,17 @@ class EvidenceIndexBuilder:
     ) -> dict[FormatSegment, ClientBaseline]:
         baselines: dict[FormatSegment, ClientBaseline] = {}
         if report is not None:
-            for baseline in sorted(report.baselines, key=lambda item: item.as_of):
-                if baseline.metric == "views_at_age" and baseline.age_days == comparison_age_days:
-                    baselines[baseline.segment] = ClientBaseline(views_at_age=baseline.median, n=baseline.n)
+            chosen: dict[FormatSegment, ChannelBaseline] = {}
+            for baseline in report.baselines:
+                if baseline.metric != "views_at_age" or baseline.age_days != comparison_age_days:
+                    continue
+                current = chosen.get(baseline.segment)
+                if current is None or _baseline_rank(baseline) > _baseline_rank(current):
+                    chosen[baseline.segment] = baseline
+            baselines = {
+                segment: ClientBaseline(views_at_age=baseline.median, n=baseline.n)
+                for segment, baseline in chosen.items()
+            }
         if baselines:
             return baselines
         by_segment: dict[FormatSegment, list[tuple[float, int]]] = defaultdict(list)

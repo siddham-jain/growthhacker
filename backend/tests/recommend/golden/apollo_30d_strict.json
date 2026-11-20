@@ -51,7 +51,7 @@
       }
     ],
     "fit_to_client": "Answers your tracked buyer question: How much does a knee replacement cost at Apollo?; Your 3–8m long-form videos run a median 1.5x your baseline (3 videos)",
-    "expected_range_vs_baseline": "1.6x-1.9x (indicative)",
+    "expected_range_vs_baseline": "3.0x your usual views (indicative, calculated by GrowthHacker)",
     "confidence": {
       "label": "High",
       "outliers": 6,
@@ -61,7 +61,7 @@
     "generated_at": "2026-11-20T09:05:00Z"
   },
   {
-    "id": "rec_jpg2j3z3pyi2",
+    "id": "rec_nvuziqua6t5q",
     "type": "format",
     "summary": "Format: Shorts",
     "lens": [
@@ -110,7 +110,7 @@
       }
     ],
     "fit_to_client": "3 of 5 supporting outliers match your topics; 2 of your last 8 videos use Shorts",
-    "expected_range_vs_baseline": "1.3x-1.9x (indicative)",
+    "expected_range_vs_baseline": "3.0x your usual views (indicative, calculated by GrowthHacker)",
     "confidence": {
       "label": "High",
       "outliers": 5,
@@ -171,9 +171,9 @@
       }
     ],
     "fit_to_client": "Answers your tracked buyer question: Which hospital is best for angioplasty in Chennai?; Your 3–8m long-form videos run a median 1.5x your baseline (3 videos)",
-    "expected_range_vs_baseline": "not enough comparable videos for a range",
+    "expected_range_vs_baseline": "2.2x-3.0x your usual views (indicative, calculated by GrowthHacker)",
     "confidence": {
-      "label": "Low",
+      "label": "Medium",
       "outliers": 3,
       "channels": 2
     },
@@ -225,7 +225,7 @@
     "generated_at": "2026-11-20T09:05:00Z"
   },
   {
-    "id": "rec_fod75og6gve2",
+    "id": "rec_dm66vugzqm2y",
     "type": "title_pattern",
     "summary": "Title pattern: [Question]",
     "lens": [
@@ -267,7 +267,7 @@
       }
     ],
     "fit_to_client": "4 of 4 supporting outliers match your topics; 0 of your last 8 videos use question titles",
-    "expected_range_vs_baseline": "1.1x-1.9x (indicative)",
+    "expected_range_vs_baseline": "3.0x your usual views (indicative, calculated by GrowthHacker)",
     "confidence": {
       "label": "Medium",
       "outliers": 4,
@@ -277,7 +277,7 @@
     "generated_at": "2026-11-20T09:05:00Z"
   },
   {
-    "id": "rec_wt5yh2kvr46f",
+    "id": "rec_cmetjahr4256",
     "type": "thumbnail_pattern",
     "summary": "Thumbnail pattern: text on the thumbnail",
     "lens": [
@@ -326,7 +326,7 @@
       }
     ],
     "fit_to_client": "12 of 19 supporting outliers match your topics; Your videos with text on the thumbnail run a median 1.1x your baseline (7 videos)",
-    "expected_range_vs_baseline": "1.0x-1.8x (indicative)",
+    "expected_range_vs_baseline": "3.0x your usual views (indicative, calculated by GrowthHacker)",
     "confidence": {
       "label": "High",
       "outliers": 12,

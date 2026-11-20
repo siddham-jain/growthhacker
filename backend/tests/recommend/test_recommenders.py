@@ -173,3 +173,25 @@ def test_disabled_types_are_not_generated(service) -> None:
     plan = service.plan(apollo_inputs(config=ClientRecommendConfig(disabled_types=["creator"])), 30)
 
     assert all(draft.type is not RecType.creator for draft in [*plan.selection.selected, *plan.creators])
+
+
+def test_a_pattern_keeps_its_card_identity_when_the_supporting_scope_changes(ctx) -> None:
+    (competitor,) = TitlePatternRecommender().generate(ctx)
+    analytics = apollo_inputs().analytics
+    niche_only = [
+        item.model_copy(
+            update={
+                "lifts": [
+                    lift.model_copy(update={"scope": LiftScope.niche})
+                    if lift.trait_key == "title.is_question"
+                    else lift
+                    for lift in lifts(item.window_days)
+                ]
+            }
+        )
+        for item in analytics
+    ]
+    (niche,) = TitlePatternRecommender().generate(context_for(apollo_inputs(analytics=niche_only)))
+
+    assert niche.subject.scope is LiftScope.niche
+    assert niche.stable_key == competitor.stable_key
