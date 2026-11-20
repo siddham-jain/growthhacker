@@ -25,6 +25,8 @@ class YouTubeRequestContext(RequestContext):
     # local extension of the port context: search sub-budget and a cache max-age override
     search_pool: SearchPool | None = None
     max_age_s: int | None = Field(default=None, ge=0)
+    # the pipeline stage the run budget tallies this spend under
+    budget_stage: str | None = None
 
     @property
     def pool(self) -> SearchPool:
@@ -38,9 +40,15 @@ def request_context(
     run_id: UUID | None = None,
     search_pool: SearchPool | None = None,
     max_age_s: int | None = None,
+    budget_stage: str | None = None,
 ) -> YouTubeRequestContext:
     return YouTubeRequestContext(
-        client_id=client_id, run_id=run_id, priority=priority, search_pool=search_pool, max_age_s=max_age_s
+        client_id=client_id,
+        run_id=run_id,
+        priority=priority,
+        search_pool=search_pool,
+        max_age_s=max_age_s,
+        budget_stage=budget_stage,
     )
 
 

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 
-from app.adapters.youtube.errors import YouTubeApiError
+from app.adapters.youtube.errors import CircuitOpen, Transient, YouTubeApiError
 from app.core.clock import Clock
 from app.core.config import YouTubeSnapshotSettings
 from app.core.logging import get_logger
@@ -13,7 +13,7 @@ from app.core.registry import Registry
 from app.domain.youtube import QuotaPriority, VideoSnapshot
 from app.models.youtube_cache import YtSnapshotSchedule, YtVideo
 from app.ports.quota import QuotaExhausted
-from app.ports.youtube import YouTubeGateway
+from app.ports.youtube import RequestContext, YouTubeGateway
 from app.retention.sweeper import REFERENCED_VIDEOS_SQL
 from app.services.youtube.context import request_context
 from app.services.youtube.store import YouTubeStore
@@ -65,6 +65,8 @@ class DueVideo:
     video_id: str
     effective_published_at: datetime
     milestone_target_h: int | None
+    last_captured_at: datetime | None = None
+    failed_attempts: int = 0
 
 
 class CadencePlanner:
@@ -153,6 +155,8 @@ class SnapshotScheduler:
                 YtSnapshotSchedule.video_id,
                 YtVideo.effective_published_at,
                 YtSnapshotSchedule.milestone_target_h,
+                YtSnapshotSchedule.last_captured_at,
+                YtSnapshotSchedule.failed_attempts,
             )
             .join(YtVideo, YtVideo.video_id == YtSnapshotSchedule.video_id)
             .where(YtSnapshotSchedule.next_due_at <= now, YtVideo.availability != "removed")
@@ -165,7 +169,7 @@ class SnapshotScheduler:
         )
         async with self._store.uow() as uow:
             rows = (await uow.session.execute(statement)).all()
-        return [DueVideo(video_id, effective, milestone) for video_id, effective, milestone in rows]
+        return [DueVideo(*row) for row in rows]
 
     async def reschedule(self, captured: Sequence[DueVideo], captured_at: datetime | None) -> None:
         now = self._clock.now()
@@ -183,7 +187,7 @@ class SnapshotScheduler:
                     "priority": plan.priority,
                 }
                 if captured_at is not None:
-                    values["last_captured_at"] = captured_at
+                    values.update(last_captured_at=captured_at, failed_attempts=0)
                 await uow.session.execute(
                     update(YtSnapshotSchedule)
                     .where(YtSnapshotSchedule.video_id == video.video_id)
@@ -192,6 +196,25 @@ class SnapshotScheduler:
             if untracked:
                 await uow.session.execute(
                     delete(YtSnapshotSchedule).where(YtSnapshotSchedule.video_id.in_(untracked))
+                )
+            await uow.commit()
+
+    async def defer(self, failed: Sequence[DueVideo], settings: YouTubeSnapshotSettings) -> None:
+        """exponential backoff for videos whose stats call failed, so a bad chunk is not retried every tick."""
+        now = self._clock.now()
+        async with self._store.uow() as uow:
+            for video in failed:
+                attempts = video.failed_attempts + 1
+                delay = min(
+                    timedelta(minutes=settings.retry_base_minutes * 2 ** (attempts - 1)),
+                    timedelta(hours=settings.retry_max_hours),
+                )
+                plan = self._planner.plan(video.effective_published_at, now, video.last_captured_at)
+                next_due = max(plan.next_due_at, now + delay) if plan else now + delay
+                await uow.session.execute(
+                    update(YtSnapshotSchedule)
+                    .where(YtSnapshotSchedule.video_id == video.video_id)
+                    .values(next_due_at=next_due, failed_attempts=attempts)
                 )
             await uow.commit()
 
@@ -251,23 +274,46 @@ class SnapshotCollector:
         report.due = len(due)
         ctx = request_context(QuotaPriority.snapshot)
         for start in range(0, len(due), size):
-            chunk = due[start : start + size]
-            try:
-                batch = await self._gateway.video_stats([video.video_id for video in chunk], ctx)
-            except (QuotaExhausted, YouTubeApiError) as error:
-                report.errors.append(type(error).__name__)
-                report.quota_limited |= isinstance(error, QuotaExhausted)
-                await self._fallback(chunk, report)
-                if isinstance(error, QuotaExhausted):
-                    await self._fallback_rest(due[start + size :], report)
-                    break
-                continue
-            report.captured += len(batch.snapshots)
-            report.missing += len(batch.missing_ids)
-            await self._scheduler.reschedule(chunk, self._clock.now())
+            if not await self._collect_chunk(due[start : start + size], ctx, report):
+                # untried videos stay due; quota is gone, not their fault
+                await self._fallback_rest(due[start + size :], report)
+                break
         return report
 
-    async def _fallback(self, chunk: Sequence[DueVideo], report: CollectReport) -> None:
+    async def _collect_chunk(
+        self, chunk: Sequence[DueVideo], ctx: RequestContext, report: CollectReport
+    ) -> bool:
+        """false once the stats quota is exhausted; a rejected chunk is bisected to isolate the bad ids."""
+        try:
+            batch = await self._gateway.video_stats([video.video_id for video in chunk], ctx)
+        except QuotaExhausted as error:
+            report.errors.append(type(error).__name__)
+            report.quota_limited = True
+            await self._fallback(chunk, report, defer=False)
+            return False
+        except (Transient, CircuitOpen) as error:
+            report.errors.append(type(error).__name__)
+            await self._fallback(chunk, report)
+            return True
+        except YouTubeApiError as error:
+            if len(chunk) > 1:
+                middle = len(chunk) // 2
+                if not await self._collect_chunk(chunk[:middle], ctx, report):
+                    await self._fallback(chunk[middle:], report, defer=False)
+                    return False
+                return await self._collect_chunk(chunk[middle:], ctx, report)
+            report.errors.append(type(error).__name__)
+            logger.warning("snapshot_video_rejected", video_id=chunk[0].video_id, error=type(error).__name__)
+            await self._fallback(chunk, report)
+            return True
+        report.captured += len(batch.snapshots)
+        report.missing += len(batch.missing_ids)
+        await self._scheduler.reschedule(chunk, self._clock.now())
+        return True
+
+    async def _fallback(
+        self, chunk: Sequence[DueVideo], report: CollectReport, *, defer: bool = True
+    ) -> None:
         now = self._clock.now()
         near = [video for video in chunk if self.milestone_near(video, now)]
         far = [video for video in chunk if video not in near]
@@ -280,12 +326,13 @@ class SnapshotCollector:
             except (QuotaExhausted, YouTubeApiError) as error:
                 report.errors.append(f"fallback:{type(error).__name__}")
                 far = list(chunk)
-        await self._scheduler.reschedule(far, None)
+        if defer and far:
+            await self._scheduler.defer(far, self._settings)
 
     async def _fallback_rest(self, rest: Sequence[DueVideo], report: CollectReport) -> None:
         size = self._settings.batch_size
         for start in range(0, len(rest), size):
-            await self._fallback(rest[start : start + size], report)
+            await self._fallback(rest[start : start + size], report, defer=False)
 
 
 def snapshots_to_drop(

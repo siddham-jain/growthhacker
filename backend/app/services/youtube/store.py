@@ -76,7 +76,7 @@ def row_to_channel(row: YtChannel) -> ChannelRecord:
     )
 
 
-def video_to_row(record: VideoRecord) -> dict[str, Any]:
+def video_to_row(record: VideoRecord, *, localized: bool = False) -> dict[str, Any]:
     # availability and quality flags belong to the ingest service, so an api refetch leaves them alone
     row = record.model_dump(
         exclude={"aspect", "format_confidence", "format", "availability", "first_missing_at", "quality_flags"}
@@ -87,7 +87,12 @@ def video_to_row(record: VideoRecord) -> dict[str, Any]:
     )
     row["format_confidence"] = CONFIDENCE_SCORES[record.format_confidence]
     row["region_restriction"] = record.region_restriction.model_dump() if record.region_restriction else None
-    row["localizations"] = {key: value.model_dump() for key, value in record.localizations.items()}
+    if localized:
+        row["localizations"] = {key: value.model_dump() for key, value in record.localizations.items()}
+        row["localizations_fetched_at"] = record.metadata_fetched_at
+    else:
+        # localizations were not requested, so what was stored earlier stays
+        del row["localizations"]
     row["thumbnails"] = {key: value.model_dump() for key, value in record.thumbnails.items()}
     row["stats_fetched_at"] = record.metadata_fetched_at
     return row
@@ -225,13 +230,17 @@ class YouTubeStore:
         return list(rows)
 
     async def save_videos(
-        self, records: Sequence[VideoRecord], snapshots: Sequence[VideoSnapshot] = ()
+        self,
+        records: Sequence[VideoRecord],
+        snapshots: Sequence[VideoSnapshot] = (),
+        *,
+        localized: bool = False,
     ) -> None:
         if not records:
             return
         async with self._uow_factory() as uow:
             await uow.repository(FirstSourceVideoRepository).upsert_many(
-                [video_to_row(record) for record in records]
+                [video_to_row(record, localized=localized) for record in records]
             )
             await uow.session.execute(
                 update(YtVideo)

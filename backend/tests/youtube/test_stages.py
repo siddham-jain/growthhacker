@@ -1,17 +1,36 @@
+import asyncio
 import uuid
+from dataclasses import replace
 from datetime import timedelta
 from typing import Any
+
+import pytest
 
 from app.core.registry import stage_registry
 from app.domain.common import ChannelRole
 from app.domain.runs import RunKind, RunNoticeCode, RunTrigger
 from app.domain.youtube import QuotaBucket
-from app.pipeline.contracts import BudgetKind, RunConfigSnapshot, RunContext, UsageLedger
-from app.pipeline.stages.youtube import IngestStage, OwnAnalyticsStage, PrefetchOwnChannelStage
+from app.pipeline.context import RunBudgetLedger
+from app.pipeline.contracts import (
+    BudgetKind,
+    RunBudget,
+    RunConfigSnapshot,
+    RunContext,
+    StageBudget,
+    UsageLedger,
+)
+from app.pipeline.stages.youtube import (
+    IngestStage,
+    OwnAnalyticsStage,
+    PrefetchOwnChannelStage,
+    youtube_context,
+)
+from app.ports.quota import QuotaExhausted
 from app.services.youtube.ingest import ChannelIngestResult
 from tests.conftest import make_settings
 from tests.contracts.test_pipeline_contracts import EmptyArtifacts, RecordingReporter, Token
 from tests.youtube.fixtures import CHANNEL_A, CHANNEL_B, NOW, channel_record, video_id, video_record
+from tests.youtube.test_quota import manager
 
 OTHER = "UCtestChannelC000000000C"
 
@@ -27,6 +46,9 @@ class Ledger:
 
     def remaining(self, kind):
         return 500 if kind is BudgetKind.youtube_units else None
+
+    def run_remaining(self, kind):
+        return self.remaining(kind)
 
     def usage(self) -> UsageLedger:
         return UsageLedger()
@@ -53,7 +75,7 @@ class FakeQuota:
     async def open_run_budget(self, run_id, caps) -> None:
         self.caps = caps
 
-    async def run_usage(self, run_id):
+    async def run_usage(self, run_id, stage=None):
         return dict(self.used)
 
 
@@ -187,3 +209,50 @@ async def test_prefetch_and_own_analytics_enablement() -> None:
     assert without_channel.status == "skipped"
     assert not OwnAnalyticsStage().enabled(ctx.snapshot)
     assert OwnAnalyticsStage().enabled(context(layer, oauth=True)[0].snapshot)
+
+
+class SpendingIngest:
+    """spends a fixed amount per channel through the real quota manager, pausing so stages interleave."""
+
+    def __init__(self, quota, units: int, release: asyncio.Event) -> None:
+        self.quota = quota
+        self.units = units
+        self.release = release
+        self.spent = asyncio.Event()
+
+    async def ingest_channel(self, channel_id, role, ctx, *, mode, languages=()):
+        await self.quota.reserve(QuotaBucket.main, self.units, ctx, "videos.list")
+        self.spent.set()
+        await self.release.wait()
+        return ChannelIngestResult(channel_id=channel_id, channel=channel_record(channel_id))
+
+
+async def test_parallel_stages_charge_only_their_own_spend(redis, redis_prefix) -> None:
+    # daily refresh with 120 run units: ingest and niche spend 40 each at the same time
+    quota = manager(redis, redis_prefix, daily_refresh_run_units=200)
+    run_ledger = RunBudgetLedger(
+        RunBudget(wall_s=600, youtube_units=120, search_calls=5, llm_usd=1, tavily_credits=1)
+    )
+    release = asyncio.Event()
+
+    def stage_context(name: str, spender: SpendingIngest) -> RunContext:
+        layer = FakeLayer()
+        layer.quota = quota
+        layer.ingest = spender
+        ctx, _, _ = context(layer, kind=RunKind.daily_refresh, competitors=())
+        return replace(ctx, run_id=run_id, stage=name, budget=run_ledger.for_stage(StageBudget()))
+
+    run_id = uuid.uuid4()
+    spenders = [SpendingIngest(quota, 40, release), SpendingIngest(quota, 40, release)]
+    ingest_ctx = stage_context("ingest", spenders[0])
+    other_ctx = stage_context("niche_discovery", spenders[1])
+    ingest = asyncio.create_task(IngestStage().run(ingest_ctx))
+    other = asyncio.create_task(IngestStage().run(other_ctx))
+    await asyncio.wait_for(asyncio.gather(*(spender.spent.wait() for spender in spenders)), timeout=5)
+    release.set()
+    first, second = await asyncio.gather(ingest, other)
+    assert first.artifact.youtube_units == 40 and second.artifact.youtube_units == 40
+    assert run_ledger.spent(BudgetKind.youtube_units) == 80
+    # the redis cap is the run's 120 units, not the remainder counted twice
+    with pytest.raises(QuotaExhausted):
+        await quota.reserve(QuotaBucket.main, 41, youtube_context(ingest_ctx), "videos.list")

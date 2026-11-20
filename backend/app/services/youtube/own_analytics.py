@@ -3,7 +3,7 @@ import secrets
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal, Protocol
 
 from pydantic import SecretStr
@@ -32,6 +32,7 @@ from app.domain.youtube import (
 from app.models.own_analytics import OwnAnalyticsDaily, OwnSearchTerm, OwnTrafficSource
 from app.models.own_analytics import OwnVideoMetrics as OwnVideoMetricsRow
 from app.models.tenancy import Client, OAuthToken
+from app.models.youtube_cache import YtVideo
 from app.ports.youtube import AnalyticsQuery, AnalyticsTable, RequestContext
 from app.repositories.shared.base import chunked
 from app.repositories.tenant.oauth_tokens import OAuthTokenRepository
@@ -156,13 +157,20 @@ class OAuthConnectionService:
         await self._redis.set(self._state_key(state), json.dumps(payload), ex=STATE_TTL_S)
         return self._flow.authorization_url(state, challenge)
 
-    async def complete(self, state: str, code: str, *, replace_own_channel: bool = False) -> ConnectResult:
+    async def complete(
+        self, state: str, code: str, *, user_id: uuid.UUID, replace_own_channel: bool = False
+    ) -> ConnectResult:
+        """finishes a connection; only the user who started it may finish it, and the state is single use."""
         raw = await self._redis.getdel(self._state_key(state))
         if raw is None:
             return ConnectResult(
                 status="invalid_state", message="This sign-in link expired. Please try again."
             )
         payload = json.loads(raw)
+        if payload["user_id"] != str(user_id):
+            return ConnectResult(
+                status="invalid_state", message="Finish connecting YouTube in the account that started it."
+            )
         scope = TenantScope(uuid.UUID(payload["workspace_id"]), uuid.UUID(payload["client_id"]))
         tokens = await self._flow.exchange(code, payload["verifier"])
         ctx = RequestContext(client_id=scope.client_id, run_id=None, priority=QuotaPriority.interactive)
@@ -350,6 +358,7 @@ class OwnAnalyticsService:
         *,
         timezone: str = "America/Los_Angeles",
         video_series_per_pull: int = 50,
+        video_series_horizon_days: int = 31,
     ) -> None:
         self._connections = connections
         self._reports = reports
@@ -358,6 +367,7 @@ class OwnAnalyticsService:
         self._clock = clock
         self._pacific = PacificDay(timezone)
         self._series_per_pull = video_series_per_pull
+        self._series_horizon_days = video_series_horizon_days
 
     async def daily_pull(self, scope: TenantScope, ctx: RequestContext) -> PullReport:
         report = PullReport()
@@ -404,8 +414,9 @@ class OwnAnalyticsService:
                     )
                 )
                 per_video_terms[video_id] = await run(self._terms_query(base, period_start, video_id))
+            recent = await self._recent_uploads(connection.channel_id, today)
             series = await self._video_series(
-                scope, run, base, [row["video"] for row in videos], period_start
+                scope, run, base, [*(row["video"] for row in videos), *recent], period_start
             )
         except Unauthorized:
             logger.info("own_analytics_unauthorized", client_id=str(scope.client_id))
@@ -471,25 +482,51 @@ class OwnAnalyticsService:
             return period_start
         return max(period_start, latest - timedelta(days=self._settings.repull_days))
 
-    async def _video_series(
-        self, scope: TenantScope, run, base: dict, video_ids: Sequence[str], period_start: date
-    ) -> dict[str, list[dict[str, Any]]]:
+    async def _recent_uploads(self, channel_id: str, today: date) -> list[str]:
+        # uploads still inside the views-at-age horizon need a series even when they miss the top list
+        since = datetime.combine(today - timedelta(days=self._series_horizon_days), datetime.min.time(), UTC)
         async with self._uow_factory() as uow:
-            covered = set(
+            return list(
                 (
                     await uow.session.execute(
-                        select(OwnAnalyticsDaily.video_id)
-                        .where(
-                            OwnAnalyticsDaily.client_id == scope.client_id,
-                            OwnAnalyticsDaily.video_id.in_(list(video_ids)),
-                        )
-                        .distinct()
+                        select(YtVideo.video_id)
+                        .where(YtVideo.channel_id == channel_id, YtVideo.effective_published_at >= since)
+                        .order_by(YtVideo.effective_published_at.desc())
                     )
                 ).scalars()
             )
-        pending = [video_id for video_id in video_ids if video_id not in covered][: self._series_per_pull]
+
+    async def _video_series(
+        self, scope: TenantScope, run, base: dict, video_ids: Sequence[str], period_start: date
+    ) -> dict[str, list[dict[str, Any]]]:
+        wanted = list(dict.fromkeys(video_ids))
+        async with self._uow_factory() as uow:
+            spans = {
+                video_id: (first, last)
+                for video_id, first, last in (
+                    await uow.session.execute(
+                        select(
+                            OwnAnalyticsDaily.video_id,
+                            func.min(OwnAnalyticsDaily.day),
+                            func.max(OwnAnalyticsDaily.day),
+                        )
+                        .where(
+                            OwnAnalyticsDaily.client_id == scope.client_id,
+                            OwnAnalyticsDaily.video_id.in_(wanted),
+                        )
+                        .group_by(OwnAnalyticsDaily.video_id)
+                    )
+                ).all()
+            }
+        horizon = timedelta(days=self._series_horizon_days)
+        # never-pulled first, then series that stop short of the horizon, stalest first
+        unpulled = [video_id for video_id in wanted if video_id not in spans]
+        incomplete = sorted(
+            (video_id for video_id, (first, last) in spans.items() if last - first < horizon),
+            key=lambda video_id: spans[video_id][1],
+        )
         series = {}
-        for video_id in pending:
+        for video_id in [*unpulled, *incomplete][: self._series_per_pull]:
             series[video_id] = await run(
                 AnalyticsQuery(
                     **base,
@@ -501,6 +538,16 @@ class OwnAnalyticsService:
                 )
             )
         return series
+
+    def _series_rows(self, rows: list[dict[str, Any]], through: date | None) -> list[tuple[date, int]]:
+        # a pulled range is complete: days the api left out up to data_through had no views
+        views = {date.fromisoformat(row["day"]): _int(row.get("views")) for row in rows}
+        if not views or through is None:
+            return sorted(views.items())
+        first = min(views)
+        last = min(through, first + timedelta(days=self._series_horizon_days))
+        filled = {first + timedelta(days=offset): 0 for offset in range((last - first).days + 1)}
+        return sorted({**filled, **views}.items())
 
     async def _save(
         self,
@@ -541,15 +588,11 @@ class OwnAnalyticsService:
             }
             for row in daily
         ]
+        through = max((row["day"] for row in daily_rows), default=None)
         daily_rows += [
-            {
-                **common,
-                "video_id": video_id,
-                "day": date.fromisoformat(row["day"]),
-                "views": _int(row.get("views")),
-            }
+            {**common, "video_id": video_id, "day": day, "views": views}
             for video_id, rows in series.items()
-            for row in rows
+            for day, views in self._series_rows(rows, through)
         ]
         await _upsert(uow, OwnAnalyticsDaily, daily_rows, ["client_id", "video_id", "day"])
         content_types = {row["video"]: row.get("creatorContentType") for row in videos}

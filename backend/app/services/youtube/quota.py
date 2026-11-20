@@ -19,6 +19,7 @@ from app.services.youtube.context import as_youtube_context
 logger = get_logger(__name__)
 
 REDIS_DOWN = (RedisConnectionError, RedisTimeoutError, OSError)
+RUN_BUDGET_TTL_S = 6 * 3600
 
 
 class PacificDay:
@@ -96,17 +97,25 @@ class QuotaManager:
     def _run_key(self, run_id: UUID, bucket: QuotaBucket) -> str:
         return f"{self._prefix}:quota:{self._settings.project}:run:{run_id}:{bucket.value}"
 
+    def _stage_key(self, run_id: UUID, bucket: QuotaBucket, stage: str) -> str:
+        return f"{self._run_key(run_id, bucket)}:stage:{stage}"
+
     async def open_run_budget(
-        self, run_id: UUID, caps: dict[QuotaBucket, int], ttl_s: int = 6 * 3600
+        self, run_id: UUID, caps: dict[QuotaBucket, int], ttl_s: int = RUN_BUDGET_TTL_S
     ) -> None:
+        # the first opener fixes the caps; the counter covers every stage and attempt of the run
         async with self._redis.pipeline(transaction=True) as pipe:
             for bucket, cap in caps.items():
-                pipe.set(f"{self._run_key(run_id, bucket)}:cap", cap, ex=ttl_s)
+                pipe.set(f"{self._run_key(run_id, bucket)}:cap", cap, ex=ttl_s, nx=True)
                 pipe.set(self._run_key(run_id, bucket), 0, ex=ttl_s, nx=True)
             await pipe.execute()
 
-    async def run_usage(self, run_id: UUID) -> dict[QuotaBucket, int]:
-        values = await self._redis.mget([self._run_key(run_id, bucket) for bucket in QuotaBucket])
+    async def run_usage(self, run_id: UUID, stage: str | None = None) -> dict[QuotaBucket, int]:
+        keys = [
+            self._run_key(run_id, bucket) if stage is None else self._stage_key(run_id, bucket, stage)
+            for bucket in QuotaBucket
+        ]
+        values = await self._redis.mget(keys)
         return {bucket: int(value or 0) for bucket, value in zip(QuotaBucket, values, strict=True)}
 
     async def _take_run_budget(self, bucket: QuotaBucket, units: int, ctx: RequestContext) -> bool:
@@ -120,7 +129,21 @@ class QuotaManager:
         if used > int(cap):
             await self._redis.decrby(key, units)
             raise QuotaExhausted(bucket, self.resets_at())
+        stage = as_youtube_context(ctx).budget_stage
+        if stage is not None:
+            async with self._redis.pipeline(transaction=True) as pipe:
+                pipe.incrby(self._stage_key(ctx.run_id, bucket, stage), units)
+                pipe.expire(self._stage_key(ctx.run_id, bucket, stage), RUN_BUDGET_TTL_S)
+                await pipe.execute()
         return True
+
+    async def _release_run_budget(self, bucket: QuotaBucket, units: int, ctx: RequestContext) -> None:
+        if ctx.run_id is None:
+            return
+        await self._redis.decrby(self._run_key(ctx.run_id, bucket), units)
+        stage = as_youtube_context(ctx).budget_stage
+        if stage is not None:
+            await self._redis.decrby(self._stage_key(ctx.run_id, bucket, stage), units)
 
     async def reserve(
         self, bucket: QuotaBucket, units: int, ctx: RequestContext, endpoint: str
@@ -159,8 +182,8 @@ class QuotaManager:
         except QuotaExhausted:
             if pool_bucket is not None:
                 await self._counter.refund(pool_bucket, day, units)
-            if run_counted and ctx.run_id is not None:
-                await self._redis.decrby(self._run_key(ctx.run_id, bucket), units)
+            if run_counted:
+                await self._release_run_budget(bucket, units, ctx)
             raise
         return YouTubeQuotaReservation(
             bucket=bucket,
@@ -202,8 +225,8 @@ class QuotaManager:
         )
         if reservation.pool_bucket:
             await self._counter.refund(reservation.pool_bucket, reservation.pt_day, reservation.units)
-        if reservation.run_counted and ctx.run_id is not None:
-            await self._redis.decrby(self._run_key(ctx.run_id, reservation.bucket), reservation.units)
+        if reservation.run_counted:
+            await self._release_run_budget(reservation.bucket, reservation.units, ctx)
 
     async def mark_exhausted(self, bucket: QuotaBucket) -> datetime:
         day = self.pt_day()

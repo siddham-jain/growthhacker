@@ -150,6 +150,7 @@ class YtVideo(Base):
     default_language: Mapped[str | None]
     default_audio_language: Mapped[str | None]
     localizations: Mapped[dict[str, Any]] = jsonb_object()
+    localizations_fetched_at: Mapped[datetime | None]
     duration_s: Mapped[int | None]
     embed_width: Mapped[int | None]
     embed_height: Mapped[int | None]
@@ -220,6 +221,7 @@ class YtSnapshotSchedule(Base):
     tracking_started_at: Mapped[datetime]
     first_seen_age_h: Mapped[float | None] = mapped_column(REAL)
     last_captured_at: Mapped[datetime | None]
+    failed_attempts: Mapped[int] = mapped_column(SmallInteger, server_default=text("0"))
 
 
 class YtComment(Base):

@@ -1,6 +1,6 @@
 import unicodedata
 from collections.abc import Callable, Sequence
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from pydantic import SecretStr
 
@@ -18,6 +18,10 @@ from app.services.youtube.ledger import CacheHitCounter
 from app.services.youtube.search import search_key, search_params_for_key
 from app.services.youtube.single_flight import BatchCoalescer, InflightClaims
 from app.services.youtube.store import YouTubeStore, row_to_channel, row_to_video
+
+
+def quota_identity(ctx: RequestContext) -> tuple:
+    return (ctx.client_id, ctx.run_id)
 
 
 class CachedGateway:
@@ -133,36 +137,55 @@ class CachedGateway:
         key = (ctx.priority, with_localizations)
         if key not in self._coalescers:
 
-            async def fetch(ids: list[str], initiator: RequestContext) -> dict[str, VideoRecord]:
-                batch = await self._fetch_videos(ids, initiator, with_localizations)
+            async def fetch(ids: list[str], caller: RequestContext) -> dict[str, VideoRecord]:
+                batch = await self._fetch_videos(ids, caller, with_localizations)
                 return {video.video_id: video for video in batch}
 
-            self._coalescers[key] = BatchCoalescer(fetch, max_batch=50, window_s=self._window_s)
+            self._coalescers[key] = BatchCoalescer(
+                fetch, max_batch=50, window_s=self._window_s, group_key=quota_identity
+            )
         return self._coalescers[key]
 
     async def _fetch_videos(
         self, ids: list[str], ctx: RequestContext, with_localizations: bool
     ) -> list[VideoRecord]:
+        started = self._clock.now()
         token, mine, others = (None, ids, [])
         if self._inflight is not None:
             token, mine, others = await self._inflight.claim("video", ids)
         try:
-            fetched: list[VideoRecord] = []
-            if mine:
-                batch = await self._inner.videos_by_id(mine, ctx, with_localizations)
-                await self._persist_videos(batch.found, ctx)
-                await self._store.record_misses(batch.missing_ids, self._clock.now(), self._removed_after)
-                fetched = batch.found
+            fetched = await self._fetch_upstream(mine, ctx, with_localizations)
         finally:
             if self._inflight is not None and token is not None:
                 await self._inflight.release("video", token, mine)
         if others and self._inflight is not None:
             await self._inflight.wait("video", others)
             rows = await self._store.videos(others)
-            fetched += [row_to_video(row) for row in rows.values() if row.availability == "available"]
+            clock_column = "localizations_fetched_at" if with_localizations else "metadata_fetched_at"
+            landed = {
+                video_id: row
+                for video_id, row in rows.items()
+                if (getattr(row, clock_column) or datetime.min.replace(tzinfo=UTC)) >= started
+            }
+            fetched += [row_to_video(row) for row in landed.values() if row.availability == "available"]
+            # ids whose other fetcher failed (say on its own quota cap) are fetched on this caller's quota
+            unresolved = [video_id for video_id in others if video_id not in landed]
+            fetched += await self._fetch_upstream(unresolved, ctx, with_localizations)
         return fetched
 
-    async def _persist_videos(self, videos: Sequence[VideoRecord], ctx: RequestContext) -> None:
+    async def _fetch_upstream(
+        self, ids: list[str], ctx: RequestContext, with_localizations: bool
+    ) -> list[VideoRecord]:
+        if not ids:
+            return []
+        batch = await self._inner.videos_by_id(ids, ctx, with_localizations)
+        await self._persist_videos(batch.found, ctx, localized=with_localizations)
+        await self._store.record_misses(batch.missing_ids, self._clock.now(), self._removed_after)
+        return batch.found
+
+    async def _persist_videos(
+        self, videos: Sequence[VideoRecord], ctx: RequestContext, *, localized: bool = False
+    ) -> None:
         if not videos:
             return
         channel_ids = unique(video.channel_id for video in videos)
@@ -173,7 +196,7 @@ class CachedGateway:
         stored = await self._store.channels(channel_ids)
         storable = [video for video in videos if video.channel_id in stored]
         snapshots = [hydration_snapshot(video, self._counting_regime) for video in storable]
-        await self._store.save_videos(storable, snapshots)
+        await self._store.save_videos(storable, snapshots, localized=localized)
 
     async def videos_by_id(
         self, ids: Sequence[VideoId], ctx: RequestContext, with_localizations: bool = False
@@ -190,7 +213,7 @@ class CachedGateway:
             elif (
                 row.availability == "available"
                 and self._policy.is_fresh(row.metadata_fetched_at, DataKind.video_metadata, now, max_age)
-                and (not with_localizations or row.localizations)
+                and (not with_localizations or self._localizations_fresh(row, now, max_age))
                 and not broadcast_due(row, now)
             ):
                 fresh[video_id] = row_to_video(row)
@@ -200,6 +223,13 @@ class CachedGateway:
             fresh.update(await self._coalescer(ctx, with_localizations).get(stale, ctx))
         found = [fresh[video_id] for video_id in wanted if video_id in fresh]
         return VideoBatch(found=found, missing_ids=[video_id for video_id in wanted if video_id not in fresh])
+
+    def _localizations_fresh(self, row: YtVideo, now: datetime, max_age: int | None) -> bool:
+        # an empty result is cached too, so a video with no localizations is not re-requested every time
+        fetched_at = row.localizations_fetched_at
+        return fetched_at is not None and self._policy.is_fresh(
+            fetched_at, DataKind.video_metadata, now, max_age
+        )
 
     async def video_stats(self, ids: Sequence[VideoId], ctx: RequestContext) -> StatsBatch:
         batch = await self._inner.video_stats(ids, ctx)

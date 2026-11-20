@@ -7,6 +7,7 @@ from uuid import UUID
 
 from redis.asyncio import Redis
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.clock import Clock
 from app.core.db import UnitOfWork
@@ -36,6 +37,7 @@ class QuotaLedger:
         self._project = project
         self._pacific = PacificDay(timezone)
         self._flush_at = flush_at
+        self._next_flush_at = flush_at
         self._buffer: list[dict[str, Any]] = []
         self._lock = asyncio.Lock()
 
@@ -61,10 +63,11 @@ class QuotaLedger:
 
     async def record(self, usage: QuotaUsage, *, cache_key: str | None = None) -> None:
         self._buffer.append(self.row(usage, cache_key=cache_key))
-        if len(self._buffer) >= self._flush_at:
+        if len(self._buffer) >= self._next_flush_at:
             await self.flush()
 
     async def flush(self) -> int:
+        """writes buffered rows; a database failure is transient, so the rows wait for a later flush."""
         async with self._lock:
             rows, self._buffer = self._buffer, []
             if not rows:
@@ -73,12 +76,14 @@ class QuotaLedger:
                 async with self._uow_factory() as uow:
                     written = await uow.repository(QuotaLedgerRepository).record(rows)
                     await uow.commit()
-                return written
-            except Exception:
-                # keep the rows for the next flush; the fetch itself already succeeded
+            except (SQLAlchemyError, OSError, TimeoutError) as error:
+                # the api calls already succeeded; retry after another batch instead of on every call
                 self._buffer = rows + self._buffer
-                logger.exception("quota_ledger_flush_failed", rows=len(rows))
-                raise
+                self._next_flush_at = len(self._buffer) + self._flush_at
+                logger.warning("quota_ledger_flush_deferred", rows=len(rows), error=type(error).__name__)
+                return 0
+            self._next_flush_at = self._flush_at
+            return written
 
 
 class CacheHitCounter:

@@ -1,6 +1,6 @@
 import asyncio
 import secrets
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Hashable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -26,7 +26,11 @@ class _Pending[R]:
 
 
 class BatchCoalescer[R]:
-    """merges concurrent id lookups into calls of at most max_batch ids; the first caller pays."""
+    """merges concurrent lookups from one quota context into calls of at most max_batch ids.
+
+    callers with different contexts never share a call, so each pays for its own lookups and one
+    caller's quota cap cannot fail another's request.
+    """
 
     def __init__(
         self,
@@ -34,11 +38,13 @@ class BatchCoalescer[R]:
         *,
         max_batch: int = 50,
         window_s: float = 0.15,
+        group_key: Callable[[Any], Hashable] = lambda context: context,
     ) -> None:
         self._fetch = fetch
         self._max_batch = max_batch
         self._window_s = window_s
-        self._pending: _Pending[R] = _Pending()
+        self._group_key = group_key
+        self._pending: dict[Hashable, _Pending[R]] = {}
         self._tasks: set[asyncio.Task[None]] = set()
 
     async def get(self, ids: Sequence[str], context: Any = None) -> dict[str, R]:
@@ -47,19 +53,22 @@ class BatchCoalescer[R]:
             return {}
         loop = asyncio.get_running_loop()
         future: asyncio.Future[dict[str, R]] = loop.create_future()
-        pending = self._pending
-        if not pending.futures:
-            pending.context = context
+        key = self._group_key(context)
+        pending = self._pending.get(key)
+        if pending is None:
+            pending = self._pending[key] = _Pending(context=context)
         pending.futures.append((wanted, future))
         pending.ids.extend(i for i in wanted if i not in pending.ids)
         if len(pending.ids) >= self._max_batch:
-            self._flush()
+            self._flush(key)
         elif pending.timer is None:
-            pending.timer = loop.call_later(self._window_s, self._flush)
+            pending.timer = loop.call_later(self._window_s, self._flush, key)
         return await future
 
-    def _flush(self) -> None:
-        pending, self._pending = self._pending, _Pending()
+    def _flush(self, key: Hashable) -> None:
+        pending = self._pending.pop(key, None)
+        if pending is None:
+            return
         if pending.timer is not None:
             pending.timer.cancel()
         task = asyncio.get_running_loop().create_task(self._run(pending))

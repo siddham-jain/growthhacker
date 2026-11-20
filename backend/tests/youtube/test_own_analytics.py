@@ -114,9 +114,10 @@ def service(uow_factory, redis: Redis, redis_prefix: str, clock, cipher, flow, c
 
 
 async def connect(connections: OAuthConnectionService, tenant) -> object:
-    url = await connections.start(tenant, uuid.uuid4())
+    user_id = uuid.uuid4()
+    url = await connections.start(tenant, user_id)
     state = parse_qs(urlsplit(url).query)["state"][0]
-    return await connections.complete(state, "code-1")
+    return await connections.complete(state, "code-1", user_id=user_id)
 
 
 async def test_connect_stores_an_encrypted_token_and_verifies_ownership(
@@ -159,7 +160,9 @@ async def test_accounts_without_a_channel_and_expired_state(
 ) -> None:
     connections = service(uow_factory, redis, redis_prefix, clock, cipher, FakeFlow(clock), None)
     assert (await connect(connections, tenant)).status == "no_channel"
-    assert (await connections.complete("unknown-state", "code-1")).status == "invalid_state"
+    assert (
+        await connections.complete("unknown-state", "code-1", user_id=uuid.uuid4())
+    ).status == "invalid_state"
 
 
 async def test_daily_pull_stores_owner_data_and_builds_the_panel(

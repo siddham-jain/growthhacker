@@ -188,8 +188,6 @@ class IngestService:
             if isinstance(page, NotModified):
                 yield page
                 return
-            if etag_key and page_number == 0 and page.etag:
-                await self._store.save_etag(etag_key, page.etag, self._clock.now())
             page_number += 1
             yield page
             token = page.next_page_token
@@ -235,9 +233,12 @@ class IngestService:
         new_ids: list[str] = []
         pages = self._pages(channel.uploads_playlist_id, ctx, self._settings.incremental_max_pages, etag_key)
         exhausted_pages = True
+        first_etag: str | None = None
         async for page in pages:
             if isinstance(page, NotModified):
                 return False
+            if result.pages == 0:
+                first_etag = page.etag
             result.pages += 1
             known = await self._store.videos([item.video_id for item in page.items])
             for item in page.items:
@@ -256,6 +257,9 @@ class IngestService:
             videos = await self._hydrate(new_ids, ctx, languages)
             result.videos += videos
             result.new_video_ids = [video.video_id for video in videos]
+        # saved only once the new uploads are hydrated, so a failed hydration re-lists the page
+        if first_etag:
+            await self._store.save_etag(etag_key, first_etag, self._clock.now())
         return exhausted_pages and result.pages >= self._settings.incremental_max_pages
 
     async def _hydrate(

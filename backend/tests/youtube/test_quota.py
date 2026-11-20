@@ -136,3 +136,28 @@ async def test_redis_outage_fails_closed_except_small_interactive_allowance(redi
     await quota.refund(first, ctx())
     await quota.reserve(QuotaBucket.main, 1, ctx(), "videos.list")
     await dead.aclose()
+
+
+async def test_run_caps_are_fixed_by_the_first_opener(redis: Redis, redis_prefix: str) -> None:
+    quota = manager(redis, redis_prefix)
+    run_id = uuid.uuid4()
+    await quota.open_run_budget(run_id, {QuotaBucket.main: 3})
+    await quota.open_run_budget(run_id, {QuotaBucket.main: 50})
+    for _ in range(3):
+        await quota.reserve(QuotaBucket.main, 1, ctx(run_id=run_id), "videos.list")
+    with pytest.raises(QuotaExhausted):
+        await quota.reserve(QuotaBucket.main, 1, ctx(run_id=run_id), "videos.list")
+
+
+async def test_stage_tallies_split_one_run_counter(redis: Redis, redis_prefix: str) -> None:
+    quota = manager(redis, redis_prefix)
+    run_id = uuid.uuid4()
+    await quota.open_run_budget(run_id, {QuotaBucket.main: 10})
+    ingest, niche = ctx(run_id=run_id, budget_stage="ingest"), ctx(run_id=run_id, budget_stage="niche")
+    kept = await quota.reserve(QuotaBucket.main, 2, ingest, "videos.list")
+    await quota.reserve(QuotaBucket.main, 3, niche, "videos.list")
+    await quota.refund(kept, ingest)
+    await quota.reserve(QuotaBucket.main, 1, ingest, "videos.list")
+    assert (await quota.run_usage(run_id))[QuotaBucket.main] == 4
+    assert (await quota.run_usage(run_id, "ingest"))[QuotaBucket.main] == 1
+    assert (await quota.run_usage(run_id, "niche"))[QuotaBucket.main] == 3
