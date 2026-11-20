@@ -1,0 +1,25 @@
+key: ai_frontier
+description: frontier labs, model launches and developer tools
+event_terms:
+  model: [launch, release, '"new model"']
+  product: [launch, release, update, pricing]
+  company: [launch, release, '"new model"', announces]
+  technology: [launch, release, update]
+  competitor: [launch, raises, acquires, outage, pricing]
+feeds:
+  - {name: openai_news, url: "https://openai.com/news/rss.xml", tier: tier1_primary}
+  - {name: deepmind_blog, url: "https://deepmind.google/blog/rss.xml", tier: tier1_primary}
+  - {name: google_ai_blog, url: "https://blog.google/technology/ai/rss/", tier: tier1_primary}
+  - {name: huggingface_blog, url: "https://huggingface.co/blog/feed.xml", tier: tier1_primary}
+domain_groups:
+  - name: labs_without_feeds
+    domains: [anthropic.com, mistral.ai, x.ai, ai.meta.com]
+    query: new model release
+primary_domains: [anthropic.com, openai.com, deepmind.google, blog.google, mistral.ai, x.ai, ai.meta.com, huggingface.co]
+arxiv_categories: [cs.CL, cs.AI, cs.LG]
+hf_orgs: [meta-llama, google, mistralai, Qwen, deepseek-ai, microsoft, nvidia]
+half_life_hours: {model_release: 48, product_launch: 48}
+alias_pairs:
+  - ["Claude Mythos 5.2", "Claude Fable 5.2"]
+ambiguous_terms: [Fable, Gemini, Mythos, Apollo]
+demo_event_types: [model_release, product_launch]

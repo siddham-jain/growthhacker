@@ -1,0 +1,19 @@
+key: health_in
+description: indian health regulators, advisories and clinical guidance
+event_terms:
+  regulator: [approval, guideline, advisory]
+  drug: [approval, launch, recall]
+  condition: [advisory, guideline, outbreak, cases]
+  procedure: [guideline, approval, new]
+  company: [launch, expansion, accreditation]
+  competitor: [launch, expansion, outage]
+feeds:
+  - {name: pib_press_releases, url: "https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=3", tier: tier1_authority}
+domain_groups:
+  - name: indian_health_regulators
+    domains: [cdsco.gov.in, mohfw.gov.in, icmr.gov.in, ncdc.mohfw.gov.in, pib.gov.in]
+    query: health advisory guideline approval
+pubmed: true
+half_life_hours: {public_health_advisory: 120, outbreak: 120, clinical_guideline: 336}
+ambiguous_terms: [Apollo]
+alarm_words: [deadly, killer, horror, panic, terrifying, shocking, outbreak alert]

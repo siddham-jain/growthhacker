@@ -1,0 +1,14 @@
+key: auto_us
+description: us car launches, recalls and ev credits
+event_terms:
+  product: [launch, unveil, price, recall]
+  company: [launch, unveil, recall]
+  competitor: [launch, unveil, price]
+  program: [tax credit, rebate, policy]
+domain_groups:
+  - name: us_auto_policy
+    domains: [fueleconomy.gov, energy.gov]
+    query: ev tax credit rebate
+half_life_hours: {product_launch: 72, recall: 168}
+ambiguous_terms: [Ranger]
+demo_event_types: [product_launch, pricing_change]

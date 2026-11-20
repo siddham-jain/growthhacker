@@ -1,0 +1,14 @@
+key: auto_in
+description: indian car launches and ev policy
+event_terms:
+  product: [launch, unveil, price]
+  company: [launch, unveil, price]
+  competitor: [launch, unveil, price]
+  program: [subsidy, scheme, policy]
+domain_groups:
+  - name: indian_auto_policy
+    domains: [heavyindustries.gov.in, pib.gov.in]
+    query: electric vehicle subsidy scheme
+half_life_hours: {product_launch: 72, policy_change: 336}
+ambiguous_terms: [Ranger, Apollo]
+demo_event_types: [product_launch, pricing_change, policy_change]

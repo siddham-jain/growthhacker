@@ -1,0 +1,11 @@
+key: home_services_us
+description: rebates, codes and weather advisories for home services
+event_terms:
+  program: [rebate, credit, code change]
+  event: [advisory, warning]
+  competitor: [launch, pricing]
+domain_groups:
+  - name: us_home_programs
+    domains: [energystar.gov, weather.gov]
+    query: rebate heat advisory
+demo_event_types: [policy_change, pricing_change]

@@ -1,0 +1,87 @@
+tiers:
+  tier1_authority:
+    - who.int
+    - cdc.gov
+    - nih.gov
+    - ncbi.nlm.nih.gov
+    - fda.gov
+    - ema.europa.eu
+    - mohfw.gov.in
+    - icmr.gov.in
+    - cdsco.gov.in
+    - ncdc.mohfw.gov.in
+    - pib.gov.in
+    - nhs.uk
+    - nice.org.uk
+    - ada.org
+    - energystar.gov
+    - weather.gov
+    - fueleconomy.gov
+    - energy.gov
+    - heavyindustries.gov.in
+  tier2_established:
+    - reuters.com
+    - apnews.com
+    - bbc.com
+    - bbc.co.uk
+    - theguardian.com
+    - nytimes.com
+    - wsj.com
+    - ft.com
+    - bloomberg.com
+    - cnbc.com
+    - axios.com
+    - theverge.com
+    - techcrunch.com
+    - arstechnica.com
+    - wired.com
+    - venturebeat.com
+    - zdnet.com
+    - engadget.com
+    - statnews.com
+    - thehindu.com
+    - indianexpress.com
+    - ndtv.com
+    - indiatimes.com
+    - hindustantimes.com
+    - livemint.com
+    - business-standard.com
+    - moneycontrol.com
+    - autocarindia.com
+    - carwale.com
+    - motortrend.com
+    - caranddriver.com
+  blocked:
+    - theonion.com
+    - babylonbee.com
+    - fauxy.com
+    - newsthump.com
+    - worldnewsdailyreport.com
+paywalled:
+  - wsj.com
+  - ft.com
+  - bloomberg.com
+  - nytimes.com
+  - theinformation.com
+press_release:
+  - prnewswire.com
+  - businesswire.com
+  - globenewswire.com
+  - einpresswire.com
+  - newswire.com
+social:
+  - x.com
+  - twitter.com
+  - facebook.com
+  - instagram.com
+  - tiktok.com
+  - linkedin.com
+  - reddit.com
+  - threads.net
+preprint:
+  - arxiv.org
+  - medrxiv.org
+  - biorxiv.org
+excluded:
+  - youtube.com
+  - youtu.be

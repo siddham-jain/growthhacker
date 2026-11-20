@@ -1,0 +1,11 @@
+key: dental
+description: dental research and professional bodies
+event_terms:
+  procedure: [guideline, study, new]
+  device: [approval, recall]
+  regulator: [guideline, approval]
+domain_groups:
+  - name: dental_bodies
+    domains: [ada.org, fda.gov]
+    query: dental guideline device approval
+pubmed: true

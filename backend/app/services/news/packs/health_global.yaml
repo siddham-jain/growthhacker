@@ -1,0 +1,10 @@
+key: health_global
+description: global health authorities and drug approvals
+event_terms:
+  regulator: [approval, guideline, advisory]
+  drug: [approval, recall]
+  condition: [advisory, outbreak, guideline]
+pubmed: true
+who_outbreaks: true
+openfda_approvals: true
+alarm_words: [deadly, killer, horror, panic, terrifying, shocking]
