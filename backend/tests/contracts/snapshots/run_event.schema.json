@@ -1,0 +1,1013 @@
+{
+  "$defs": {
+    "AgeMethod": {
+      "enum": [
+        "observed",
+        "interpolated",
+        "owner_analytics",
+        "age_band_proxy",
+        "pending",
+        "unavailable"
+      ],
+      "title": "AgeMethod",
+      "type": "string"
+    },
+    "CardWrittenPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence_label": {
+          "title": "Confidence Label",
+          "type": "string"
+        },
+        "kind": {
+          "const": "card_written",
+          "default": "card_written",
+          "title": "Kind",
+          "type": "string"
+        },
+        "lens": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Lens",
+          "type": "array"
+        },
+        "recommendation_id": {
+          "title": "Recommendation Id",
+          "type": "string"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "recommendation_id",
+        "type",
+        "summary",
+        "lens",
+        "confidence_label"
+      ],
+      "title": "CardWrittenPayload",
+      "type": "object"
+    },
+    "ChannelResolvedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "channel_id": {
+          "pattern": "^UC[0-9A-Za-z_-]{22}$",
+          "title": "Channel Id",
+          "type": "string"
+        },
+        "handle": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Handle"
+        },
+        "kind": {
+          "const": "channel_resolved",
+          "default": "channel_resolved",
+          "title": "Kind",
+          "type": "string"
+        },
+        "subscriber_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Subscriber Count"
+        },
+        "thumbnail_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Thumbnail Url"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "verified_by": {
+          "enum": [
+            "website_link",
+            "channel_link",
+            "oauth",
+            "manual"
+          ],
+          "title": "Verified By",
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel_id",
+        "title",
+        "handle",
+        "thumbnail_url",
+        "subscriber_count",
+        "verified_by"
+      ],
+      "title": "ChannelResolvedPayload",
+      "type": "object"
+    },
+    "CompetitorCandidatePayload": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "format": "uuid",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "channel_id": {
+          "anyOf": [
+            {
+              "pattern": "^UC[0-9A-Za-z_-]{22}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Channel Id"
+        },
+        "evidence_count": {
+          "title": "Evidence Count",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "competitor_candidate",
+          "default": "competitor_candidate",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "web_search",
+            "youtube_search",
+            "profile",
+            "llm",
+            "user"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "thumbnail_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Thumbnail Url"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "name",
+        "channel_id",
+        "thumbnail_url",
+        "source",
+        "evidence_count"
+      ],
+      "title": "CompetitorCandidatePayload",
+      "type": "object"
+    },
+    "Counts": {
+      "additionalProperties": false,
+      "properties": {
+        "done": {
+          "minimum": 0,
+          "title": "Done",
+          "type": "integer"
+        },
+        "total": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total"
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "done",
+        "unit"
+      ],
+      "title": "Counts",
+      "type": "object"
+    },
+    "FallbackPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "enum": [
+            "llm",
+            "tavily",
+            "crawler"
+          ],
+          "title": "Component",
+          "type": "string"
+        },
+        "kind": {
+          "const": "fallback",
+          "default": "fallback",
+          "title": "Kind",
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "template",
+            "secondary_provider",
+            "skipped"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "component",
+        "reason",
+        "mode"
+      ],
+      "title": "FallbackPayload",
+      "type": "object"
+    },
+    "NewsFoundPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "headline": {
+          "title": "Headline",
+          "type": "string"
+        },
+        "kind": {
+          "const": "news_found",
+          "default": "news_found",
+          "title": "Kind",
+          "type": "string"
+        },
+        "news_id": {
+          "format": "uuid",
+          "title": "News Id",
+          "type": "string"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Published At"
+        },
+        "source_domain": {
+          "title": "Source Domain",
+          "type": "string"
+        }
+      },
+      "required": [
+        "news_id",
+        "headline",
+        "source_domain",
+        "published_at"
+      ],
+      "title": "NewsFoundPayload",
+      "type": "object"
+    },
+    "OutlierFoundPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "channel_title": {
+          "title": "Channel Title",
+          "type": "string"
+        },
+        "kind": {
+          "const": "outlier_found",
+          "default": "outlier_found",
+          "title": "Kind",
+          "type": "string"
+        },
+        "outlier_ratio": {
+          "title": "Outlier Ratio",
+          "type": "number"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "video_id": {
+          "pattern": "^[0-9A-Za-z_-]{11}$",
+          "title": "Video Id",
+          "type": "string"
+        },
+        "views_at_age": {
+          "$ref": "#/$defs/ViewsAtAgeSummary"
+        }
+      },
+      "required": [
+        "video_id",
+        "channel_title",
+        "title",
+        "outlier_ratio",
+        "views_at_age"
+      ],
+      "title": "OutlierFoundPayload",
+      "type": "object"
+    },
+    "PageReadPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "page_read",
+          "default": "page_read",
+          "title": "Kind",
+          "type": "string"
+        },
+        "page_type": {
+          "enum": [
+            "service",
+            "about",
+            "location",
+            "pricing",
+            "blog",
+            "other"
+          ],
+          "title": "Page Type",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Title"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "path",
+        "title",
+        "page_type"
+      ],
+      "title": "PageReadPayload",
+      "type": "object"
+    },
+    "PageSkippedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "page_skipped",
+          "default": "page_skipped",
+          "title": "Kind",
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "robots",
+            "timeout",
+            "non_html",
+            "duplicate",
+            "budget",
+            "blocked"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "reason"
+      ],
+      "title": "PageSkippedPayload",
+      "type": "object"
+    },
+    "ProfileFieldPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "title": "Count",
+          "type": "integer"
+        },
+        "field": {
+          "enum": [
+            "offerings",
+            "value_props",
+            "locations",
+            "conversion_actions",
+            "buyer_questions"
+          ],
+          "title": "Field",
+          "type": "string"
+        },
+        "kind": {
+          "const": "profile_field",
+          "default": "profile_field",
+          "title": "Kind",
+          "type": "string"
+        },
+        "preview": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 5,
+          "title": "Preview",
+          "type": "array"
+        }
+      },
+      "required": [
+        "field",
+        "count"
+      ],
+      "title": "ProfileFieldPayload",
+      "type": "object"
+    },
+    "QuotaPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "quota",
+          "default": "quota",
+          "title": "Kind",
+          "type": "string"
+        },
+        "remaining_today": {
+          "title": "Remaining Today",
+          "type": "integer"
+        },
+        "search_calls_used": {
+          "title": "Search Calls Used",
+          "type": "integer"
+        },
+        "youtube_units_used": {
+          "title": "Youtube Units Used",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "youtube_units_used",
+        "search_calls_used",
+        "remaining_today"
+      ],
+      "title": "QuotaPayload",
+      "type": "object"
+    },
+    "RefreshSuggestedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "insertions": {
+          "title": "Insertions",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "refresh_suggested",
+          "default": "refresh_suggested",
+          "title": "Kind",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "video_id": {
+          "pattern": "^[0-9A-Za-z_-]{11}$",
+          "title": "Video Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "video_id",
+        "title",
+        "insertions"
+      ],
+      "title": "RefreshSuggestedPayload",
+      "type": "object"
+    },
+    "RunEventType": {
+      "enum": [
+        "run.queued",
+        "run.started",
+        "run.progress",
+        "run.awaiting_confirmation",
+        "run.succeeded",
+        "run.partial",
+        "run.failed",
+        "run.cancelled",
+        "run.superseded",
+        "stage.started",
+        "stage.step",
+        "stage.progress",
+        "stage.retrying",
+        "stage.reused",
+        "stage.succeeded",
+        "stage.degraded",
+        "stage.failed",
+        "stage.skipped",
+        "insight",
+        "notice",
+        "results.published"
+      ],
+      "title": "RunEventType",
+      "type": "string"
+    },
+    "RunStatus": {
+      "enum": [
+        "queued",
+        "running",
+        "cancelling",
+        "succeeded",
+        "partial",
+        "failed",
+        "cancelled",
+        "superseded"
+      ],
+      "title": "RunStatus",
+      "type": "string"
+    },
+    "SnapshotProgressPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "snapshot_progress",
+          "default": "snapshot_progress",
+          "title": "Kind",
+          "type": "string"
+        },
+        "snapshots_taken": {
+          "title": "Snapshots Taken",
+          "type": "integer"
+        },
+        "videos_tracked": {
+          "title": "Videos Tracked",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "videos_tracked",
+        "snapshots_taken"
+      ],
+      "title": "SnapshotProgressPayload",
+      "type": "object"
+    },
+    "SourceFallbackPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "from_source": {
+          "title": "From Source",
+          "type": "string"
+        },
+        "kind": {
+          "const": "source_fallback",
+          "default": "source_fallback",
+          "title": "Kind",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "to_source": {
+          "title": "To Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from_source",
+        "to_source"
+      ],
+      "title": "SourceFallbackPayload",
+      "type": "object"
+    },
+    "StageStatus": {
+      "enum": [
+        "pending",
+        "running",
+        "succeeded",
+        "reused",
+        "degraded",
+        "failed",
+        "skipped",
+        "cancelled",
+        "interrupted"
+      ],
+      "title": "StageStatus",
+      "type": "string"
+    },
+    "TopicSummaryPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "topic_summary",
+          "default": "topic_summary",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "matched_videos": {
+          "title": "Matched Videos",
+          "type": "integer"
+        },
+        "review_flagged": {
+          "title": "Review Flagged",
+          "type": "integer"
+        },
+        "topic_ref_id": {
+          "title": "Topic Ref Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "topic_ref_id",
+        "label",
+        "matched_videos",
+        "review_flagged"
+      ],
+      "title": "TopicSummaryPayload",
+      "type": "object"
+    },
+    "TraitLiftPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "trait_lift",
+          "default": "trait_lift",
+          "title": "Kind",
+          "type": "string"
+        },
+        "lift": {
+          "title": "Lift",
+          "type": "number"
+        },
+        "outliers_with_trait": {
+          "title": "Outliers With Trait",
+          "type": "integer"
+        },
+        "sample": {
+          "title": "Sample",
+          "type": "integer"
+        },
+        "trait": {
+          "title": "Trait",
+          "type": "string"
+        }
+      },
+      "required": [
+        "trait",
+        "lift",
+        "outliers_with_trait",
+        "sample"
+      ],
+      "title": "TraitLiftPayload",
+      "type": "object"
+    },
+    "VideosFetchedPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "channel_id": {
+          "pattern": "^UC[0-9A-Za-z_-]{22}$",
+          "title": "Channel Id",
+          "type": "string"
+        },
+        "channel_title": {
+          "title": "Channel Title",
+          "type": "string"
+        },
+        "count": {
+          "title": "Count",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "videos_fetched",
+          "default": "videos_fetched",
+          "title": "Kind",
+          "type": "string"
+        },
+        "window_days": {
+          "title": "Window Days",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "channel_id",
+        "channel_title",
+        "count",
+        "window_days"
+      ],
+      "title": "VideosFetchedPayload",
+      "type": "object"
+    },
+    "ViewsAtAgeSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "age_days": {
+          "minimum": 0,
+          "title": "Age Days",
+          "type": "integer"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "method": {
+          "$ref": "#/$defs/AgeMethod"
+        },
+        "views": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Views"
+        }
+      },
+      "required": [
+        "age_days",
+        "views",
+        "method",
+        "label"
+      ],
+      "title": "ViewsAtAgeSummary",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "client_id": {
+      "format": "uuid",
+      "title": "Client Id",
+      "type": "string"
+    },
+    "counts": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Counts"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "level": {
+      "default": "info",
+      "enum": [
+        "info",
+        "warning",
+        "error"
+      ],
+      "title": "Level",
+      "type": "string"
+    },
+    "message": {
+      "maxLength": 200,
+      "title": "Message",
+      "type": "string"
+    },
+    "payload": {
+      "anyOf": [
+        {
+          "discriminator": {
+            "mapping": {
+              "card_written": "#/$defs/CardWrittenPayload",
+              "channel_resolved": "#/$defs/ChannelResolvedPayload",
+              "competitor_candidate": "#/$defs/CompetitorCandidatePayload",
+              "fallback": "#/$defs/FallbackPayload",
+              "news_found": "#/$defs/NewsFoundPayload",
+              "outlier_found": "#/$defs/OutlierFoundPayload",
+              "page_read": "#/$defs/PageReadPayload",
+              "page_skipped": "#/$defs/PageSkippedPayload",
+              "profile_field": "#/$defs/ProfileFieldPayload",
+              "quota": "#/$defs/QuotaPayload",
+              "refresh_suggested": "#/$defs/RefreshSuggestedPayload",
+              "snapshot_progress": "#/$defs/SnapshotProgressPayload",
+              "source_fallback": "#/$defs/SourceFallbackPayload",
+              "topic_summary": "#/$defs/TopicSummaryPayload",
+              "trait_lift": "#/$defs/TraitLiftPayload",
+              "videos_fetched": "#/$defs/VideosFetchedPayload"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PageReadPayload"
+            },
+            {
+              "$ref": "#/$defs/PageSkippedPayload"
+            },
+            {
+              "$ref": "#/$defs/ProfileFieldPayload"
+            },
+            {
+              "$ref": "#/$defs/ChannelResolvedPayload"
+            },
+            {
+              "$ref": "#/$defs/CompetitorCandidatePayload"
+            },
+            {
+              "$ref": "#/$defs/VideosFetchedPayload"
+            },
+            {
+              "$ref": "#/$defs/SnapshotProgressPayload"
+            },
+            {
+              "$ref": "#/$defs/TopicSummaryPayload"
+            },
+            {
+              "$ref": "#/$defs/OutlierFoundPayload"
+            },
+            {
+              "$ref": "#/$defs/TraitLiftPayload"
+            },
+            {
+              "$ref": "#/$defs/NewsFoundPayload"
+            },
+            {
+              "$ref": "#/$defs/CardWrittenPayload"
+            },
+            {
+              "$ref": "#/$defs/RefreshSuggestedPayload"
+            },
+            {
+              "$ref": "#/$defs/QuotaPayload"
+            },
+            {
+              "$ref": "#/$defs/FallbackPayload"
+            },
+            {
+              "$ref": "#/$defs/SourceFallbackPayload"
+            }
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Payload"
+    },
+    "percent": {
+      "anyOf": [
+        {
+          "maximum": 100.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Percent"
+    },
+    "run_id": {
+      "format": "uuid",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "seq": {
+      "minimum": 1,
+      "title": "Seq",
+      "type": "integer"
+    },
+    "stage": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Stage"
+    },
+    "stage_percent": {
+      "anyOf": [
+        {
+          "maximum": 100.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Stage Percent"
+    },
+    "status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StageStatus"
+        },
+        {
+          "$ref": "#/$defs/RunStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Status"
+    },
+    "step": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Step"
+    },
+    "ts": {
+      "format": "date-time",
+      "title": "Ts",
+      "type": "string"
+    },
+    "type": {
+      "$ref": "#/$defs/RunEventType"
+    }
+  },
+  "required": [
+    "run_id",
+    "client_id",
+    "seq",
+    "type",
+    "message",
+    "ts"
+  ],
+  "title": "RunEvent",
+  "type": "object"
+}

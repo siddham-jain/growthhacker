@@ -1,0 +1,202 @@
+{
+  "$defs": {
+    "ConfidenceLabel": {
+      "enum": [
+        "High",
+        "Medium",
+        "Low"
+      ],
+      "title": "ConfidenceLabel",
+      "type": "string"
+    },
+    "Lens": {
+      "enum": [
+        "views",
+        "conversion"
+      ],
+      "title": "Lens",
+      "type": "string"
+    },
+    "RecType": {
+      "enum": [
+        "video_idea",
+        "title_pattern",
+        "thumbnail_pattern",
+        "format",
+        "creator",
+        "news_opportunity",
+        "description_refresh"
+      ],
+      "title": "RecType",
+      "type": "string"
+    },
+    "StrictConfidence": {
+      "additionalProperties": false,
+      "properties": {
+        "channels": {
+          "title": "Channels",
+          "type": "integer"
+        },
+        "label": {
+          "$ref": "#/$defs/ConfidenceLabel"
+        },
+        "outliers": {
+          "title": "Outliers",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "label",
+        "outliers",
+        "channels"
+      ],
+      "title": "StrictConfidence",
+      "type": "object"
+    },
+    "StrictReferenceVideo": {
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "title": "Channel",
+          "type": "string"
+        },
+        "outlier_ratio": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Outlier Ratio"
+        },
+        "published_at": {
+          "format": "date",
+          "title": "Published At",
+          "type": "string"
+        },
+        "video_id": {
+          "pattern": "^[0-9A-Za-z_-]{11}$",
+          "title": "Video Id",
+          "type": "string"
+        },
+        "views_day7": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Views Day7"
+        }
+      },
+      "required": [
+        "video_id",
+        "channel",
+        "published_at",
+        "views_day7",
+        "outlier_ratio"
+      ],
+      "title": "StrictReferenceVideo",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "buyer_question": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Buyer Question"
+    },
+    "confidence": {
+      "$ref": "#/$defs/StrictConfidence"
+    },
+    "expected_range_vs_baseline": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Expected Range Vs Baseline"
+    },
+    "fit_to_client": {
+      "title": "Fit To Client",
+      "type": "string"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^rec_[a-z2-7]{12}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "lens": {
+      "items": {
+        "$ref": "#/$defs/Lens"
+      },
+      "title": "Lens",
+      "type": "array"
+    },
+    "reference_videos": {
+      "items": {
+        "$ref": "#/$defs/StrictReferenceVideo"
+      },
+      "title": "Reference Videos",
+      "type": "array"
+    },
+    "summary": {
+      "title": "Summary",
+      "type": "string"
+    },
+    "type": {
+      "$ref": "#/$defs/RecType"
+    },
+    "why_it_works": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Why It Works",
+      "type": "array"
+    },
+    "window_days": {
+      "enum": [
+        7,
+        30,
+        90
+      ],
+      "title": "Window Days",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "id",
+    "type",
+    "summary",
+    "lens",
+    "buyer_question",
+    "why_it_works",
+    "reference_videos",
+    "fit_to_client",
+    "expected_range_vs_baseline",
+    "confidence",
+    "window_days",
+    "generated_at"
+  ],
+  "title": "StrictRecommendation",
+  "type": "object"
+}

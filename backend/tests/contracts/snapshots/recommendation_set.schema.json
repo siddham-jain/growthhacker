@@ -1,0 +1,2302 @@
+{
+  "$defs": {
+    "Advisory": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "title_stale_year",
+            "chapters_needed",
+            "localizations_not_updated",
+            "too_many_hashtags",
+            "invalid_chapters",
+            "shorts_links_not_clickable",
+            "manual_review"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "risk": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Risk",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "message",
+        "risk"
+      ],
+      "title": "Advisory",
+      "type": "object"
+    },
+    "AgeMethod": {
+      "enum": [
+        "observed",
+        "interpolated",
+        "owner_analytics",
+        "age_band_proxy",
+        "pending",
+        "unavailable"
+      ],
+      "title": "AgeMethod",
+      "type": "string"
+    },
+    "ChannelRole": {
+      "enum": [
+        "own",
+        "competitor",
+        "niche",
+        "benchmark",
+        "creator"
+      ],
+      "title": "ChannelRole",
+      "type": "string"
+    },
+    "ClaimLevel": {
+      "enum": [
+        "L0_navigational",
+        "L1_context",
+        "L2_coverage",
+        "L3_applicability"
+      ],
+      "title": "ClaimLevel",
+      "type": "string"
+    },
+    "CollaborationEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "competitor_channel_id": {
+          "pattern": "^UC[0-9A-Za-z_-]{22}$",
+          "title": "Competitor Channel Id",
+          "type": "string"
+        },
+        "competitor_name": {
+          "title": "Competitor Name",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "mentioned_by_competitor",
+            "mentions_competitor",
+            "sponsor_language",
+            "disclosed_paid_promotion"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "matched_on": {
+          "enum": [
+            "handle",
+            "channel_url",
+            "custom_url",
+            "website_domain",
+            "brand_name"
+          ],
+          "title": "Matched On",
+          "type": "string"
+        },
+        "matched_token": {
+          "title": "Matched Token",
+          "type": "string"
+        },
+        "published_at": {
+          "format": "date-time",
+          "title": "Published At",
+          "type": "string"
+        },
+        "video_id": {
+          "pattern": "^[0-9A-Za-z_-]{11}$",
+          "title": "Video Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "competitor_channel_id",
+        "competitor_name",
+        "video_id",
+        "published_at",
+        "matched_on",
+        "matched_token"
+      ],
+      "title": "CollaborationEvidence",
+      "type": "object"
+    },
+    "Confidence": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "$ref": "#/$defs/ConfidenceBasis",
+          "default": "standard"
+        },
+        "caps_applied": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Caps Applied",
+          "type": "array"
+        },
+        "channels": {
+          "minimum": 0,
+          "title": "Channels",
+          "type": "integer"
+        },
+        "label": {
+          "$ref": "#/$defs/ConfidenceLabel"
+        },
+        "matching_videos": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Matching Videos",
+          "type": "integer"
+        },
+        "outliers": {
+          "minimum": 0,
+          "title": "Outliers",
+          "type": "integer"
+        },
+        "rule_id": {
+          "$ref": "#/$defs/ConfidenceRuleId",
+          "default": "default_v1"
+        }
+      },
+      "required": [
+        "label",
+        "outliers",
+        "channels"
+      ],
+      "title": "Confidence",
+      "type": "object"
+    },
+    "ConfidenceBasis": {
+      "enum": [
+        "standard",
+        "first_mover",
+        "rule_based"
+      ],
+      "title": "ConfidenceBasis",
+      "type": "string"
+    },
+    "ConfidenceLabel": {
+      "enum": [
+        "High",
+        "Medium",
+        "Low"
+      ],
+      "title": "ConfidenceLabel",
+      "type": "string"
+    },
+    "ConfidenceRuleId": {
+      "enum": [
+        "default_v1",
+        "creator_v1",
+        "news_v1",
+        "refresh_v1"
+      ],
+      "title": "ConfidenceRuleId",
+      "type": "string"
+    },
+    "ConversionActionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "url"
+      ],
+      "title": "ConversionActionRef",
+      "type": "object"
+    },
+    "CreatorConsistency": {
+      "additionalProperties": false,
+      "properties": {
+        "gap_cv": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Gap Cv"
+        },
+        "hit_rate": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Hit Rate"
+        },
+        "last_upload_at": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Last Upload At"
+        },
+        "median_gap_days": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Median Gap Days"
+        }
+      },
+      "required": [
+        "median_gap_days",
+        "gap_cv",
+        "hit_rate",
+        "last_upload_at"
+      ],
+      "title": "CreatorConsistency",
+      "type": "object"
+    },
+    "CreatorPerformance": {
+      "additionalProperties": false,
+      "properties": {
+        "comparison_age_days": {
+          "title": "Comparison Age Days",
+          "type": "integer"
+        },
+        "median_outlier_ratio": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Median Outlier Ratio"
+        },
+        "median_views_at_age": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Median Views At Age"
+        },
+        "niche_median_views_at_age": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Niche Median Views At Age"
+        }
+      },
+      "required": [
+        "median_outlier_ratio",
+        "median_views_at_age",
+        "niche_median_views_at_age",
+        "comparison_age_days"
+      ],
+      "title": "CreatorPerformance",
+      "type": "object"
+    },
+    "CreatorRelevance": {
+      "additionalProperties": false,
+      "properties": {
+        "match_share": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Match Share",
+          "type": "number"
+        },
+        "topics_covered": {
+          "title": "Topics Covered",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "match_share",
+        "topics_covered"
+      ],
+      "title": "CreatorRelevance",
+      "type": "object"
+    },
+    "CreatorSubject": {
+      "additionalProperties": false,
+      "properties": {
+        "channel_id": {
+          "pattern": "^UC[0-9A-Za-z_-]{22}$",
+          "title": "Channel Id",
+          "type": "string"
+        },
+        "collaborations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CollaborationEvidence"
+          },
+          "title": "Collaborations",
+          "type": "array"
+        },
+        "consistency": {
+          "$ref": "#/$defs/CreatorConsistency"
+        },
+        "declared_country": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Declared Country"
+        },
+        "handle": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Handle"
+        },
+        "kind": {
+          "const": "creator",
+          "default": "creator",
+          "title": "Kind",
+          "type": "string"
+        },
+        "performance": {
+          "$ref": "#/$defs/CreatorPerformance"
+        },
+        "relevance": {
+          "$ref": "#/$defs/CreatorRelevance"
+        },
+        "subscriber_band": {
+          "$ref": "#/$defs/SubscriberBand"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "uploads_90d": {
+          "title": "Uploads 90D",
+          "type": "integer"
+        },
+        "uploads_checked": {
+          "title": "Uploads Checked",
+          "type": "integer"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel_id",
+        "title",
+        "url",
+        "subscriber_band",
+        "uploads_90d",
+        "uploads_checked",
+        "relevance",
+        "performance",
+        "consistency"
+      ],
+      "title": "CreatorSubject",
+      "type": "object"
+    },
+    "EvidenceNumber": {
+      "additionalProperties": false,
+      "properties": {
+        "display": {
+          "title": "Display",
+          "type": "string"
+        },
+        "unit": {
+          "enum": [
+            "count",
+            "views",
+            "ratio_x",
+            "percent",
+            "days",
+            "minutes",
+            "seconds",
+            "videos",
+            "channels",
+            "year",
+            "currency"
+          ],
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "value",
+        "unit",
+        "display"
+      ],
+      "title": "EvidenceNumber",
+      "type": "object"
+    },
+    "EvidenceSource": {
+      "enum": [
+        "youtube_public",
+        "youtube_own_analytics",
+        "spotlit_ai_tracking",
+        "website",
+        "news",
+        "client_config"
+      ],
+      "title": "EvidenceSource",
+      "type": "string"
+    },
+    "ExpectedRange": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "enum": [
+            "peer",
+            "blended",
+            "own",
+            "peer_only_no_baseline",
+            "insufficient",
+            "not_applicable"
+          ],
+          "title": "Basis",
+          "type": "string"
+        },
+        "comparison_age_days": {
+          "title": "Comparison Age Days",
+          "type": "integer"
+        },
+        "display": {
+          "title": "Display",
+          "type": "string"
+        },
+        "high": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "High"
+        },
+        "low": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Low"
+        },
+        "n_own": {
+          "default": 0,
+          "title": "N Own",
+          "type": "integer"
+        },
+        "n_peer": {
+          "default": 0,
+          "title": "N Peer",
+          "type": "integer"
+        },
+        "n_peer_effective": {
+          "default": 0.0,
+          "title": "N Peer Effective",
+          "type": "number"
+        },
+        "size_note": {
+          "anyOf": [
+            {
+              "enum": [
+                "peers_much_smaller",
+                "peers_much_larger"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Size Note"
+        },
+        "views_at_age_range": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Views At Age Range"
+        }
+      },
+      "required": [
+        "low",
+        "high",
+        "basis",
+        "comparison_age_days",
+        "display"
+      ],
+      "title": "ExpectedRange",
+      "type": "object"
+    },
+    "FormatSuggestion": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "enum": [
+            "short",
+            "long_explainer",
+            "tutorial",
+            "live_or_premiere"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "rationale_codes": {
+          "default": [],
+          "items": {
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "title": "Rationale Codes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "format"
+      ],
+      "title": "FormatSuggestion",
+      "type": "object"
+    },
+    "GapEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "client_best_ratio": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Best Ratio"
+        },
+        "client_last_covered_at": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Last Covered At"
+        },
+        "client_videos_matching": {
+          "title": "Client Videos Matching",
+          "type": "integer"
+        },
+        "competitors_covering": {
+          "title": "Competitors Covering",
+          "type": "integer"
+        },
+        "competitors_total": {
+          "title": "Competitors Total",
+          "type": "integer"
+        },
+        "gap_size": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Gap Size",
+          "type": "number"
+        },
+        "gap_type": {
+          "enum": [
+            "uncovered",
+            "stale",
+            "underperforming",
+            "none"
+          ],
+          "title": "Gap Type",
+          "type": "string"
+        },
+        "niche_outliers_matching": {
+          "title": "Niche Outliers Matching",
+          "type": "integer"
+        },
+        "topic_id": {
+          "title": "Topic Id",
+          "type": "string"
+        },
+        "window_outliers_total": {
+          "title": "Window Outliers Total",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "topic_id",
+        "gap_type",
+        "competitors_covering",
+        "competitors_total",
+        "niche_outliers_matching",
+        "window_outliers_total",
+        "client_videos_matching",
+        "gap_size"
+      ],
+      "title": "GapEvidence",
+      "type": "object"
+    },
+    "InsertionAnchor": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor_excerpt": {
+          "maxLength": 80,
+          "title": "Anchor Excerpt",
+          "type": "string"
+        },
+        "anchor_hash": {
+          "title": "Anchor Hash",
+          "type": "string"
+        },
+        "char_offset_hint": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Char Offset Hint"
+        },
+        "strategy": {
+          "title": "Strategy",
+          "type": "string"
+        }
+      },
+      "required": [
+        "strategy",
+        "anchor_excerpt",
+        "anchor_hash"
+      ],
+      "title": "InsertionAnchor",
+      "type": "object"
+    },
+    "InsertionKind": {
+      "enum": [
+        "insert",
+        "link_fix"
+      ],
+      "title": "InsertionKind",
+      "type": "string"
+    },
+    "InsertionOp": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/InsertionAnchor"
+        },
+        "claim_level": {
+          "$ref": "#/$defs/ClaimLevel"
+        },
+        "hashtags_added": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Hashtags Added",
+          "type": "array"
+        },
+        "keywords_added": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Keywords Added",
+          "type": "array"
+        },
+        "kind": {
+          "$ref": "#/$defs/InsertionKind"
+        },
+        "old_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Old Text"
+        },
+        "op_id": {
+          "title": "Op Id",
+          "type": "string"
+        },
+        "phrased_by": {
+          "enum": [
+            "template",
+            "llm"
+          ],
+          "title": "Phrased By",
+          "type": "string"
+        },
+        "position": {
+          "$ref": "#/$defs/InsertionPosition"
+        },
+        "text": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "text_bytes": {
+          "title": "Text Bytes",
+          "type": "integer"
+        },
+        "trigger_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Trigger Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "op_id",
+        "kind",
+        "position",
+        "anchor",
+        "text",
+        "text_bytes",
+        "claim_level",
+        "phrased_by"
+      ],
+      "title": "InsertionOp",
+      "type": "object"
+    },
+    "InsertionPosition": {
+      "enum": [
+        "top_line",
+        "after_first_paragraph",
+        "before_hashtag_line",
+        "before_links_block",
+        "append"
+      ],
+      "title": "InsertionPosition",
+      "type": "string"
+    },
+    "InsufficiencyCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "cards": {
+          "default": 0,
+          "title": "Cards",
+          "type": "integer"
+        },
+        "channels": {
+          "default": 0,
+          "title": "Channels",
+          "type": "integer"
+        },
+        "outliers": {
+          "default": 0,
+          "title": "Outliers",
+          "type": "integer"
+        },
+        "videos": {
+          "default": 0,
+          "title": "Videos",
+          "type": "integer"
+        }
+      },
+      "title": "InsufficiencyCounts",
+      "type": "object"
+    },
+    "InsufficiencyNotice": {
+      "additionalProperties": false,
+      "properties": {
+        "found": {
+          "$ref": "#/$defs/InsufficiencyCounts"
+        },
+        "kind": {
+          "enum": [
+            "thin_window",
+            "type_thin",
+            "no_buyer_questions",
+            "no_client_baseline",
+            "few_competitors",
+            "stale_data"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "reason_code": {
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "rec_type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RecType"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "required": {
+          "$ref": "#/$defs/InsufficiencyCounts"
+        },
+        "suggestion": {
+          "$ref": "#/$defs/InsufficiencySuggestion"
+        },
+        "window_days": {
+          "enum": [
+            7,
+            30,
+            90
+          ],
+          "title": "Window Days",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "window_days",
+        "found",
+        "required",
+        "suggestion",
+        "reason_code"
+      ],
+      "title": "InsufficiencyNotice",
+      "type": "object"
+    },
+    "InsufficiencySuggestion": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "widen_window",
+            "add_competitors",
+            "add_keywords",
+            "add_buyer_questions",
+            "connect_oauth",
+            "wait"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "projected": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InsufficiencyCounts"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "widen_to": {
+          "anyOf": [
+            {
+              "enum": [
+                7,
+                30,
+                90
+              ],
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Widen To"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "title": "InsufficiencySuggestion",
+      "type": "object"
+    },
+    "Lens": {
+      "enum": [
+        "views",
+        "conversion"
+      ],
+      "title": "Lens",
+      "type": "string"
+    },
+    "LensAssignment": {
+      "additionalProperties": false,
+      "properties": {
+        "lens": {
+          "$ref": "#/$defs/Lens"
+        },
+        "reasons": {
+          "items": {
+            "$ref": "#/$defs/Reason"
+          },
+          "title": "Reasons",
+          "type": "array"
+        }
+      },
+      "required": [
+        "lens",
+        "reasons"
+      ],
+      "title": "LensAssignment",
+      "type": "object"
+    },
+    "NewsCompliance": {
+      "additionalProperties": false,
+      "properties": {
+        "disclaimers": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Disclaimers",
+          "type": "array"
+        },
+        "review_required": {
+          "title": "Review Required",
+          "type": "boolean"
+        },
+        "safety_flags": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SafetyFlag"
+          },
+          "title": "Safety Flags",
+          "type": "array"
+        }
+      },
+      "required": [
+        "review_required"
+      ],
+      "title": "NewsCompliance",
+      "type": "object"
+    },
+    "NewsExtras": {
+      "additionalProperties": false,
+      "properties": {
+        "compliance": {
+          "$ref": "#/$defs/NewsCompliance"
+        },
+        "conversion_action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConversionActionRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "format_suggestion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FormatSuggestion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reference_sources": {
+          "items": {
+            "$ref": "#/$defs/NewsSourceRef"
+          },
+          "title": "Reference Sources",
+          "type": "array"
+        },
+        "urgency": {
+          "enum": [
+            "now",
+            "this_week",
+            "evergreen_window"
+          ],
+          "title": "Urgency",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reference_sources",
+        "urgency",
+        "compliance"
+      ],
+      "title": "NewsExtras",
+      "type": "object"
+    },
+    "NewsSourceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Published At"
+        },
+        "publisher": {
+          "title": "Publisher",
+          "type": "string"
+        },
+        "tier": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceTier"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "publisher",
+        "published_at"
+      ],
+      "title": "NewsSourceRef",
+      "type": "object"
+    },
+    "NewsSubject": {
+      "additionalProperties": false,
+      "properties": {
+        "angle": {
+          "title": "Angle",
+          "type": "string"
+        },
+        "compliance": {
+          "$ref": "#/$defs/NewsCompliance"
+        },
+        "conversion_action_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Conversion Action Id"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "format_suggestion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FormatSuggestion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "key_entity": {
+          "title": "Key Entity",
+          "type": "string"
+        },
+        "kind": {
+          "const": "news",
+          "default": "news",
+          "title": "Kind",
+          "type": "string"
+        },
+        "news_signal_id": {
+          "format": "uuid",
+          "title": "News Signal Id",
+          "type": "string"
+        },
+        "reference_sources": {
+          "items": {
+            "$ref": "#/$defs/NewsSourceRef"
+          },
+          "minItems": 1,
+          "title": "Reference Sources",
+          "type": "array"
+        },
+        "story_id": {
+          "format": "uuid",
+          "title": "Story Id",
+          "type": "string"
+        },
+        "urgency": {
+          "enum": [
+            "now",
+            "this_week",
+            "evergreen_window"
+          ],
+          "title": "Urgency",
+          "type": "string"
+        }
+      },
+      "required": [
+        "news_signal_id",
+        "story_id",
+        "key_entity",
+        "angle",
+        "urgency",
+        "expires_at",
+        "reference_sources",
+        "compliance"
+      ],
+      "title": "NewsSubject",
+      "type": "object"
+    },
+    "PatternSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "ci_high": {
+          "title": "Ci High",
+          "type": "number"
+        },
+        "ci_low": {
+          "title": "Ci Low",
+          "type": "number"
+        },
+        "client_n_with": {
+          "default": 0,
+          "title": "Client N With",
+          "type": "integer"
+        },
+        "client_ratio_with": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Ratio With"
+        },
+        "client_usage_share": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Usage Share"
+        },
+        "kind": {
+          "enum": [
+            "title",
+            "thumbnail",
+            "format"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "lift": {
+          "title": "Lift",
+          "type": "number"
+        },
+        "n_outliers_total": {
+          "title": "N Outliers Total",
+          "type": "integer"
+        },
+        "n_outliers_with": {
+          "title": "N Outliers With",
+          "type": "integer"
+        },
+        "n_total": {
+          "title": "N Total",
+          "type": "integer"
+        },
+        "n_with": {
+          "title": "N With",
+          "type": "integer"
+        },
+        "scope": {
+          "enum": [
+            "competitor_set",
+            "niche"
+          ],
+          "title": "Scope",
+          "type": "string"
+        },
+        "traits": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Traits",
+          "type": "object"
+        }
+      },
+      "required": [
+        "kind",
+        "traits",
+        "scope",
+        "lift",
+        "ci_low",
+        "ci_high",
+        "n_with",
+        "n_outliers_with",
+        "n_total",
+        "n_outliers_total"
+      ],
+      "title": "PatternSpec",
+      "type": "object"
+    },
+    "Reason": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "title": "Code",
+          "type": "string"
+        },
+        "numbers": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/EvidenceNumber"
+          },
+          "title": "Numbers",
+          "type": "array"
+        },
+        "params": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "default": {},
+          "title": "Params",
+          "type": "object"
+        },
+        "reason_id": {
+          "title": "Reason Id",
+          "type": "string"
+        },
+        "ref_video_ids": {
+          "default": [],
+          "items": {
+            "pattern": "^[0-9A-Za-z_-]{11}$",
+            "type": "string"
+          },
+          "title": "Ref Video Ids",
+          "type": "array"
+        },
+        "source": {
+          "$ref": "#/$defs/EvidenceSource"
+        },
+        "statement": {
+          "title": "Statement",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason_id",
+        "code",
+        "statement",
+        "source"
+      ],
+      "title": "Reason",
+      "type": "object"
+    },
+    "RecType": {
+      "enum": [
+        "video_idea",
+        "title_pattern",
+        "thumbnail_pattern",
+        "format",
+        "creator",
+        "news_opportunity",
+        "description_refresh"
+      ],
+      "title": "RecType",
+      "type": "string"
+    },
+    "Recommendation": {
+      "additionalProperties": false,
+      "properties": {
+        "buyer_question": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Buyer Question"
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence"
+        },
+        "expected_range_vs_baseline": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Expected Range Vs Baseline"
+        },
+        "extras": {
+          "$ref": "#/$defs/RecommendationExtras"
+        },
+        "fit_to_client": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Fit To Client",
+          "type": "string"
+        },
+        "generated_at": {
+          "format": "date-time",
+          "title": "Generated At",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^rec_[a-z2-7]{12}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "lens": {
+          "items": {
+            "$ref": "#/$defs/Lens"
+          },
+          "maxItems": 2,
+          "minItems": 1,
+          "title": "Lens",
+          "type": "array"
+        },
+        "reference_videos": {
+          "items": {
+            "$ref": "#/$defs/ReferenceVideo"
+          },
+          "title": "Reference Videos",
+          "type": "array"
+        },
+        "summary": {
+          "maxLength": 140,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/RecType"
+        },
+        "why_it_works": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Why It Works",
+          "type": "array"
+        },
+        "window_days": {
+          "enum": [
+            7,
+            30,
+            90
+          ],
+          "title": "Window Days",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "summary",
+        "lens",
+        "buyer_question",
+        "why_it_works",
+        "reference_videos",
+        "fit_to_client",
+        "expected_range_vs_baseline",
+        "confidence",
+        "window_days",
+        "generated_at",
+        "extras"
+      ],
+      "title": "Recommendation",
+      "type": "object"
+    },
+    "RecommendationExtras": {
+      "additionalProperties": false,
+      "properties": {
+        "buyer_question_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Buyer Question Id"
+        },
+        "contract_version": {
+          "const": "1.1",
+          "default": "1.1",
+          "title": "Contract Version",
+          "type": "string"
+        },
+        "data_disclosure": {
+          "default": "Calculated by GrowthHacker from public YouTube data, not a YouTube metric",
+          "title": "Data Disclosure",
+          "type": "string"
+        },
+        "example_titles": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Example Titles",
+          "type": "array"
+        },
+        "expected_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExpectedRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "first_seen_at": {
+          "format": "date-time",
+          "title": "First Seen At",
+          "type": "string"
+        },
+        "fit_structured": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Reason"
+          },
+          "title": "Fit Structured",
+          "type": "array"
+        },
+        "flags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Flags",
+          "type": "array"
+        },
+        "gap": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GapEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "lens_reasons": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/LensAssignment"
+          },
+          "title": "Lens Reasons",
+          "type": "array"
+        },
+        "news": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NewsExtras"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "refresh": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RefreshExtras"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "related": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/RelatedRecommendation"
+          },
+          "title": "Related",
+          "type": "array"
+        },
+        "related_buyer_questions": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Related Buyer Questions",
+          "type": "array"
+        },
+        "rendered_by": {
+          "enum": [
+            "llm",
+            "template"
+          ],
+          "title": "Rendered By",
+          "type": "string"
+        },
+        "run_id": {
+          "format": "uuid",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "stable_key": {
+          "title": "Stable Key",
+          "type": "string"
+        },
+        "status": {
+          "default": "new",
+          "enum": [
+            "new",
+            "ongoing",
+            "updated"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "creator": "#/$defs/CreatorSubject",
+                  "format": "#/$defs/PatternSpec",
+                  "news": "#/$defs/NewsSubject",
+                  "refresh": "#/$defs/RefreshSubject",
+                  "thumbnail": "#/$defs/PatternSpec",
+                  "title": "#/$defs/PatternSpec",
+                  "video_idea": "#/$defs/VideoIdeaSubject"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/VideoIdeaSubject"
+                },
+                {
+                  "$ref": "#/$defs/PatternSpec"
+                },
+                {
+                  "$ref": "#/$defs/CreatorSubject"
+                },
+                {
+                  "$ref": "#/$defs/NewsSubject"
+                },
+                {
+                  "$ref": "#/$defs/RefreshSubject"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject"
+        },
+        "why_it_works_structured": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Reason"
+          },
+          "title": "Why It Works Structured",
+          "type": "array"
+        }
+      },
+      "required": [
+        "stable_key",
+        "run_id",
+        "rendered_by",
+        "first_seen_at",
+        "expires_at"
+      ],
+      "title": "RecommendationExtras",
+      "type": "object"
+    },
+    "ReferenceVideo": {
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "title": "Channel",
+          "type": "string"
+        },
+        "channel_baseline_views_at_age": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Channel Baseline Views At Age"
+        },
+        "channel_id": {
+          "pattern": "^UC[0-9A-Za-z_-]{22}$",
+          "title": "Channel Id",
+          "type": "string"
+        },
+        "channel_role": {
+          "$ref": "#/$defs/ChannelRole"
+        },
+        "format_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Format Key"
+        },
+        "has_paid_product_placement": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Has Paid Product Placement"
+        },
+        "is_outlier": {
+          "title": "Is Outlier",
+          "type": "boolean"
+        },
+        "length_band": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Length Band"
+        },
+        "matched_topic_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Matched Topic Ids",
+          "type": "array"
+        },
+        "outlier_ratio": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Outlier Ratio"
+        },
+        "published_at": {
+          "format": "date-time",
+          "title": "Published At",
+          "type": "string"
+        },
+        "thumbnail_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thumbnail Url"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "video_id": {
+          "pattern": "^[0-9A-Za-z_-]{11}$",
+          "title": "Video Id",
+          "type": "string"
+        },
+        "views_at_age": {
+          "$ref": "#/$defs/ViewsAtAgeSummary"
+        },
+        "views_day7": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Views Day7"
+        }
+      },
+      "required": [
+        "video_id",
+        "url",
+        "title",
+        "channel",
+        "channel_id",
+        "channel_role",
+        "published_at",
+        "views_day7",
+        "views_at_age",
+        "outlier_ratio",
+        "is_outlier"
+      ],
+      "title": "ReferenceVideo",
+      "type": "object"
+    },
+    "RefreshExtras": {
+      "additionalProperties": false,
+      "properties": {
+        "advisories": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Advisory"
+          },
+          "title": "Advisories",
+          "type": "array"
+        },
+        "inserted_bytes": {
+          "minimum": 0,
+          "title": "Inserted Bytes",
+          "type": "integer"
+        },
+        "operations": {
+          "items": {
+            "$ref": "#/$defs/InsertionOp"
+          },
+          "title": "Operations",
+          "type": "array"
+        },
+        "resulting_bytes": {
+          "minimum": 0,
+          "title": "Resulting Bytes",
+          "type": "integer"
+        },
+        "review_required": {
+          "title": "Review Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "operations",
+        "review_required",
+        "inserted_bytes",
+        "resulting_bytes"
+      ],
+      "title": "RefreshExtras",
+      "type": "object"
+    },
+    "RefreshSubject": {
+      "additionalProperties": false,
+      "properties": {
+        "advisories": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Advisory"
+          },
+          "title": "Advisories",
+          "type": "array"
+        },
+        "kind": {
+          "const": "refresh",
+          "default": "refresh",
+          "title": "Kind",
+          "type": "string"
+        },
+        "operations": {
+          "items": {
+            "$ref": "#/$defs/InsertionOp"
+          },
+          "title": "Operations",
+          "type": "array"
+        },
+        "review_required": {
+          "title": "Review Required",
+          "type": "boolean"
+        },
+        "video_id": {
+          "pattern": "^[0-9A-Za-z_-]{11}$",
+          "title": "Video Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "video_id",
+        "operations",
+        "review_required"
+      ],
+      "title": "RefreshSubject",
+      "type": "object"
+    },
+    "RelatedRecommendation": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^rec_[a-z2-7]{12}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/RecType"
+        }
+      },
+      "required": [
+        "type",
+        "id"
+      ],
+      "title": "RelatedRecommendation",
+      "type": "object"
+    },
+    "SafetyFlag": {
+      "enum": [
+        "tragedy",
+        "death",
+        "medical_claim",
+        "unverified_health_claim",
+        "political",
+        "legal",
+        "controversy",
+        "minors",
+        "self_harm",
+        "fear_inducing"
+      ],
+      "title": "SafetyFlag",
+      "type": "string"
+    },
+    "SourceTier": {
+      "enum": [
+        "tier1_primary",
+        "tier1_authority",
+        "tier2_established",
+        "tier3_low",
+        "blocked"
+      ],
+      "title": "SourceTier",
+      "type": "string"
+    },
+    "SubscriberBand": {
+      "enum": [
+        "lt_10k",
+        "10k_100k",
+        "100k_1m",
+        "gt_1m",
+        "hidden"
+      ],
+      "title": "SubscriberBand",
+      "type": "string"
+    },
+    "VideoIdeaSubject": {
+      "additionalProperties": false,
+      "properties": {
+        "format_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Format Key"
+        },
+        "kind": {
+          "const": "video_idea",
+          "default": "video_idea",
+          "title": "Kind",
+          "type": "string"
+        },
+        "length_band": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Length Band"
+        },
+        "placeholders": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Placeholders",
+          "type": "array"
+        },
+        "thumbnail_hint_traits": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Thumbnail Hint Traits",
+          "type": "object"
+        },
+        "title_hint_traits": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Title Hint Traits",
+          "type": "object"
+        },
+        "topic_id": {
+          "title": "Topic Id",
+          "type": "string"
+        },
+        "topic_text": {
+          "title": "Topic Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "topic_id",
+        "topic_text"
+      ],
+      "title": "VideoIdeaSubject",
+      "type": "object"
+    },
+    "ViewsAtAgeSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "age_days": {
+          "minimum": 0,
+          "title": "Age Days",
+          "type": "integer"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "method": {
+          "$ref": "#/$defs/AgeMethod"
+        },
+        "views": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Views"
+        }
+      },
+      "required": [
+        "age_days",
+        "views",
+        "method",
+        "label"
+      ],
+      "title": "ViewsAtAgeSummary",
+      "type": "object"
+    },
+    "WhiteSpaceNote": {
+      "additionalProperties": false,
+      "properties": {
+        "ai_answer_citations": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ai Answer Citations"
+        },
+        "buyer_question_id": {
+          "format": "uuid",
+          "title": "Buyer Question Id",
+          "type": "string"
+        },
+        "channels_checked": {
+          "title": "Channels Checked",
+          "type": "integer"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "videos_checked": {
+          "title": "Videos Checked",
+          "type": "integer"
+        },
+        "widest_window_checked": {
+          "enum": [
+            7,
+            30,
+            90
+          ],
+          "title": "Widest Window Checked",
+          "type": "integer"
+        },
+        "window_days": {
+          "enum": [
+            7,
+            30,
+            90
+          ],
+          "title": "Window Days",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "buyer_question_id",
+        "text",
+        "window_days",
+        "videos_checked",
+        "channels_checked",
+        "widest_window_checked"
+      ],
+      "title": "WhiteSpaceNote",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "as_of": {
+      "format": "date-time",
+      "title": "As Of",
+      "type": "string"
+    },
+    "candidate_count": {
+      "default": 0,
+      "title": "Candidate Count",
+      "type": "integer"
+    },
+    "client_id": {
+      "format": "uuid",
+      "title": "Client Id",
+      "type": "string"
+    },
+    "contract_version": {
+      "const": "1.1",
+      "default": "1.1",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "notices": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/InsufficiencyNotice"
+      },
+      "title": "Notices",
+      "type": "array"
+    },
+    "recommendations": {
+      "items": {
+        "$ref": "#/$defs/Recommendation"
+      },
+      "title": "Recommendations",
+      "type": "array"
+    },
+    "suppressed_counts": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "default": {},
+      "title": "Suppressed Counts",
+      "type": "object"
+    },
+    "white_space": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/WhiteSpaceNote"
+      },
+      "title": "White Space",
+      "type": "array"
+    },
+    "window_days": {
+      "enum": [
+        7,
+        30,
+        90
+      ],
+      "title": "Window Days",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "client_id",
+    "window_days",
+    "as_of",
+    "generated_at",
+    "recommendations"
+  ],
+  "title": "RecommendationSet",
+  "type": "object"
+}
