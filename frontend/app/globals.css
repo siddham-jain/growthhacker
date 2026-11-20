@@ -1,0 +1,155 @@
+@import "tailwindcss";
+@import "../styles/tokens.css";
+@import "../styles/kits/zeus.css";
+@import "../styles/kits/bui.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant rtl (&:dir(rtl));
+@custom-variant ltr (&:dir(ltr));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-sidebar: var(--sidebar);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-info: var(--info);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-up: var(--up);
+  --color-down: var(--down);
+  --color-lens-views: var(--lens-views);
+  --color-lens-conversion: var(--lens-conversion);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+
+  --font-sans: var(--font-inter), var(--font-devanagari), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-schibsted), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-instrument-serif), Georgia, serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+}
+
+@utility text-display {
+  font-family: var(--font-display);
+  font-size: 3rem;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  font-weight: 400;
+}
+
+@utility text-greeting {
+  font-family: var(--font-display);
+  font-size: 2.125rem;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  font-weight: 400;
+}
+
+@utility text-title {
+  font-family: var(--font-heading);
+  font-size: 1.75rem;
+  line-height: 2rem;
+  letter-spacing: -0.6px;
+  font-weight: 500;
+}
+
+@utility text-section {
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  line-height: 1.625rem;
+  letter-spacing: -0.3px;
+  font-weight: 500;
+}
+
+@utility text-headline {
+  font-size: 1rem;
+  line-height: 1.375rem;
+  letter-spacing: -0.2px;
+  font-weight: 600;
+}
+
+@utility text-metric {
+  font-family: var(--font-heading);
+  font-size: 2.25rem;
+  line-height: 2.25rem;
+  letter-spacing: -1.4px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+@utility text-eyebrow {
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  letter-spacing: 0.16em;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    line-height: 1.375rem;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  a {
+    cursor: pointer;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes reveal-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@utility animate-reveal {
+  animation: reveal-rise var(--dur-base) var(--ease-out) both;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}

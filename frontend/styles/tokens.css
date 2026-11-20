@@ -1,0 +1,101 @@
+/* growthhacker design tokens: the single source of truth, values measured from usespotlit.ai (plan 13 §4.1) */
+
+:root {
+  color-scheme: light;
+
+  --background: hsl(0 0% 98%);
+  --foreground: hsl(0 0% 9%);
+  --card: hsl(0 0% 100%);
+  --sidebar: hsl(0 0% 96%);
+  --primary: hsl(222 47% 11%);
+  --primary-foreground: hsl(0 0% 98%);
+  --secondary: hsl(0 0% 94%);
+  --muted: hsl(0 0% 96%);
+  --muted-foreground: hsl(0 0% 32%);
+  --subtle-foreground: hsl(0 0% 46%);
+  --border: hsl(216 22% 91%);
+  --border-strong: hsl(216 14% 84%);
+  --input: hsl(0 0% 54%);
+  --ring: hsl(221 83% 53%);
+
+  --info: hsl(219 45% 38%);
+  --success: hsl(145 46% 33%);
+  --danger: hsl(4 62% 47%);
+  --warning: hsl(33 64% 33%);
+  --up: hsl(142 73% 27%);
+  --down: hsl(0 74% 42%);
+
+  --lens-views: hsl(219 45% 38%);
+  --lens-conversion: hsl(160 45% 30%);
+
+  --chart-1: hsl(219 45% 38%);
+  --chart-2: hsl(0 0% 32%);
+  --chart-3: hsl(220 35% 57%);
+  --chart-4: hsl(0 0% 54%);
+  --chart-5: hsl(219 47% 32%);
+  --chart-6: hsl(215 16% 47%);
+
+  --hero-surface: linear-gradient(165deg, hsl(214 92% 56%) 0%, hsl(206 85% 72%) 48%, hsl(204 80% 92%) 100%);
+  --hero-ink: hsl(0 0% 100%);
+
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 360ms;
+}
+
+@theme static {
+  --radius-control: 8px;
+  --radius-input: 12px;
+  --radius-card: 16px;
+  --radius-panel: 20px;
+  --radius-hero: 28px;
+  --radius-pill: 9999px;
+
+  --shadow-card: 0 0 0 1px var(--border);
+  --shadow-raised: 0 1px 2px rgb(15 23 42 / 0.04), 0 10px 30px -18px rgb(11 42 107 / 0.25);
+  --shadow-hero: 0 18px 40px -24px rgb(11 42 107 / 0.45);
+  --shadow-overlay: 0 24px 60px rgb(0 0 0 / 0.18);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: hsl(0 0% 9%);
+  --foreground: hsl(0 0% 96%);
+  --card: hsl(0 0% 13%);
+  --sidebar: hsl(0 0% 11%);
+  --primary: hsl(0 0% 96%);
+  --primary-foreground: hsl(0 0% 9%);
+  --secondary: hsl(0 0% 16%);
+  --muted: hsl(0 0% 15%);
+  --muted-foreground: hsl(0 0% 69%);
+  --subtle-foreground: hsl(0 0% 56%);
+  --border: hsl(0 0% 18%);
+  --border-strong: hsl(0 0% 26%);
+  --input: hsl(0 0% 40%);
+  --ring: hsl(224 57% 73%);
+
+  --info: hsl(224 57% 73%);
+  --success: hsl(143 48% 53%);
+  --danger: hsl(0 100% 71%);
+  --warning: hsl(44 72% 59%);
+  --up: hsl(143 48% 53%);
+  --down: hsl(0 100% 71%);
+
+  --lens-views: hsl(224 57% 73%);
+  --lens-conversion: hsl(160 45% 57%);
+
+  --chart-1: hsl(224 57% 73%);
+  --chart-2: hsl(0 0% 69%);
+  --chart-3: hsl(220 35% 62%);
+  --chart-4: hsl(0 0% 50%);
+  --chart-5: hsl(219 47% 52%);
+  --chart-6: hsl(215 16% 60%);
+
+  --hero-surface: linear-gradient(165deg, hsl(222 40% 14%) 0%, hsl(220 30% 10%) 55%, hsl(0 0% 8%) 100%);
+
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 30px -18px rgb(0 0 0 / 0.6);
+  --shadow-hero: 0 18px 40px -24px rgb(0 0 0 / 0.7);
+  --shadow-overlay: 0 24px 60px rgb(0 0 0 / 0.5);
+}

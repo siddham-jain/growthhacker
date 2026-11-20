@@ -1,0 +1,108 @@
+/* alias layer: beautiful ui token names pointed at our tokens, plus the keyframes its components use */
+
+:root {
+  --ink: var(--foreground);
+  --ink-2: var(--muted-foreground);
+  --ink-3: var(--subtle-foreground);
+  --surface: var(--card);
+  --inset: var(--muted);
+  --hover: var(--muted);
+  --hover-2: var(--secondary);
+  --field: var(--muted);
+  --line: var(--border);
+  --line-strong: var(--border-strong);
+  --accent: var(--info);
+  --accent-ink: var(--info);
+  --accent-tint: color-mix(in oklab, var(--info) 12%, var(--card));
+  --green: var(--success);
+  --green-tint: color-mix(in oklab, var(--success) 12%, var(--card));
+  --orange: var(--warning);
+  --orange-tint: color-mix(in oklab, var(--warning) 12%, var(--card));
+  --red: var(--danger);
+  --red-tint: color-mix(in oklab, var(--danger) 12%, var(--card));
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-surface: var(--surface);
+  --color-inset: var(--inset);
+  --color-hover: var(--hover);
+  --color-hover-2: var(--hover-2);
+  --color-field: var(--field);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-tint: var(--accent-tint);
+  --color-green: var(--green);
+  --color-green-tint: var(--green-tint);
+  --color-orange: var(--orange);
+  --color-orange-tint: var(--orange-tint);
+  --color-red: var(--red);
+  --color-red-tint: var(--red-tint);
+}
+
+@theme static {
+  --shadow-hairline: 0 0 0 1px var(--border);
+  --shadow-btn: 0 0 0 1px var(--border-strong), 0 1px 2px rgb(0 0 0 / 0.05);
+}
+
+.primitive-card-bar {
+  padding: 10px 12px;
+}
+
+@keyframes shimmer-text {
+  from {
+    background-position: 150% center;
+  }
+  to {
+    background-position: -50% center;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pixel-on {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  18%,
+  42% {
+    opacity: 1;
+  }
+  62% {
+    opacity: 0.15;
+  }
+}

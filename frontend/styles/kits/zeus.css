@@ -1,0 +1,293 @@
+/* alias layer: the semantic names used by vendored zeus ui and boardui components, pointed at our tokens */
+
+@theme inline {
+  --color-accent-400: var(--info);
+  --color-accent-500: var(--ring);
+  --color-accent-600: var(--info);
+
+  --color-text-primary: var(--foreground);
+  --color-text-secondary: var(--muted-foreground);
+  --color-text-tertiary: var(--subtle-foreground);
+  --color-text-white: var(--primary-foreground);
+
+  --color-foreground-full: var(--card);
+  --color-foreground-icon-primary: var(--foreground);
+  --color-foreground-icon-secondary: var(--muted-foreground);
+  --color-foreground-icon-tertiary: var(--subtle-foreground);
+  --color-foreground-icon-quaternary: var(--border-strong);
+  --color-foreground-disabled-danger: color-mix(in oklab, var(--danger) 45%, var(--card));
+
+  --color-background-full: var(--background);
+  --color-background-primary-default: var(--card);
+  --color-background-primary-hover: var(--muted);
+  --color-background-primary-active: var(--secondary);
+  --color-background-primary-disabled: var(--muted);
+  --color-background-secondary-default: var(--muted);
+  --color-background-secondary-hover: var(--secondary);
+  --color-background-tertiary-default: var(--secondary);
+
+  --color-border-button-default: var(--border);
+  --color-border-button-hover: var(--border-strong);
+  --color-border-button-active: var(--input);
+  --color-border-focus-ring: var(--ring);
+  --color-separator-border: var(--border);
+
+  --color-button-ghost-background: color-mix(in oklab, var(--info) 10%, var(--card));
+  --color-button-ghost-hover: color-mix(in oklab, var(--info) 16%, var(--card));
+  --color-button-ghost-active: color-mix(in oklab, var(--info) 24%, var(--card));
+  --color-button-ghost-disabled: var(--muted);
+  --color-button-ghost-disabled-foreground: var(--subtle-foreground);
+  --color-button-ghost-foreground: var(--info);
+  --color-button-primary-disabled-foreground: var(--subtle-foreground);
+
+  --color-avatar-neutral-background: var(--secondary);
+  --color-badge-neutral-background: var(--secondary);
+  --color-control-indicator-background: var(--card);
+  --color-control-indicator-background-subtle: var(--muted);
+  --color-notification-error-background: color-mix(in oklab, var(--danger) 12%, var(--card));
+  --color-notification-error-foreground: var(--danger);
+  --color-segmented-control-background: var(--secondary);
+  --color-segmented-control-selected-background: var(--card);
+  --color-tab-count-selected-background: color-mix(in oklab, var(--info) 14%, var(--card));
+  --color-theme-toggle-sidebar-background: var(--secondary);
+  --color-theme-toggle-sidebar-selected-background: var(--card);
+  --color-switch-off-chip-start: var(--card);
+  --color-switch-off-chip-end: var(--muted);
+  --color-switch-on-chip-start: var(--primary);
+  --color-switch-on-chip-end: var(--primary);
+
+  --color-status-blue-background: color-mix(in oklab, var(--info) 14%, var(--card));
+  --color-status-blue-text: var(--info);
+  --color-status-cyan-background: color-mix(in oklab, var(--lens-conversion) 14%, var(--card));
+  --color-status-cyan-text: var(--lens-conversion);
+  --color-status-lime-background: color-mix(in oklab, var(--success) 14%, var(--card));
+  --color-status-lime-text: var(--success);
+  --color-status-orange-background: color-mix(in oklab, var(--warning) 14%, var(--card));
+  --color-status-orange-text: var(--warning);
+  --color-status-yellow-background: color-mix(in oklab, var(--warning) 10%, var(--card));
+  --color-status-yellow-text: var(--warning);
+  --color-status-purple-background: color-mix(in oklab, var(--chart-5) 14%, var(--card));
+  --color-status-purple-text: var(--chart-5);
+  --color-status-rose-background: color-mix(in oklab, var(--danger) 12%, var(--card));
+  --color-status-rose-text: var(--danger);
+  --color-status-dot-green-halo: color-mix(in oklab, var(--success) 20%, transparent);
+  --color-status-dot-yellow-halo: color-mix(in oklab, var(--warning) 22%, transparent);
+  --color-status-dot-indigo-halo: color-mix(in oklab, var(--info) 20%, transparent);
+
+  --radius-2lg: 10px;
+
+  --shadow-2xs: 0 1px rgb(0 0 0 / 0.05);
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.06);
+  --shadow-dropdown: 0 1px 1px 0 rgb(0 0 0 / 0.04), 0 4px 4px 0 rgb(0 0 0 / 0.02);
+  --shadow-checkbox-selected: inset 0 2px 0 0 rgb(255 255 255 / 0.25), inset 0 0 0 1px var(--ring);
+
+  --text-body-regular: 0.875rem;
+  --text-body-regular--line-height: 1.25rem;
+  --text-body-regular--font-weight: 400;
+  --text-body-medium: 0.875rem;
+  --text-body-medium--line-height: 1.25rem;
+  --text-body-medium--font-weight: 500;
+  --text-caption-1-regular: 0.75rem;
+  --text-caption-1-regular--line-height: 1rem;
+  --text-caption-1-regular--letter-spacing: 0.15px;
+  --text-caption-1-regular--font-weight: 400;
+  --text-caption-1-medium: 0.75rem;
+  --text-caption-1-medium--line-height: 1rem;
+  --text-caption-1-medium--letter-spacing: 0.15px;
+  --text-caption-1-medium--font-weight: 500;
+  --text-caption-1-semibold: 0.75rem;
+  --text-caption-1-semibold--line-height: 1rem;
+  --text-caption-1-semibold--letter-spacing: 0.15px;
+  --text-caption-1-semibold--font-weight: 600;
+  --text-caption-2-medium: 0.6875rem;
+  --text-caption-2-medium--line-height: 0.9375rem;
+  --text-caption-2-medium--letter-spacing: 0.2px;
+  --text-caption-2-medium--font-weight: 500;
+  --text-headline-semibold: 1rem;
+  --text-headline-semibold--line-height: 1.375rem;
+  --text-headline-semibold--font-weight: 600;
+  --text-title-1-semibold: 1.5rem;
+  --text-title-1-semibold--line-height: 2.125rem;
+  --text-title-1-semibold--font-weight: 600;
+  --text-title-3-medium: 1.125rem;
+  --text-title-3-medium--line-height: 1.625rem;
+  --text-title-3-medium--font-weight: 500;
+}
+
+:root {
+  --button-transition-ms: 150ms;
+  --gradient-button-primary-default: linear-gradient(180deg, color-mix(in oklab, var(--primary) 88%, var(--card)) 0%, var(--primary) 100%);
+  --gradient-button-primary-hover: linear-gradient(180deg, color-mix(in oklab, var(--primary) 80%, var(--card)) 0%, color-mix(in oklab, var(--primary) 92%, var(--card)) 100%);
+  --gradient-button-primary-active: linear-gradient(180deg, var(--primary) 0%, var(--primary) 100%);
+  --gradient-button-primary-disabled: linear-gradient(180deg, var(--secondary) 0%, var(--secondary) 100%);
+  --gradient-button-danger-default: linear-gradient(180deg, color-mix(in oklab, var(--danger) 88%, white) 0%, var(--danger) 100%);
+  --gradient-button-danger-hover: linear-gradient(180deg, color-mix(in oklab, var(--danger) 80%, white) 0%, var(--danger) 100%);
+  --gradient-button-danger-active: linear-gradient(180deg, var(--danger) 0%, var(--danger) 100%);
+  --gradient-button-danger-disabled: linear-gradient(180deg, var(--muted) 0%, var(--muted) 100%);
+}
+
+@utility button-press-motion {
+  transition:
+    background-color var(--button-transition-ms) ease,
+    border-color var(--button-transition-ms) ease,
+    box-shadow var(--button-transition-ms) ease,
+    color var(--button-transition-ms) ease,
+    transform 420ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:active:not(:disabled):not([aria-disabled="true"]) {
+    transform: scale(0.98);
+    transition-duration: 150ms, 150ms, 150ms, 150ms, 220ms;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+    transform: none;
+  }
+}
+
+@utility bg-button-primary {
+  position: relative;
+  isolation: isolate;
+  background-image: var(--gradient-button-primary-default);
+  color: var(--primary-foreground);
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: inherit;
+    background-image: var(--gradient-button-primary-hover);
+    opacity: 0;
+    transition: opacity var(--button-transition-ms) ease;
+  }
+  &:hover:not(:disabled):not([aria-disabled="true"])::before {
+    opacity: 1;
+  }
+  &:active:not(:disabled):not([aria-disabled="true"]) {
+    background-image: var(--gradient-button-primary-active);
+  }
+  &:disabled,
+  &[aria-disabled="true"] {
+    background-image: var(--gradient-button-primary-disabled);
+  }
+  &:disabled::before,
+  &[aria-disabled="true"]::before {
+    display: none;
+  }
+}
+
+@utility bg-button-danger {
+  position: relative;
+  isolation: isolate;
+  background-image: var(--gradient-button-danger-default);
+
+  &:hover:not(:disabled):not([aria-disabled="true"]) {
+    background-image: var(--gradient-button-danger-hover);
+  }
+  &:active:not(:disabled):not([aria-disabled="true"]) {
+    background-image: var(--gradient-button-danger-active);
+  }
+  &:disabled,
+  &[aria-disabled="true"] {
+    background-image: var(--gradient-button-danger-disabled);
+  }
+}
+
+@keyframes ai-chat-text-shimmer {
+  from {
+    background-position: 200% center;
+  }
+  to {
+    background-position: -100% center;
+  }
+}
+
+.bui-agent-thinking-label {
+  color: transparent;
+  background-image: linear-gradient(
+    100deg,
+    color-mix(in oklab, var(--bui-agent-thinking-tone) 55%, transparent) 30%,
+    var(--bui-agent-thinking-tone) 50%,
+    color-mix(in oklab, var(--bui-agent-thinking-tone) 55%, transparent) 70%
+  );
+  background-position: 200% center;
+  background-size: 300% 100%;
+  background-clip: text;
+  animation: ai-chat-text-shimmer 2.6s linear infinite;
+}
+
+@keyframes bui-agent-thinking-star {
+  0%,
+  100% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  60% {
+    transform: scale(0.8);
+    opacity: 0.9;
+  }
+}
+
+.bui-agent-thinking-star {
+  transform: scale(0);
+  animation-name: bui-agent-thinking-star;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+@keyframes bui-agent-thinking-dash {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+.bui-agent-thinking-comet {
+  animation-name: bui-agent-thinking-dash;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.bui-agent-thinking-stars {
+  color: color-mix(in oklab, currentColor 75%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bui-agent-thinking-label {
+    color: var(--bui-agent-thinking-tone);
+    background-image: none;
+    animation: none;
+  }
+  .bui-agent-thinking-star {
+    animation: none;
+    transform: none;
+    opacity: 0.7;
+  }
+  .bui-agent-thinking-comet {
+    animation: none;
+  }
+}
+
+.theme-transitioning,
+.theme-transitioning * {
+  transition: none !important;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  z-index: 2;
+}
