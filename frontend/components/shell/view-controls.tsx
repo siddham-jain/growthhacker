@@ -14,6 +14,7 @@ export function ViewControls({ showLens = true }: { showLens?: boolean }) {
   const { windowDays, lens, setWindow, setLens } = useViewParams();
   return (
     <div className="flex flex-wrap items-center gap-2">
+      <span data-coach="window" className="inline-flex">
       <SegmentedControl
         aria-label="How far back we look"
         selectedKeys={[String(windowDays)]}
@@ -28,6 +29,7 @@ export function ViewControls({ showLens = true }: { showLens?: boolean }) {
           </SegmentedControlItem>
         ))}
       </SegmentedControl>
+      </span>
       {showLens ? (
         <SegmentedControl
           aria-label="Lens"

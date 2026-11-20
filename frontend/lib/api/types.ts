@@ -1,4 +1,8 @@
-// hand-written from plan 11 §3.3–3.4 and plan 99 §4 until the backend publishes /api/v1/openapi.json
+// wire shapes come from schema.d.ts (generated from the backend's openapi.json, `pnpm gen:api`); the backend wins on any difference.
+// shapes the ui adopts as-is are aliases below; view models the screens need are mapped from the wire in adapters.ts.
+import type { components } from "./schema";
+
+type Wire = components["schemas"];
 
 export type WindowDays = 7 | 30 | 90;
 export type Lens = "views" | "conversion";
@@ -20,14 +24,16 @@ export interface Freshness {
 
 export interface RunNotice {
   code: string;
-  level: "info" | "warning" | "error";
+  // the backend sends no level; the notice registry decides the tone from the code
+  level?: "info" | "warning" | "error";
   message: string;
-  suggest?: { widen_window_to?: WindowDays };
+  stage?: string | null;
+  suggest?: { widen_window_to?: WindowDays } | null;
 }
 
 export interface ResultEnvelope<T> {
   data: T;
-  window_days: WindowDays;
+  window_days: number;
   as_of: string;
   run_id: string;
   generated_at: string;
@@ -54,16 +60,20 @@ export interface Problem {
   extra: Record<string, unknown> | null;
 }
 
+// auth (11 auth.py: session cookie or `Authorization: Bearer <api key>`)
+
+export type WorkspaceRole = Wire["MeWorkspace"]["role"];
+export type MeWorkspace = Wire["MeWorkspace"];
+export type Me = Wire["MeOut"];
+
+export interface LoginIn {
+  email: string;
+  password: string;
+}
+
 // clients
 
-export type ClientLifecycle =
-  | "onboarding"
-  | "awaiting_confirmation"
-  | "analyzing"
-  | "active"
-  | "paused"
-  | "failed"
-  | "deleting";
+export type ClientLifecycle = Wire["ClientLifecycle"];
 
 export interface Market {
   country: string;
@@ -76,7 +86,7 @@ export type ChannelVerifiedBy = "website_link" | "channel_link" | "oauth" | "man
 export interface ChannelRef {
   channel_id: string;
   title: string;
-  handle: string;
+  handle: string | null;
   thumbnail_url: string | null;
   subscriber_count: number | null;
   verified: boolean;
@@ -110,9 +120,16 @@ export interface ClientCreate {
   start_onboarding?: boolean;
 }
 
-export type ClientCreated = Client & { onboarding_run?: PipelineRun };
+export interface ClientCreated {
+  client: Client;
+  onboarding_run: PipelineRun | null;
+}
 
 export type ClientPatch = Partial<Pick<Client, "name" | "window_days" | "market" | "refresh_hour_local" | "paused">>;
+
+export interface ChannelAttachIn {
+  channel_id: string | null;
+}
 
 export interface ChannelResolveOut {
   candidates: {
@@ -181,14 +198,7 @@ export interface BusinessProfile {
   };
 }
 
-export interface ProfileSource {
-  url: string;
-  title: string;
-  fetched_at: string;
-  source_kind: ContextSourceKind;
-  snapshot_at?: string | null;
-  pages: number;
-}
+export type ProfileSource = Wire["ProfileSource"];
 
 export interface BusinessProfileView {
   profile: BusinessProfile;
@@ -204,95 +214,30 @@ export type ProfilePatch = Partial<Record<"offerings" | "value_propositions" | "
 
 // topics
 
-export type TopicStatus = "suggested" | "active" | "rejected";
+export type TopicStatus = Wire["KeywordItem"]["status"];
+export type KeywordItem = Wire["KeywordItem"];
+export type BuyerQuestionItem = Wire["BuyerQuestionItem"];
+export type KeywordCreate = Wire["KeywordCreate"];
+export type BuyerQuestionCreate = Wire["BuyerQuestionCreate"];
+export type TopicPatch = Wire["TopicRefPatch"];
+export type BulkStatusIn = Wire["BulkStatusIn"];
 
-export interface KeywordItem {
-  id: string;
-  text: string;
-  status: TopicStatus;
-  source: "profile" | "user" | "spotlit";
-  priority: number;
-  created_at: string;
-}
+// competitors (04's candidate model as the backend serves it)
 
-export interface BuyerQuestionItem {
-  id: string;
-  text: string;
-  status: TopicStatus;
-  source: "profile" | "user" | "spotlit_ai_tracking";
-  intent_stage: "awareness" | "consideration" | "decision" | null;
-  cited_video_ids: string[];
-  priority: number;
-  created_at: string;
-}
-
-export interface TopicCreate {
-  text: string;
-  priority?: number;
-  status?: TopicStatus;
-}
-
-export interface BulkStatusIn {
-  ids: string[];
-  status: "active" | "rejected";
-}
-
-// competitors (fields beyond 11's CompetitorView follow plan 13 §13.4)
-
-export type CompetitorRole = "competitor_set" | "niche_set" | "benchmark_set";
-export type CompetitorRelation = "direct" | "aggregator" | "content";
-
-export interface CompetitorView {
-  id: string;
-  status: "suggested" | "confirmed" | "rejected";
-  channel: ChannelRef | null;
-  name: string;
-  source: "web_search" | "youtube_search" | "profile" | "user";
-  score: number;
-  evidence: { kind: string; url: string | null; text: string }[];
-  reject_reason: string | null;
-  added_by: "system" | "user";
-  role: CompetitorRole;
-  relation: CompetitorRelation;
-  business_relevance: "high" | "medium" | "low";
-  youtube_relevance: number;
-  evidence_summary: string;
-  uploads_90d: number | null;
-  last_upload_at: string | null;
-  preview_video_ids: string[];
-}
-
-export interface CompetitorAddIn {
-  channel_ref: string;
-  name?: string;
-}
-
-export interface CompetitorRejectIn {
-  reason?: "not_competitor" | "wrong_channel" | "too_big" | "too_small" | "other";
-  note?: string;
-}
+export type CompetitorRole = Wire["CandidateRole"];
+export type CompetitorRelation = Wire["CompetitorRelation"];
+export type CompetitorStatus = Wire["CandidateStatus"];
+export type CompetitorView = Wire["CompetitorView"];
+export type CompetitorChannelView = Wire["CompetitorChannelView"];
+export type CompetitorAddIn = Wire["CompetitorAddIn"];
+export type CompetitorRejectIn = Wire["CompetitorRejectIn"];
 
 // runs and events
 
-export type RunKind = "analysis" | "daily_refresh" | "onboarding" | "news_scan" | "cards" | "recrawl";
-export type RunStatus =
-  | "queued"
-  | "running"
-  | "awaiting_confirmation"
-  | "succeeded"
-  | "partial"
-  | "failed"
-  | "cancelled"
-  | "superseded";
-export type StageStatus =
-  | "pending"
-  | "running"
-  | "retrying"
-  | "reused"
-  | "succeeded"
-  | "degraded"
-  | "failed"
-  | "skipped";
+export type RunKind = Wire["RunKind"];
+// the run.awaiting_confirmation event hands an onboarding run to the confirm step; the reducer records it as a status
+export type RunStatus = Wire["RunStatus"] | "awaiting_confirmation";
+export type StageStatus = Wire["StageStatus"] | "retrying";
 
 export interface StageRunView {
   stage: string;
@@ -302,6 +247,7 @@ export interface StageRunView {
   message: string | null;
 }
 
+// view of the backend RunOut (progress_pct → percent)
 export interface PipelineRun {
   id: string;
   client_id: string;
@@ -353,30 +299,45 @@ export interface Counts {
   unit: string;
 }
 
+// age_band_proxy is an estimate from the video's age band, not a measured day-N value
+export type AgeMethod = "observed" | "interpolated" | "owner_analytics" | "age_band_proxy" | "pending" | "unavailable";
+
 export interface ViewsAtAgeRef {
   age_days: number;
   views: number | null;
-  method: "observed" | "interpolated" | "owner_analytics" | "age_band_proxy" | "pending" | "unavailable";
+  method: AgeMethod;
   label: string;
 }
 
-// source_* kinds carry the 03 §14 cascade events (crawl.source_started / crawl.blocked / crawl.fallback)
+export interface ViewsAtAgePoint {
+  age_days: number;
+  views: number;
+  method: AgeMethod;
+}
+
+export interface ViewsAtAgeCurve {
+  video_id: string;
+  title: string;
+  channel_title: string;
+  outlier_ratio: number | null;
+  points: ViewsAtAgePoint[];
+}
+
+// mirrors backend app/domain/runs.py EventPayload; unknown kinds are ignored by the reducer
 export type EventPayload =
-  | { kind: "source_started"; tier: number; source_kind: ContextSourceKind; target: string }
-  | { kind: "source_blocked"; source_kind: ContextSourceKind; reason: string }
-  | { kind: "source_fallback"; from: ContextSourceKind; to: ContextSourceKind }
-  | { kind: "page_read"; url: string; path: string; title: string; page_type: "service" | "about" | "location" | "pricing" | "blog" | "other"; source_kind?: ContextSourceKind }
+  | { kind: "source_fallback"; from_source: string; to_source: string; reason?: string | null }
+  | { kind: "page_read"; url: string; path: string; title: string | null; page_type: "service" | "about" | "location" | "pricing" | "blog" | "other" }
   | { kind: "page_skipped"; url: string; reason: "robots" | "timeout" | "non_html" | "duplicate" | "budget" | "blocked" }
-  | { kind: "profile_field"; field: "offerings" | "value_props" | "locations" | "conversion_actions" | "buyer_questions"; count: number; preview: string[]; source_kinds?: ContextSourceKind[] }
-  | { kind: "channel_resolved"; channel_id: string; title: string; handle: string; thumbnail_url: string | null; subscriber_count: number | null; verified_by: ChannelVerifiedBy }
-  | { kind: "competitor_candidate"; candidate_id: string; name: string; channel_id: string | null; thumbnail_url: string | null; source: "web_search" | "youtube_search" | "profile"; evidence_count: number }
+  | { kind: "profile_field"; field: "offerings" | "value_props" | "locations" | "conversion_actions" | "buyer_questions"; count: number; preview: string[] }
+  | { kind: "channel_resolved"; channel_id: string; title: string; handle: string | null; thumbnail_url: string | null; subscriber_count: number | null; verified_by: ChannelVerifiedBy }
+  | { kind: "competitor_candidate"; candidate_id: string; name: string; channel_id: string | null; thumbnail_url: string | null; source: "web_search" | "youtube_search" | "profile" | "llm" | "user"; evidence_count: number }
   | { kind: "videos_fetched"; channel_id: string; channel_title: string; count: number; window_days: number }
   | { kind: "snapshot_progress"; videos_tracked: number; snapshots_taken: number }
-  | { kind: "topic_summary"; topic_ref_id: string; label: string; matched_videos: number; review_flagged: boolean }
+  | { kind: "topic_summary"; topic_ref_id: string; label: string; matched_videos: number; review_flagged: number }
   | { kind: "outlier_found"; video_id: string; channel_title: string; title: string; outlier_ratio: number; views_at_age: ViewsAtAgeRef }
   | { kind: "trait_lift"; trait: string; lift: number; outliers_with_trait: number; sample: number }
-  | { kind: "news_found"; news_id: string; headline: string; source_domain: string; published_at: string }
-  | { kind: "card_written"; recommendation_id: string; type: RecType; summary: string; lens: Lens[]; confidence_label: ConfidenceLabel }
+  | { kind: "news_found"; news_id: string; headline: string; source_domain: string; published_at: string | null }
+  | { kind: "card_written"; recommendation_id: string; type: string; summary: string; lens: string[]; confidence_label: string }
   | { kind: "refresh_suggested"; video_id: string; title: string; insertions: number }
   | { kind: "quota"; youtube_units_used: number; search_calls_used: number; remaining_today: number }
   | { kind: "fallback"; component: "llm" | "tavily" | "crawler"; reason: string; mode: "template" | "secondary_provider" | "skipped" };
@@ -422,7 +383,7 @@ export type RecType =
   | "news_opportunity"
   | "description_refresh";
 
-export type ConfidenceLabel = "High" | "Medium" | "Low";
+export type ConfidenceLabel = Wire["ConfidenceLabel"];
 
 export interface Confidence {
   label: ConfidenceLabel;
@@ -432,19 +393,7 @@ export interface Confidence {
   caps_applied?: string[];
 }
 
-export interface ReferenceVideo {
-  video_id: string;
-  url: string;
-  title: string;
-  channel: string;
-  channel_id: string;
-  channel_role?: "own" | "competitor" | "niche" | "benchmark" | "creator";
-  published_at: string;
-  views_day7: number | null;
-  views_at_age?: ViewsAtAgeRef;
-  outlier_ratio: number | null;
-  thumbnail_url?: string | null;
-}
+export type ReferenceVideo = Wire["ReferenceVideo"];
 
 export interface RecommendationOut {
   id: string;
@@ -463,102 +412,67 @@ export interface RecommendationOut {
   run_id?: string;
   rendered_by?: "llm" | "template";
   topic_ref_ids?: string[];
-  feedback?: { rating: "up" | "down" | null; status: FeedbackStatus | null };
+  feedback?: RecommendationFeedback | null;
 }
 
-export type FeedbackStatus = "saved" | "dismissed" | "done";
+export type FeedbackIn = Wire["FeedbackIn"];
+export type FeedbackStatus = NonNullable<FeedbackIn["status"]>;
+export type FeedbackReason = NonNullable<FeedbackIn["reason"]>;
 
-export interface FeedbackIn {
-  rating?: "up" | "down";
-  reasons?: ("not_relevant" | "too_generic" | "already_made" | "wrong_data" | "great")[];
-  status?: FeedbackStatus;
-  note?: string;
+export interface RecommendationFeedback {
+  status: FeedbackStatus | null;
+  reason?: FeedbackReason | null;
+  linked_video_id?: string | null;
 }
 
-export interface WhiteSpaceNote {
-  buyer_question: string;
-  videos_checked: number;
-  channels_checked: number;
-  window_days: WindowDays;
-}
+export type WhiteSpaceNote = Wire["WhiteSpaceNote"];
 
 // news, refresh, creators
 
-export type Urgency = "now" | "this_week" | "evergreen_window";
+export type Urgency = Wire["NewsOpportunityView"]["urgency"];
+export type NewsOpportunityView = Wire["NewsOpportunityView"];
+export type NewsSignal = Wire["NewsSignal"];
+// fewer than 3 reference videos (owner decision o3): listed apart from recommendations as first-mover signals
+export type EarlySignalView = Wire["EarlySignalView"];
 
-export interface NewsOpportunityView {
-  id: string;
-  news: { news_id: string; headline: string; url: string; source_domain: string; published_at: string };
-  recommendation_id: string | null;
-  summary: string;
-  relevance: number;
-  offering_refs: string[];
-  demand_check: { youtube_results_7d: number; outliers: number };
-  status: "new" | "dismissed" | "used";
-  urgency: Urgency;
-  expires_at: string;
-  reference_count: number;
-  review_required: boolean;
-}
+export type InsertionPosition = Wire["InsertionPosition"];
+export type InsertionOp = Wire["InsertionOp"];
+export type RefreshSuggestionView = Wire["RefreshSuggestionView"];
+export type RefreshAppliedIn = Wire["RefreshAppliedIn"];
+// rule-based fixes, kept apart from refresh suggestions (owner decision o3)
+export type HygieneData = Wire["HygieneData"];
 
-export type InsertionPosition = "top_line" | "after_first_paragraph" | "before_hashtag_line" | "before_links_block" | "append";
-
-export interface InsertionOp {
-  op_id: string;
-  kind: "insert" | "link_fix";
-  position: InsertionPosition;
-  anchor_excerpt: string;
-  old_text?: string;
-  text: string;
-  keywords_added: string[];
-}
-
-export interface RefreshSuggestionView {
-  id: string;
-  video: { video_id: string; title: string; published_at: string; url: string; views: number };
-  warranted_because: string[];
-  operations: InsertionOp[];
-  inserted_bytes: number;
-  resulting_bytes: number;
-  expected_effect: string;
-  basis: "keyword" | "news" | "rule_based";
-  review_required: boolean;
-  status: "open" | "applied" | "dismissed";
-  applied_at: string | null;
-}
-
-export interface RefreshAppliedIn {
-  applied_at?: string;
-  applied_text?: string;
-}
-
-export interface CreatorView {
-  channel: ChannelRef;
-  rank: number;
-  subscriber_band: string;
-  cadence_label: string;
-  relevance: { matched_videos: number; recent_videos: number; topics: string[] };
-  recent_performance_vs_niche: string;
-  consistency: string;
-  collaborations: { video_id: string; competitor_name: string; label: "mention" | "disclosed_paid_promotion"; date: string }[];
-  reference_videos: ReferenceVideo[];
-  recommendation_id: string | null;
-}
+// grouped by relevance and sorted by one user-chosen criterion server-side; there is no rank
+export type CreatorView = Wire["CreatorView"];
+export type CreatorsData = Wire["CreatorsData"];
 
 // analytics (06 payloads, display fields only)
+
+export interface OwnVideoPoint {
+  video_id: string;
+  title: string;
+  published_at: string;
+  ratio: number | null;
+  method: AgeMethod;
+  segment: VideoMetricsView["segment"];
+}
 
 export interface OwnPerformanceReport {
   median_ratio_window: number | null;
   median_ratio_prev_window: number | null;
   comparison_age_days: number;
   videos_in_window: number;
+  method_mix: Partial<Record<AgeMethod, number>>;
+  videos: OwnVideoPoint[];
+  baseline: { age_days: number; views: number | null; method: AgeMethod; n: number } | null;
+  curves: ViewsAtAgeCurve[];
   best: VideoMetricsView[];
   worst: VideoMetricsView[];
 }
 
 export interface OwnPerformance {
-  youtube_public: OwnPerformanceReport;
-  youtube_analytics: { subscribers_gained: number; top_search_terms: string[] } | null;
+  youtube_public: OwnPerformanceReport | null;
+  youtube_analytics: { top_search_terms: string[] } | null;
   website: { conversion_actions_seen: number } | null;
 }
 
@@ -572,19 +486,32 @@ export interface VideoMetricsView {
   outlier_ratio: number | null;
   is_outlier: boolean;
   segment: "long_form" | "short_form" | "live";
+  channel_baseline_views_at_age?: number | null;
 }
 
 export interface ChannelScorecard {
   channel: ChannelRef;
   role: CompetitorRole;
-  relation: CompetitorRelation;
+  // the analytics sheet carries no relation; it's joined from the competitor list when known
+  relation: CompetitorRelation | null;
   uploads_per_week: number;
   median_ratio: number | null;
   outliers_in_window: number;
   videos_in_window: number;
   days_since_last_upload: number;
+  longest_gap_days: number | null;
   subscriber_hidden: boolean;
+  subscriber_band: string;
+  segment_mix: Partial<Record<VideoMetricsView["segment"], number>>;
+  median_views_at_age: { age_days: number; views: number | null; method: AgeMethod } | null;
+  // outliers of videos, with the wilson interval as counts of the same denominator
+  outlier_hit_rate: { outliers: number; videos: number; likely_low: number; likely_high: number };
   top_outliers: VideoMetricsView[];
+}
+
+export interface CadenceWeek {
+  week_start: string;
+  uploads: number;
 }
 
 export interface TraitLiftView {
@@ -600,22 +527,51 @@ export interface TraitLiftView {
 
 export interface CompetitorDetail {
   scorecard: ChannelScorecard;
+  // the client's own sheet for side-by-side reading; null when the client has no channel
+  you: ChannelScorecard | null;
+  cadence_series: CadenceWeek[];
+  curves: ViewsAtAgeCurve[];
   top_outliers: VideoMetricsView[];
   trait_lift: TraitLiftView[];
-  topic_coverage: { topic: string; videos: number; outliers: number; client_videos: number }[];
+  topic_coverage: { topic_ref_id: string; topic: string; videos: number; outliers: number; client_videos: number; recommendation_id: string | null }[];
+  collaborations: { video_id: string; handle_or_name: string; kind: "mention" | "disclosed_paid" }[];
+}
+
+// counts only (06 GapMatrix): buyer questions as rows, tracked channels as columns
+export interface GapCellView {
+  n_videos: number;
+  n_outliers: number;
+  best_ratio: number | null;
+}
+
+export interface GapMatrixView {
+  topics: { id: string; label: string }[];
+  channels: { channel_id: string; title: string }[];
+  cells: Record<string, Record<string, GapCellView>>;
+  own: Record<string, number>;
 }
 
 export interface TrendingReport {
-  items: (VideoMetricsView & { velocity_per_hour: number })[];
-  rising_topics: { label: string; uploads_prev: number; uploads_now: number; outliers_prev: number; outliers_now: number }[];
+  items: (VideoMetricsView & { views_per_day: number })[];
+  rising_topics: { topic_ref_id: string; label: string; uploads_prev: number; uploads_now: number; outliers_prev: number; outliers_now: number }[];
 }
 
-export interface TopicCoverage {
-  topic_ref: { id: string; label: string };
-  own_videos: number;
-  competitor_videos: number;
-  outliers: number;
-  review_flagged: boolean;
+
+// workspace llm settings (owner only); api keys are write-only and never returned
+
+export type LlmTier = "low" | "medium" | "high";
+export type LlmProviderId = Wire["LLMSettingsIn"]["provider_order"] extends (infer T)[] | null | undefined ? T : never;
+export type LlmSettings = Wire["LLMSettingsOut"];
+export type LlmSettingsIn = Wire["LLMSettingsIn"];
+export type LlmProviderOut = Wire["LLMProviderOut"];
+export type LlmProviderIn = Wire["LLMProviderIn"];
+
+// proposed: no backend endpoint yet, served by mock mode only
+export interface NotificationSettings {
+  email: string | null;
+  first_brief_ready: boolean;
+  daily_digest: boolean;
+  news_closing_soon: boolean;
 }
 
 // ops and evaluation (12's report objects are not frozen yet)

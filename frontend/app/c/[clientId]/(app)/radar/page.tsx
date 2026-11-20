@@ -2,34 +2,23 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { NewsCard } from "@/components/cards/news-card";
-import { ReferenceStrip } from "@/components/cards/reference-strip";
+import { EarlySignalCard } from "@/components/cards/early-signal-card";
+import { MIN_REFERENCES, NewsCard } from "@/components/cards/news-card";
+import { VideoList } from "@/components/cards/video-list";
+import { VideoEvidenceDrawer } from "@/components/evidence/evidence-drawer";
+import { NoticeList } from "@/components/states/notice-list";
 import { FreshnessLine } from "@/components/shell/freshness-line";
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState, LoadingBlock } from "@/components/states/states";
-import { Tab, TabList, TabPanel, Tabs } from "@/components/ui/primitives";
-import { newsQuery, outliersQuery, recommendationsQuery, trendingQuery } from "@/lib/api/queries";
-import type { ReferenceVideo, VideoMetricsView } from "@/lib/api/types";
+import { Tab, TabList, TabPanel, Tabs, toast } from "@/components/ui/primitives";
+import { useDismissNews } from "@/lib/api/mutations";
+import { earlySignalsQuery, newsQuery, outliersQuery, recommendationsQuery, trendingQuery } from "@/lib/api/queries";
+import type { VideoMetricsView } from "@/lib/api/types";
 import { formatCompact } from "@/lib/format";
 import { useTabParam, useViewParams } from "@/lib/url-state";
 import { useClientId } from "@/lib/use-client-id";
 
 const TABS = ["news", "early", "trending", "outliers", "unanswered"] as const;
-const MIN_REFERENCES = 3;
-
-function asReference(video: VideoMetricsView): ReferenceVideo {
-  return {
-    video_id: video.video_id,
-    url: `https://www.youtube.com/watch?v=${video.video_id}`,
-    title: video.title,
-    channel: video.channel_title,
-    channel_id: video.channel_id,
-    published_at: video.published_at,
-    views_day7: video.views_at_age.views,
-    views_at_age: video.views_at_age,
-    outlier_ratio: video.outlier_ratio,
-  };
-}
 
 export default function RadarPage() {
   const clientId = useClientId();
@@ -40,16 +29,23 @@ export default function RadarPage() {
   const trending = useQuery(trendingQuery(clientId, windowDays));
   const outliers = useQuery(outliersQuery(clientId, windowDays));
   const recommendations = useQuery(recommendationsQuery(clientId, { window_days: windowDays }));
+  const early = useQuery(earlySignalsQuery(clientId, windowDays));
+  const dismiss = useDismissNews(clientId);
+  const [inspected, setInspected] = useState<VideoMetricsView | null>(null);
+  const onDismiss = (id: string) =>
+    dismiss.mutate(id, { onSuccess: () => toast("Dismissed", { description: "We'll weigh stories like this lower." }), onError: () => toast.error("Couldn't dismiss that. Try again.") });
 
   const live = (news.data?.data.items ?? []).filter((item) => item.status === "new" && Date.parse(item.expires_at) > now);
+  const expired = (news.data?.data.items ?? []).filter((item) => item.status === "new" && Date.parse(item.expires_at) <= now);
   const opportunities = live.filter((item) => item.reference_count >= MIN_REFERENCES);
-  const earlySignals = live.filter((item) => item.reference_count < MIN_REFERENCES);
+  const earlySignals = (early.data?.data ?? []).filter((item) => Date.parse(item.expires_at) > now);
   const whiteSpace = recommendations.data?.state === "ready" ? (recommendations.data.envelope.white_space ?? []) : [];
 
   return (
     <>
       <PageHeader title="Niche radar" subtitle="What's moving in your niche right now: news worth reacting to, early signals, trending videos and open questions." />
       <FreshnessLine envelope={news.data} />
+      {news.data ? <NoticeList notices={news.data.notices} className="mb-5" /> : null}
       <Tabs selectedKey={tab} onSelectionChange={(key) => setTab(key as (typeof TABS)[number])}>
         <TabList aria-label="Radar sections">
           <Tab id="news" count={opportunities.length}>News opportunities</Tab>
@@ -62,8 +58,18 @@ export default function RadarPage() {
           <div className="flex flex-col gap-4">
             {news.isPending ? <LoadingBlock /> : null}
             {opportunities.map((item) => (
-              <NewsCard key={item.id} opportunity={item} now={now} />
+              <NewsCard key={item.id} opportunity={item} now={now} onDismiss={() => onDismiss(item.id)} />
             ))}
+            {expired.length ? (
+              <details className="rounded-card bg-card p-4 shadow-card">
+                <summary className="cursor-pointer text-body-medium">Expired · {expired.length}</summary>
+                <ul className="mt-2 flex flex-col gap-1 text-body-regular text-muted-foreground">
+                  {expired.map((item) => (
+                    <li key={item.id}>{item.news.headline} · this window has closed</li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
             {news.data && !opportunities.length ? <EmptyState title="No news opportunities" body="Nothing in the news ties to your offerings with enough YouTube evidence right now." /> : null}
           </div>
         </TabPanel>
@@ -72,9 +78,11 @@ export default function RadarPage() {
             <p className="text-body-regular text-muted-foreground">
               Fresh stories with fewer than {MIN_REFERENCES} YouTube videos so far. They can&apos;t be recommendations yet, so we list them here, labelled honestly.
             </p>
+            {early.isPending ? <LoadingBlock rows={2} /> : null}
             {earlySignals.map((item) => (
-              <NewsCard key={item.id} opportunity={item} now={now} />
+              <EarlySignalCard key={item.id} signal={item} now={now} />
             ))}
+            {early.data && !earlySignals.length ? <EmptyState title="No early signals" body="Nothing fresh in the news ties to your offerings before YouTube has caught up." /> : null}
           </div>
         </TabPanel>
         <TabPanel id="trending">
@@ -96,7 +104,7 @@ export default function RadarPage() {
                     {item.title}
                   </span>
                   <span className="text-caption-1-regular text-muted-foreground">
-                    {item.channel_title} · {formatCompact(item.velocity_per_hour)} views/hour
+                    {item.channel_title} · {formatCompact(item.views_per_day)} views/day
                   </span>
                 </li>
               ))}
@@ -104,13 +112,13 @@ export default function RadarPage() {
           </div>
         </TabPanel>
         <TabPanel id="outliers">
-          {outliers.isPending ? <LoadingBlock /> : <ReferenceStrip videos={(outliers.data?.data.items ?? []).map(asReference)} />}
+          {outliers.isPending ? <LoadingBlock /> : <VideoList videos={outliers.data?.data.items ?? []} onInspect={setInspected} />}
         </TabPanel>
         <TabPanel id="unanswered">
           <ul className="flex flex-col gap-3">
             {whiteSpace.map((note) => (
-              <li key={note.buyer_question} className="rounded-card bg-card px-4 py-3 shadow-card text-body-regular">
-                No one has answered “{note.buyer_question}” on YouTube in the last {note.window_days} days{" "}
+              <li key={note.text} className="rounded-card bg-card px-4 py-3 shadow-card text-body-regular">
+                No one has answered “{note.text}” on YouTube in the last {note.window_days} days{" "}
                 <span className="text-muted-foreground">
                   (checked {note.videos_checked} videos across {note.channels_checked} channels).
                 </span>
@@ -119,6 +127,7 @@ export default function RadarPage() {
           </ul>
         </TabPanel>
       </Tabs>
+      <VideoEvidenceDrawer video={inspected} onClose={() => setInspected(null)} />
     </>
   );
 }

@@ -4,16 +4,18 @@ import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { RecommendationCard } from "@/components/cards/recommendation-card";
+import { RecommendationEvidenceDrawer } from "@/components/evidence/evidence-drawer";
+import { NoticeList } from "@/components/states/notice-list";
 import { FreshnessLine } from "@/components/shell/freshness-line";
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState, ErrorState, LoadingBlock } from "@/components/states/states";
 import { ThinDataPrompt } from "@/components/states/thin-data-prompt";
 import { Button } from "@/components/ui/button";
-import { Tab, TabList, Tabs } from "@/components/ui/primitives";
+import { SegmentedControl, SegmentedControlItem, Tab, TabList, TabPanel, Tabs } from "@/components/ui/primitives";
 import { useRecommendationFeedback } from "@/lib/api/mutations";
 import { recommendationsQuery } from "@/lib/api/queries";
 import type { RecType, WhiteSpaceNote } from "@/lib/api/types";
-import { useTabParam, useViewParams } from "@/lib/url-state";
+import { useEvidenceParam, useTabParam, useViewParams } from "@/lib/url-state";
 import { useClientId } from "@/lib/use-client-id";
 
 const TABS = ["all", "video_idea", "title_pattern", "thumbnail_pattern", "format"] as const;
@@ -25,6 +27,7 @@ const TAB_LABELS: Record<(typeof TABS)[number], string> = {
   format: "Formats",
 };
 const INITIAL_VISIBLE = 3;
+const STATUSES = ["open", "saved", "done"] as const;
 
 function UnansweredPanel({ notes }: { notes: WhiteSpaceNote[] }) {
   if (!notes.length) return null;
@@ -34,8 +37,8 @@ function UnansweredPanel({ notes }: { notes: WhiteSpaceNote[] }) {
         Unanswered on YouTube
       </h2>
       {notes.map((note) => (
-        <p key={note.buyer_question} className="text-body-regular text-foreground">
-          No one has answered “{note.buyer_question}” in the last {note.window_days} days{" "}
+        <p key={note.text} className="text-body-regular text-foreground">
+          No one has answered “{note.text}” in the last {note.window_days} days{" "}
           <span className="text-muted-foreground">
             (checked {note.videos_checked} videos across {note.channels_checked} channels). No reference videos, so no confidence score.
           </span>
@@ -49,6 +52,8 @@ export default function IdeasPage() {
   const clientId = useClientId();
   const { windowDays, lens, setLens } = useViewParams();
   const [tab, setTab] = useTabParam(TABS, "all");
+  const [statusFilter, setStatusFilter] = useTabParam(STATUSES, "open", "status");
+  const { openEvidence } = useEvidenceParam();
   const focusCard = useSearchParams().get("card");
   const [showAll, setShowAll] = useState(false);
   const result = useQuery(recommendationsQuery(clientId, { window_days: windowDays }));
@@ -60,7 +65,8 @@ export default function IdeasPage() {
 
   const envelope = result.data?.state === "ready" ? result.data.envelope : undefined;
   const all = (envelope?.data.items ?? []).filter((rec) => rec.type !== "news_opportunity" && rec.type !== "description_refresh" && rec.type !== "creator");
-  const inTab = tab === "all" ? all : all.filter((rec) => rec.type === (tab as RecType));
+  const byStatus = all.filter((rec) => (statusFilter === "open" ? rec.feedback?.status !== "done" && rec.feedback?.status !== "saved" : rec.feedback?.status === statusFilter));
+  const inTab = tab === "all" ? byStatus : byStatus.filter((rec) => rec.type === (tab as RecType));
   const visibleByLens = lens === "both" ? inTab : inTab.filter((rec) => rec.lens.includes(lens));
   const hiddenByLens = inTab.length - visibleByLens.length;
   const shown = showAll || focusCard ? visibleByLens : visibleByLens.slice(0, INITIAL_VISIBLE);
@@ -80,12 +86,32 @@ export default function IdeasPage() {
                 </Tab>
               ))}
             </TabList>
-          </Tabs>
+            <TabPanel id={tab} className="flex flex-col gap-4 pt-4 outline-none">
           {result.isPending ? <LoadingBlock /> : null}
           {result.error ? <ErrorState error={result.error} onRetry={() => result.refetch()} /> : null}
-          {result.data?.state === "writing" ? <LoadingBlock rows={2} /> : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-caption-1-medium text-muted-foreground">Show</span>
+            <SegmentedControl aria-label="Status" selectedKeys={[statusFilter]} onSelectionChange={(keys) => setStatusFilter([...keys][0] as (typeof STATUSES)[number])}>
+              <SegmentedControlItem id="open">To consider</SegmentedControlItem>
+              <SegmentedControlItem id="saved">Saved</SegmentedControlItem>
+              <SegmentedControlItem id="done">Done</SegmentedControlItem>
+            </SegmentedControl>
+          </div>
+          {result.data?.state === "writing" ? (
+            <div className="flex flex-col gap-3" role="status">
+              <p className="text-body-regular text-muted-foreground">Writing cards for the last {windowDays} days… about 20 seconds.</p>
+              <LoadingBlock rows={2} />
+            </div>
+          ) : null}
+          {envelope ? <NoticeList notices={envelope.notices} /> : null}
           {thinNotice ? <ThinDataPrompt notice={thinNotice} /> : null}
-          {envelope && !visibleByLens.length && !hiddenByLens ? (
+          {envelope && !visibleByLens.length && !hiddenByLens && statusFilter !== "open" ? (
+            <EmptyState
+              title={statusFilter === "saved" ? "Nothing saved yet" : "Nothing marked done yet"}
+              body={statusFilter === "saved" ? "Save an idea to keep it here while you plan." : "Mark an idea done when you publish it, and link the video so we can track it."}
+            />
+          ) : null}
+          {envelope && !visibleByLens.length && !hiddenByLens && statusFilter === "open" ? (
             <EmptyState
               title="Nothing met our evidence bar"
               body={`No ${TAB_LABELS[tab].toLowerCase()} in the last ${windowDays} days had 3 or more recent reference videos. Widening the window or adding competitors gives us more to learn from.`}
@@ -98,7 +124,8 @@ export default function IdeasPage() {
               lensFilter={lens}
               defaultExpanded={rec.id === focusCard || (index === 0 && !focusCard)}
               highlighted={rec.id === focusCard}
-              onFeedback={(status) => feedback.mutate({ recommendationId: rec.id, status })}
+              onFeedback={(input) => feedback.mutate({ recommendationId: rec.id, ...input })}
+              onEvidence={() => openEvidence(rec.id)}
             />
           ))}
           {!showAll && !focusCard && visibleByLens.length > INITIAL_VISIBLE ? (
@@ -109,14 +136,17 @@ export default function IdeasPage() {
           {hiddenByLens ? (
             <p className="text-caption-1-regular text-muted-foreground">
               {hiddenByLens} {hiddenByLens === 1 ? "card is" : "cards are"} hidden by the {lens === "views" ? "Views" : "Conversion"} lens ·{" "}
-              <button type="button" className="text-info underline-offset-2 hover:underline" onClick={() => setLens("both")}>
+              <button type="button" className="text-info underline underline-offset-2" onClick={() => setLens("both")}>
                 Show all
               </button>
             </p>
           ) : null}
+            </TabPanel>
+          </Tabs>
         </div>
         <UnansweredPanel notes={envelope?.white_space ?? []} />
       </div>
+      <RecommendationEvidenceDrawer clientId={clientId} />
     </>
   );
 }

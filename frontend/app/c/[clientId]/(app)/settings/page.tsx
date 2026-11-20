@@ -1,121 +1,125 @@
 "use client";
 
+import { RiRefreshLine } from "@remixicon/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ProfileReview } from "@/components/onboarding/profile-review";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { CompetitorsEditor } from "@/components/settings/competitors-editor";
+import { EngineSettings } from "@/components/settings/engine-settings";
+import { ProfileEditor } from "@/components/settings/profile-editor";
+import { ScheduleSettings } from "@/components/settings/schedule-settings";
+import { SettingsSection } from "@/components/settings/section";
+import { TopicsEditor } from "@/components/settings/topics-editor";
+import { useActiveWorkspace } from "@/components/shell/account-menu";
 import { PageHeader } from "@/components/shell/page-header";
-import { ErrorState, InfoNote, LoadingBlock } from "@/components/states/states";
+import { ErrorState, LoadingBlock } from "@/components/states/states";
 import { Button } from "@/components/ui/button";
-import { Chip, SegmentedControl, SegmentedControlItem, Tab, TabList, TabPanel, Tabs } from "@/components/ui/primitives";
+import { Tab, TabList, TabPanel, Tabs, toast } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
-import { buyerQuestionsQuery, clientKey, clientQuery, competitorsQuery, keywordsQuery, profileQuery } from "@/lib/api/queries";
-import type { CompetitorRole, TopicStatus, WindowDays } from "@/lib/api/types";
-import { RELATION_LABELS } from "@/lib/labels";
+import { buyerQuestionsQuery, clientKey, clientQuery, competitorsQuery, keywordsQuery, llmSettingsQuery, notificationSettingsQuery, profileQuery } from "@/lib/api/queries";
 import { useTabParam } from "@/lib/url-state";
 import { useClientId } from "@/lib/use-client-id";
 
-const TABS = ["profile", "topics", "competitors", "integrations", "schedule"] as const;
+const TABS = ["profile", "topics", "competitors", "integrations", "engine", "schedule"] as const;
 
-const STATUS_COLOR: Record<TopicStatus, "lime" | "soft" | "rose"> = { active: "lime", suggested: "soft", rejected: "rose" };
-const ROLE_LABELS: Record<CompetitorRole, string> = { competitor_set: "Competitor", niche_set: "Niche", benchmark_set: "Benchmark" };
-
-function TopicList({ title, items }: { title: string; items: { id: string; text: string; status: TopicStatus }[] }) {
+// edits collapse into one banner; the analysis only re-runs when the user asks
+function RerunBanner({ clientId, activeRunId }: { clientId: string; activeRunId: string | null }) {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const rerun = useMutation({
+    mutationFn: async () => api.runs.create(clientId, { kind: "analysis" }, crypto.randomUUID()),
+    onSuccess: (run) => {
+      queryClient.invalidateQueries({ queryKey: [...clientKey(clientId), "runs"] });
+      toast("Analysis started", { description: "About two minutes.", actions: [{ label: "Watch", onClick: () => router.push(`/c/${clientId}/setup/analysis?run=${run.id}`) }] });
+    },
+    onError: () => toast.error("Couldn't start the analysis. Try again."),
+  });
   return (
-    <section className="rounded-card bg-card p-4 shadow-card">
-      <h2 className="mb-2 text-body-medium text-foreground">
-        {title} <span className="text-muted-foreground">· {items.filter((item) => item.status === "active").length} active</span>
-      </h2>
-      <ul className="divide-y divide-border">
-        {items.map((item) => (
-          <li key={item.id} className="flex items-center justify-between gap-3 py-2 text-body-regular">
-            <span>{item.text}</span>
-            <Chip variant="caption" color={STATUS_COLOR[item.status]}>
-              {item.status}
-            </Chip>
-          </li>
-        ))}
-      </ul>
-    </section>
+    <div role="status" className="mb-5 flex flex-col gap-3 rounded-card bg-[color-mix(in_oklab,var(--info)_8%,var(--card))] px-4 py-3 shadow-card sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-body-regular text-foreground">
+        {activeRunId ? "We'll use your changes in the next run." : "Your settings changed. Re-run analysis to update recommendations (about 2 minutes)."}
+      </p>
+      {rerun.isSuccess ? null : (
+        <Button variant="primary" size="small" leadingIcon={RiRefreshLine} onClick={() => rerun.mutate()} disabled={rerun.isPending}>
+          {activeRunId ? "Re-run after this one" : "Re-run analysis"}
+        </Button>
+      )}
+    </div>
   );
 }
 
 export default function SettingsPage() {
   const clientId = useClientId();
-  const queryClient = useQueryClient();
   const [tab, setTab] = useTabParam(TABS, "profile");
+  const [changed, setChanged] = useState(false);
+  const markChanged = () => setChanged(true);
+  const { me } = useActiveWorkspace();
   const client = useQuery(clientQuery(clientId));
-  const profile = useQuery(profileQuery(clientId));
-  const keywords = useQuery(keywordsQuery(clientId));
-  const questions = useQuery(buyerQuestionsQuery(clientId));
-  const competitors = useQuery(competitorsQuery(clientId));
-  const updateWindow = useMutation({
-    mutationFn: (windowDays: WindowDays) => api.clients.update(clientId, { window_days: windowDays }, client.data?.version ?? 0),
-    onSuccess: (updated) => queryClient.setQueryData(clientKey(clientId), updated),
-  });
+  const profile = useQuery({ ...profileQuery(clientId), enabled: tab === "profile" });
+  const keywords = useQuery({ ...keywordsQuery(clientId), enabled: tab === "topics" });
+  const questions = useQuery({ ...buyerQuestionsQuery(clientId), enabled: tab === "topics" });
+  const competitors = useQuery({ ...competitorsQuery(clientId), enabled: tab === "competitors" });
+  const llm = useQuery({ ...llmSettingsQuery(), enabled: tab === "engine" });
+  const notifications = useQuery({ ...notificationSettingsQuery(clientId), enabled: tab === "schedule" });
+  const canEdit = me?.role !== "viewer";
 
   return (
     <>
-      <PageHeader title="Settings" subtitle="Your business profile, topics, competitors and connections." controls="none" />
+      <PageHeader title="Settings" subtitle="Your business profile, topics, competitors, connections and how often we look." controls="none" />
+      {changed ? <RerunBanner clientId={clientId} activeRunId={client.data?.active_run_id ?? null} /> : null}
       <Tabs selectedKey={tab} onSelectionChange={(key) => setTab(key as (typeof TABS)[number])}>
         <TabList aria-label="Settings sections">
           <Tab id="profile">Business profile</Tab>
           <Tab id="topics">Keywords and questions</Tab>
           <Tab id="competitors">Competitors</Tab>
           <Tab id="integrations">Integrations</Tab>
-          <Tab id="schedule">Schedule</Tab>
+          <Tab id="engine">Analysis engine</Tab>
+          <Tab id="schedule">Schedule and notifications</Tab>
         </TabList>
         <TabPanel id="profile">
           {profile.isPending ? <LoadingBlock /> : null}
           {profile.error ? <ErrorState error={profile.error} onRetry={() => profile.refetch()} /> : null}
-          {profile.data ? <ProfileReview view={profile.data} /> : null}
+          {profile.data ? <ProfileEditor clientId={clientId} view={profile.data} onChanged={markChanged} /> : null}
         </TabPanel>
         <TabPanel id="topics">
-          <div className="grid gap-4 lg:grid-cols-2">
-            <TopicList title="Buyer questions" items={questions.data?.items ?? []} />
-            <TopicList title="Keywords" items={keywords.data?.items ?? []} />
-          </div>
+          {keywords.isPending || questions.isPending ? <LoadingBlock /> : null}
+          {keywords.data && questions.data ? <TopicsEditor clientId={clientId} keywords={keywords.data.items} questions={questions.data.items} onChanged={markChanged} /> : null}
         </TabPanel>
         <TabPanel id="competitors">
-          <ul className="divide-y divide-border rounded-card bg-card shadow-card">
-            {(competitors.data?.items ?? []).map((item) => (
-              <li key={item.id} className="flex flex-wrap items-center gap-2 px-4 py-3">
-                <span className="text-body-medium text-foreground">{item.name}</span>
-                <Chip variant="caption" color="soft">
-                  {ROLE_LABELS[item.role]} · {RELATION_LABELS[item.relation]}
-                </Chip>
-                <span className="ml-auto text-caption-1-regular text-muted-foreground">{item.status}</span>
-              </li>
-            ))}
-          </ul>
+          {competitors.isPending ? <LoadingBlock /> : null}
+          {competitors.data ? <CompetitorsEditor clientId={clientId} competitors={competitors.data.items} onChanged={markChanged} /> : null}
         </TabPanel>
         <TabPanel id="integrations">
-          <div className="flex flex-col gap-3 rounded-card bg-card p-5 shadow-card">
-            <p className="text-body-medium text-foreground">YouTube owner analytics</p>
-            <p className="text-body-regular text-muted-foreground">
-              Connecting adds exact day-N views, subscribers gained, traffic sources and search terms. They&apos;re shown only to your workspace and never mixed with
-              public numbers.
-            </p>
-            <Button variant="primary" size="small" className="w-fit" onClick={() => api.integrations.youtubeConnect(clientId)}>
+          <SettingsSection
+            title="YouTube owner analytics"
+            description="Connecting adds exact day-N views, subscribers gained, traffic sources and search terms. They're shown only to your workspace and never mixed with public numbers."
+          >
+            <Button
+              variant="primary"
+              size="small"
+              className="w-fit"
+              onClick={async () => {
+                const { authorization_url } = await api.integrations.youtubeConnect(clientId);
+                if (authorization_url.startsWith("http")) window.location.assign(authorization_url);
+                else toast("Connecting isn't available with demo data", { description: "With a real workspace this opens Google's consent screen." });
+              }}
+            >
               {client.data?.oauth_connected ? "Reconnect" : "Connect with YouTube"}
             </Button>
-          </div>
+          </SettingsSection>
+        </TabPanel>
+        <TabPanel id="engine">
+          {llm.isPending ? <LoadingBlock /> : null}
+          {llm.error ? <ErrorState error={llm.error} onRetry={() => llm.refetch()} /> : null}
+          {llm.data ? <EngineSettings settings={llm.data} canEdit={me?.role === "owner"} /> : null}
         </TabPanel>
         <TabPanel id="schedule">
-          <div className="flex flex-col gap-4 rounded-card bg-card p-5 shadow-card">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-body-medium text-foreground">Default window</span>
-              <SegmentedControl
-                aria-label="Default window"
-                selectedKeys={[String(client.data?.window_days ?? 30)]}
-                onSelectionChange={(keys) => updateWindow.mutate(Number([...keys][0]) as WindowDays)}
-              >
-                <SegmentedControlItem id="7">7 days</SegmentedControlItem>
-                <SegmentedControlItem id="30">30 days</SegmentedControlItem>
-                <SegmentedControlItem id="90">90 days</SegmentedControlItem>
-              </SegmentedControl>
-            </div>
-            <p className="text-body-regular text-muted-foreground">Daily refresh at {client.data?.refresh_hour_local ?? 6}:00 local time.</p>
-            {updateWindow.isSuccess ? <InfoNote>Saved. Re-run analysis to update recommendations (about 2 minutes).</InfoNote> : null}
-          </div>
+          {notifications.isPending || !client.data ? <LoadingBlock /> : null}
+          {client.data && notifications.data ? (
+            <fieldset disabled={!canEdit} className="contents">
+              <ScheduleSettings client={client.data} notifications={notifications.data} onChanged={markChanged} />
+            </fieldset>
+          ) : null}
         </TabPanel>
       </Tabs>
     </>

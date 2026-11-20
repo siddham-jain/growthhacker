@@ -3,18 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { RiAddLine, RiArrowDownSLine } from "@remixicon/react";
+import { RiAddLine, RiArrowDownSLine, RiSearchLine } from "@remixicon/react";
 import { ThemeToggle } from "@/components/ui/primitives";
 import { clientsQuery } from "@/lib/api/queries";
 import type { Client } from "@/lib/api/types";
 import { cx } from "@/lib/cx";
-import { API_MOCK, DEMO_WORKSPACE } from "@/lib/env";
+import { API_MOCK } from "@/lib/env";
+import { AccountMenu, useWorkspaceSlug } from "./account-menu";
+import { openCommandMenu } from "./command-menu";
 import { NAV_ITEMS } from "./nav";
 import { LifecycleDot } from "./lifecycle-dot";
 
 export function Brand({ compact = false }: { compact?: boolean }) {
+  const slug = useWorkspaceSlug();
   return (
-    <Link href={`/w/${DEMO_WORKSPACE}/clients`} className="flex items-center gap-2 rounded-control px-1 py-1">
+    <Link href={`/w/${slug}/clients`} className="flex items-center gap-2 rounded-control px-1 py-1">
       <span aria-hidden className="grid size-7 place-items-center rounded-full bg-primary text-[13px] font-semibold text-primary-foreground">
         G
       </span>
@@ -25,6 +28,7 @@ export function Brand({ compact = false }: { compact?: boolean }) {
 
 function ClientSwitcher({ client }: { client: Client | undefined }) {
   const clients = useQuery(clientsQuery());
+  const slug = useWorkspaceSlug();
   return (
     <details className="group relative lg:max-xl:hidden">
       <summary className="flex cursor-pointer list-none items-center gap-2 rounded-control border border-border bg-card px-2.5 py-2 text-body-medium shadow-xs">
@@ -39,7 +43,7 @@ function ClientSwitcher({ client }: { client: Client | undefined }) {
             <span className="truncate">{item.name}</span>
           </Link>
         ))}
-        <Link href={`/w/${DEMO_WORKSPACE}/new`} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-body-regular text-muted-foreground hover:bg-muted">
+        <Link href={`/w/${slug}/new`} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-body-regular text-muted-foreground hover:bg-muted">
           <RiAddLine aria-hidden className="size-4" />
           Add client
         </Link>
@@ -81,8 +85,19 @@ export function Sidebar({ client, clientId }: { client: Client | undefined; clie
     <aside className="sticky top-0 hidden h-dvh shrink-0 flex-col gap-5 border-r border-border bg-sidebar px-3 py-4 lg:flex lg:w-16 xl:w-60">
       <Brand compact />
       <ClientSwitcher client={client} />
+      <button
+        type="button"
+        onClick={openCommandMenu}
+        title="Search and commands"
+        className="flex items-center gap-2 rounded-control border border-border bg-card px-2.5 py-1.5 text-body-regular text-muted-foreground shadow-xs transition-colors hover:text-foreground lg:max-xl:justify-center"
+      >
+        <RiSearchLine aria-hidden className="size-4 shrink-0" />
+        <span className="flex-1 text-left lg:max-xl:sr-only">Search</span>
+        <kbd className="rounded-sm bg-muted px-1.5 font-sans text-caption-2-medium text-muted-foreground lg:max-xl:hidden">⌘K</kbd>
+      </button>
       <SidebarNav clientId={clientId} />
       <div className="mt-auto flex flex-col gap-3 lg:max-xl:items-center">
+        <AccountMenu compact />
         {API_MOCK ? (
           <p className="text-caption-1-regular text-subtle-foreground lg:max-xl:hidden">Demo data · Apollo Hospitals fixtures</p>
         ) : null}

@@ -14,3 +14,15 @@ export { default as TaskRows, type TaskRow } from "@/components/kits/bui/primiti
 export { EntityChip } from "@/components/kits/bui/atoms/EntityChip";
 export { ValuePill } from "@/components/kits/bui/atoms/ValuePill";
 export { useCountUp } from "@/hooks/use-count-up";
+export { Tooltip, TooltipTrigger } from "@/components/kits/zeus/base/tooltip/tooltip";
+export { CardSurface } from "@/components/kits/zeus/application/charts/card-surface";
+export { ChartCard, ChartLegend, type ChartLegendEntry } from "@/components/kits/zeus/application/charts/chart-card";
+export { ChartAxisLabel, ChartSwatch } from "@/components/kits/zeus/application/charts/chart-cell";
+export { ChartPlot } from "@/components/kits/zeus/application/charts/chart-plot";
+export { Toaster, toast } from "@/components/kits/boardui/base/toast/toast";
+export { CommandPalette, CommandPaletteItem, CommandPaletteSection } from "@/components/kits/boardui/base/command-palette/command-palette";
+export { Popover, PopoverFooter, PopoverHeader, PopoverTrigger } from "@/components/kits/boardui/base/popover/popover";
+export { Meter } from "@/components/kits/boardui/base/meter/meter";
+export { SwitchCard } from "@/components/kits/boardui/base/switch/switch-card";
+export { Select, SelectItem } from "@/components/kits/boardui/base/select/select";
+export { DrawerFooter } from "@/components/kits/boardui/base/drawer/drawer";

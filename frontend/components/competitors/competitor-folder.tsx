@@ -69,8 +69,9 @@ export function CompetitorFolder({ name, href, previews, size = "md", ...folder 
   );
   if (!href) return card;
   return (
-    <Link href={href} aria-label={`${name}: open competitor analysis`} className="block rounded-[24px] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
+    <Link href={href} className="block rounded-[24px] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
       {card}
+      <span className="sr-only">Open competitor analysis</span>
     </Link>
   );
 }

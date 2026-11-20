@@ -57,24 +57,51 @@
   --color-switch-on-chip-end: var(--primary);
 
   --color-status-blue-background: color-mix(in oklab, var(--info) 14%, var(--card));
-  --color-status-blue-text: var(--info);
+  --color-status-blue-text: color-mix(in oklab, var(--info) 82%, var(--foreground));
   --color-status-cyan-background: color-mix(in oklab, var(--lens-conversion) 14%, var(--card));
-  --color-status-cyan-text: var(--lens-conversion);
+  --color-status-cyan-text: color-mix(in oklab, var(--lens-conversion) 82%, var(--foreground));
   --color-status-lime-background: color-mix(in oklab, var(--success) 14%, var(--card));
-  --color-status-lime-text: var(--success);
+  --color-status-lime-text: color-mix(in oklab, var(--success) 82%, var(--foreground));
   --color-status-orange-background: color-mix(in oklab, var(--warning) 14%, var(--card));
-  --color-status-orange-text: var(--warning);
+  --color-status-orange-text: color-mix(in oklab, var(--warning) 82%, var(--foreground));
   --color-status-yellow-background: color-mix(in oklab, var(--warning) 10%, var(--card));
-  --color-status-yellow-text: var(--warning);
+  --color-status-yellow-text: color-mix(in oklab, var(--warning) 82%, var(--foreground));
   --color-status-purple-background: color-mix(in oklab, var(--chart-5) 14%, var(--card));
   --color-status-purple-text: var(--chart-5);
   --color-status-rose-background: color-mix(in oklab, var(--danger) 12%, var(--card));
-  --color-status-rose-text: var(--danger);
+  --color-status-rose-text: color-mix(in oklab, var(--danger) 82%, var(--foreground));
   --color-status-dot-green-halo: color-mix(in oklab, var(--success) 20%, transparent);
   --color-status-dot-yellow-halo: color-mix(in oklab, var(--warning) 22%, transparent);
   --color-status-dot-indigo-halo: color-mix(in oklab, var(--info) 20%, transparent);
 
+  --color-background-tertiary-hover: var(--border-strong);
+  --color-background-tertiary-error: color-mix(in oklab, var(--danger) 12%, var(--card));
+  --color-background-quaternary-hover: var(--border-strong);
+  --color-foreground-icon-error: var(--danger);
+  --color-text-disabled: var(--subtle-foreground);
+  --color-text-error-primary: var(--danger);
+  --color-text-error-placeholder: color-mix(in oklab, var(--danger) 60%, var(--card));
+  --color-input-disabled-background: var(--muted);
+  --color-input-disabled-foreground: var(--subtle-foreground);
+  --color-input-disabled-text: var(--subtle-foreground);
+  --color-dropdown-item-hover-background: var(--muted);
+  --color-kbd-background: var(--secondary);
+  --color-kbd-subtle-background: var(--muted);
+  --color-kbd-foreground: var(--muted-foreground);
+  --color-notification-information-background: color-mix(in oklab, var(--info) 12%, var(--card));
+  --color-notification-information-foreground: var(--info);
+  --color-notification-success-background: color-mix(in oklab, var(--success) 12%, var(--card));
+  --color-notification-success-foreground: var(--success);
+  --color-notification-center-background: var(--card);
+
+  --color-chart-track: var(--muted);
+  --color-chart-cursor: var(--border-strong);
+  --color-chart-1-active: var(--chart-1);
+  --color-chart-6-active: var(--chart-5);
+  --color-chart-8-active: var(--chart-5);
+
   --radius-2lg: 10px;
+  --radius-notification-card: 10px;
 
   --shadow-2xs: 0 1px rgb(0 0 0 / 0.05);
   --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.06);
@@ -87,6 +114,15 @@
   --text-body-medium: 0.875rem;
   --text-body-medium--line-height: 1.25rem;
   --text-body-medium--font-weight: 500;
+  --text-body-2-regular: 0.8125rem;
+  --text-body-2-regular--line-height: 1.125rem;
+  --text-body-2-regular--font-weight: 400;
+  --text-body-2-medium: 0.8125rem;
+  --text-body-2-medium--line-height: 1.125rem;
+  --text-body-2-medium--font-weight: 500;
+  --text-title-1-medium: 1.5rem;
+  --text-title-1-medium--line-height: 2.125rem;
+  --text-title-1-medium--font-weight: 500;
   --text-caption-1-regular: 0.75rem;
   --text-caption-1-regular--line-height: 1rem;
   --text-caption-1-regular--letter-spacing: 0.15px;
@@ -290,4 +326,23 @@
 
 ::view-transition-new(root) {
   z-index: 2;
+}
+
+@keyframes number-fade {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-number-fade {
+  animation: number-fade 220ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-number-fade {
+    animation: none;
+  }
 }

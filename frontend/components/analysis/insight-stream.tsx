@@ -1,5 +1,7 @@
 "use client";
 
+import type { ConfidenceLabel, RecType } from "@/lib/api/types";
+
 import { ConfidenceMeter } from "@/components/ui/confidence-meter";
 import { TypeChip } from "@/components/ui/chips";
 import { EntityChip, ValuePill } from "@/components/ui/primitives";
@@ -44,8 +46,8 @@ function InsightRow({ insight }: { insight: InsightView }) {
       return (
         <div className="flex flex-col gap-1.5 rounded-control bg-card p-3 shadow-card">
           <div className="flex flex-wrap items-center gap-2">
-            <TypeChip type={payload.type} />
-            <ConfidenceMeter confidence={{ label: payload.confidence_label, outliers: 0, channels: 0 }} compact />
+            <TypeChip type={payload.type as RecType} />
+            <ConfidenceMeter confidence={{ label: payload.confidence_label as ConfidenceLabel, outliers: 0, channels: 0 }} compact />
           </div>
           <p className="text-body-medium text-foreground">{payload.summary}</p>
         </div>

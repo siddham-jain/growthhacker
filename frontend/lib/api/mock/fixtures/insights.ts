@@ -1,5 +1,8 @@
 import type {
+  AgeMethod,
   CreatorView,
+  EarlySignalView,
+  InsertionOp,
   NewsOpportunityView,
   OwnPerformance,
   RecommendationOut,
@@ -7,7 +10,7 @@ import type {
   TrendingReport,
   WhiteSpaceNote,
 } from "../../types";
-import { channels, daysAgo, hoursFromNow, NOW, reference, RUN_ID } from "./base";
+import { channels, curve, daysAgo, hoursFromNow, NOW, reference, RUN_ID, unifiedDiff } from "./base";
 import { videos } from "./videos";
 
 const base = { window_days: 30 as const, generated_at: NOW, run_id: RUN_ID, rendered_by: "llm" as const };
@@ -88,8 +91,8 @@ export const recommendations: RecommendationOut[] = [
 ];
 
 export const whiteSpace: WhiteSpaceNote[] = [
-  { buyer_question: "Is proton therapy right for my cancer?", videos_checked: 412, channels_checked: 14, window_days: 90 },
-  { buyer_question: "Does insurance cover robotic surgery?", videos_checked: 412, channels_checked: 14, window_days: 90 },
+  { buyer_question_id: "bq_proton_fit", text: "Is proton therapy right for my cancer?", videos_checked: 412, channels_checked: 14, window_days: 90, widest_window_checked: 90 },
+  { buyer_question_id: "bq_insurance", text: "Does insurance cover robotic surgery?", videos_checked: 412, channels_checked: 14, window_days: 90, widest_window_checked: 90 },
 ];
 
 export const newsOpportunities: NewsOpportunityView[] = [
@@ -100,7 +103,7 @@ export const newsOpportunities: NewsOpportunityView[] = [
     summary: "Explainer: what the new CGHS cardiac package rates mean for bypass and angioplasty patients",
     relevance: 0.88,
     offering_refs: ["Cardiac sciences"],
-    demand_check: { youtube_results_7d: 6, outliers: 3 },
+    demand_check: { youtube_results_7d: 6, outliers: 3, status: "checked" },
     status: "new",
     urgency: "now",
     expires_at: hoursFromNow(40),
@@ -114,7 +117,7 @@ export const newsOpportunities: NewsOpportunityView[] = [
     summary: "Short: which children's brain tumours can now be treated with proton therapy",
     relevance: 0.81,
     offering_refs: ["Proton therapy"],
-    demand_check: { youtube_results_7d: 1, outliers: 0 },
+    demand_check: { youtube_results_7d: 0, outliers: 0, status: "checked" },
     status: "new",
     urgency: "this_week",
     expires_at: hoursFromNow(110),
@@ -128,7 +131,7 @@ export const newsOpportunities: NewsOpportunityView[] = [
     summary: "Dengue warning signs and when to go to hospital, by an Apollo physician",
     relevance: 0.64,
     offering_refs: ["Emergency care"],
-    demand_check: { youtube_results_7d: 2, outliers: 1 },
+    demand_check: { youtube_results_7d: 2, outliers: 1, status: "checked" },
     status: "new",
     urgency: "now",
     expires_at: hoursFromNow(20),
@@ -137,16 +140,72 @@ export const newsOpportunities: NewsOpportunityView[] = [
   },
 ];
 
+const PROTON_DESCRIPTION = [
+  "Proton therapy targets tumours with high precision, sparing healthy tissue around them. Dr. Srinivas explains who it helps and how a course of treatment works.",
+  "",
+  "00:00 What proton therapy is",
+  "01:42 Which cancers it treats",
+  "04:10 What a treatment day looks like",
+  "06:55 Costs and insurance",
+  "",
+  "Book a consultation: https://www.apollohospitals.com/proton-cancer-centre",
+  "Call 1860-500-1066",
+  "",
+  "#ProtonTherapy #CancerCare #ApolloHospitals",
+].join("\n");
+
+const STROKE_DESCRIPTION = [
+  "BE FAST is the easiest way to remember the signs of a stroke: Balance, Eyes, Face, Arms, Speech, Time.",
+  "Every minute counts. Our neurologists explain what to do while you wait for help.",
+  "",
+  "#Stroke #BEFAST #ApolloHospitals",
+].join("\n");
+
+const CAMPUS_DESCRIPTION = [
+  "Take a walk through our new Navi Mumbai campus: the emergency wing, the cardiac ICU and the day-care suites.",
+  "",
+  "Visit us:",
+  "https://www.apollohospitals.com/navimumbai-old",
+  "",
+  "#NaviMumbai #ApolloHospitals",
+].join("\n");
+
+function op(id: string, kind: InsertionOp["kind"], position: InsertionOp["position"], anchor: string, text: string, keywords: string[] = [], oldText: string | null = null): InsertionOp {
+  return {
+    op_id: id,
+    kind,
+    position,
+    anchor: { anchor_excerpt: anchor, anchor_hash: id, strategy: "line" },
+    claim_level: "L1_context",
+    phrased_by: "template",
+    text,
+    text_bytes: new TextEncoder().encode(text).length,
+    keywords_added: keywords,
+    hashtags_added: [],
+    trigger_ids: [],
+    old_text: oldText,
+  };
+}
+
+const PROTON_AFTER = PROTON_DESCRIPTION.replace("works.\n\n", "works.\nNow also used for some children's brain tumours. Ask our team whether it fits your case.\n\n");
+const STROKE_AFTER = `Emergency? Call 1066 for an Apollo ambulance.\n${STROKE_DESCRIPTION}`;
+const CAMPUS_AFTER = CAMPUS_DESCRIPTION.replace("https://www.apollohospitals.com/navimumbai-old", "https://www.apollohospitals.com/locations/navi-mumbai");
+
+const refreshBase = { advisories: [], expires_at: hoursFromNow(24 * 20), description_changed: false };
+
 export const refreshSuggestions: RefreshSuggestionView[] = [
   {
     id: "rf_proton",
-    video: { video_id: videos.apolloProton.video_id, title: videos.apolloProton.title, published_at: videos.apolloProton.published_at, url: "https://www.youtube.com/watch?v=ap-proton-therapy", views: 18_200 },
+    video: { video_id: videos.apolloProton.video_id, title: videos.apolloProton.title, published_at: videos.apolloProton.published_at, url: "https://www.youtube.com/watch?v=ap-proton-therapy" },
     warranted_because: ["'Proton therapy for children' appears in 3 niche outliers this month; your video doesn't mention it."],
     operations: [
-      { op_id: "op1", kind: "insert", position: "after_first_paragraph", anchor_excerpt: "Proton therapy targets tumours with high precision…", text: "Now also used for some children's brain tumours. Ask our team whether it fits your case.", keywords_added: ["children's brain tumours"] },
+      op("op1", "insert", "after_first_paragraph", "Proton therapy targets tumours with high precision…", "Now also used for some children's brain tumours. Ask our team whether it fits your case.", ["children's brain tumours"]),
     ],
     inserted_bytes: 92,
     resulting_bytes: 1_486,
+    ...refreshBase,
+    original_description_hash: "h_proton",
+    preview_diff: unifiedDiff(PROTON_DESCRIPTION, PROTON_AFTER),
     expected_effect: "Helps this video show up for searches about proton therapy for children. No view promise.",
     basis: "keyword",
     review_required: true,
@@ -155,13 +214,16 @@ export const refreshSuggestions: RefreshSuggestionView[] = [
   },
   {
     id: "rf_stroke_cta",
-    video: { video_id: videos.apolloStroke.video_id, title: videos.apolloStroke.title, published_at: videos.apolloStroke.published_at, url: "https://www.youtube.com/watch?v=ap-stroke-signs", views: 9_800 },
+    video: { video_id: videos.apolloStroke.video_id, title: videos.apolloStroke.title, published_at: videos.apolloStroke.published_at, url: "https://www.youtube.com/watch?v=ap-stroke-signs" },
     warranted_because: ["Description has no way to reach you: no booking link or helpline."],
     operations: [
-      { op_id: "op2", kind: "insert", position: "top_line", anchor_excerpt: "BE FAST is the easiest way to remember…", text: "Emergency? Call 1066 for an Apollo ambulance.", keywords_added: [] },
+      op("op2", "insert", "top_line", "BE FAST is the easiest way to remember…", "Emergency? Call 1066 for an Apollo ambulance."),
     ],
     inserted_bytes: 47,
     resulting_bytes: 802,
+    ...refreshBase,
+    original_description_hash: "h_stroke",
+    preview_diff: unifiedDiff(STROKE_DESCRIPTION, STROKE_AFTER),
     expected_effect: "Gives viewers a direct next step. No view promise.",
     basis: "rule_based",
     review_required: false,
@@ -170,13 +232,16 @@ export const refreshSuggestions: RefreshSuggestionView[] = [
   },
   {
     id: "rf_campus_link",
-    video: { video_id: videos.apolloTour.video_id, title: videos.apolloTour.title, published_at: videos.apolloTour.published_at, url: "https://www.youtube.com/watch?v=ap-campus-tour", views: 3_100 },
+    video: { video_id: videos.apolloTour.video_id, title: videos.apolloTour.title, published_at: videos.apolloTour.published_at, url: "https://www.youtube.com/watch?v=ap-campus-tour" },
     warranted_because: ["A link in the description returns 404."],
     operations: [
-      { op_id: "op3", kind: "link_fix", position: "before_links_block", anchor_excerpt: "Visit us:", old_text: "https://www.apollohospitals.com/navimumbai-old", text: "https://www.apollohospitals.com/locations/navi-mumbai", keywords_added: [] },
+      op("op3", "link_fix", "before_links_block", "Visit us:", "https://www.apollohospitals.com/locations/navi-mumbai", [], "https://www.apollohospitals.com/navimumbai-old"),
     ],
     inserted_bytes: 6,
     resulting_bytes: 640,
+    ...refreshBase,
+    original_description_hash: "h_campus",
+    preview_diff: unifiedDiff(CAMPUS_DESCRIPTION, CAMPUS_AFTER),
     expected_effect: "Fixes a broken link. No view promise.",
     basis: "rule_based",
     review_required: false,
@@ -185,39 +250,95 @@ export const refreshSuggestions: RefreshSuggestionView[] = [
   },
 ];
 
+function creator(
+  channel: CreatorView["channel"],
+  group: CreatorView["group"],
+  position: number,
+  matchShare: number,
+  topics: number,
+  uploads: number,
+  medianRatio: number,
+  summary: string,
+  refs: CreatorView["reference_videos"],
+  collaborations: CreatorView["collaborations"] = [],
+): CreatorView {
+  return {
+    channel,
+    group,
+    position,
+    match_share: matchShare,
+    topics_covered: topics,
+    uploads_90d: uploads,
+    subscriber_band: (channel.subscriber_count ?? 0) >= 100_000 ? "100K–1M subscribers" : "10K–100K subscribers",
+    summary,
+    performance: { comparison_age_days: 7, median_outlier_ratio: medianRatio, median_views_at_age: null, niche_median_views_at_age: 12_000 },
+    consistency: { gap_cv: 0.4, hit_rate: 0.4, last_upload_at: daysAgo(3), median_gap_days: Math.round(90 / uploads) },
+    collaborations,
+    reference_videos: refs,
+    recommendation_id: `rec_creator_${position}`,
+    sort: "match_share",
+    sort_value: matchShare,
+  };
+}
+
+const cardioDoc = { ...channels.doctorExplains, channel_id: "UCcardiodoc000000001", title: "Cardio Doc Ravi", handle: "@CardioDocRavi", subscriber_count: 310_000 };
+const jointSmart = { ...channels.healthWithAsha, channel_id: "UCjointsmart00000001", title: "Joint Smart", handle: "@JointSmart", subscriber_count: 48_000 };
+
 export const creators: CreatorView[] = [
+  creator(channels.drHeartTalks, "strong", 1, 0.64, 2, 13, 1.8, "Heart attack signs and bypass explainers, often in Hindi.", [reference(videos.heartSmartHindi, "creator")], [
+    { video_id: "hs-collab-1", competitor_channel_id: channels.fortis.channel_id, competitor_name: "Fortis Healthcare", kind: "mentions_competitor", matched_on: "handle", matched_token: "@FortisHealthcare", published_at: daysAgo(39) },
+  ]),
+  creator(channels.healthWithAsha, "strong", 2, 0.55, 2, 11, 1.3, "Health checkups and women's health for a general audience.", [reference(videos.ashaCheckup, "creator")], [
+    { video_id: "ha-collab-1", competitor_channel_id: channels.max.channel_id, competitor_name: "Max Healthcare", kind: "disclosed_paid_promotion", matched_on: "brand_name", matched_token: "Max Healthcare", published_at: daysAgo(79) },
+  ]),
+  creator(cardioDoc, "related", 3, 0.39, 2, 24, 1.4, "A cardiologist answering bypass and angioplasty questions.", [reference(videos.medantaAngioVsBypass, "creator")]),
+  creator(jointSmart, "related", 4, 0.44, 1, 9, 1.1, "Knee replacement recovery stories.", [reference(videos.manipalKneeCost, "creator")]),
+];
+
+export const earlySignals: EarlySignalView[] = [
   {
-    channel: channels.drHeartTalks,
-    rank: 1,
-    subscriber_band: "100K–1M subscribers",
-    cadence_label: "posts every 4 days",
-    relevance: { matched_videos: 9, recent_videos: 14, topics: ["heart attack signs", "bypass surgery"] },
-    recent_performance_vs_niche: "median 1.8× their own normal",
-    consistency: "posted 13 times in 90 days · 46% of videos beat their normal",
-    collaborations: [{ video_id: "hs-collab-1", competitor_name: "Fortis Healthcare", label: "mention", date: daysAgo(39) }],
-    reference_videos: [reference(videos.heartSmartHindi, "creator")],
-    recommendation_id: null,
+    id: "es_proton",
+    opportunity_id: "news_proton_approval",
+    key_entity: "Proton therapy for paediatric brain tumours",
+    angle: "Short: which children's brain tumours can now be treated with proton therapy",
+    urgency: "this_week",
+    expires_at: hoursFromNow(110),
+    window_days: 7,
+    confidence: { label: "Low", outliers: 0, channels: 0, basis: "first_mover", caps_applied: [], matching_videos: 0, rule_id: "news_v1" },
+    reference_videos: [],
+    sources: [{ publisher: "cdsco.gov.in", url: "https://example.org/proton", title: "New proton therapy indication approved for paediatric brain tumours", published_at: daysAgo(1.2), tier: "tier1_primary" }],
+    statements: ["Approval covers two tumour types in children under 14."],
   },
   {
-    channel: channels.healthWithAsha,
-    rank: 2,
-    subscriber_band: "10K–100K subscribers",
-    cadence_label: "posts weekly",
-    relevance: { matched_videos: 6, recent_videos: 11, topics: ["health checkups", "women's health"] },
-    recent_performance_vs_niche: "median 1.3× their own normal",
-    consistency: "posted 11 times in 90 days · 36% of videos beat their normal",
-    collaborations: [{ video_id: "ha-collab-1", competitor_name: "Max Healthcare", label: "disclosed_paid_promotion", date: daysAgo(79) }],
-    reference_videos: [reference(videos.ashaCheckup, "creator")],
-    recommendation_id: null,
+    id: "es_dengue",
+    opportunity_id: "news_dengue",
+    key_entity: "Dengue in Hyderabad and Chennai",
+    angle: "Dengue warning signs and when to go to hospital, by an Apollo physician",
+    urgency: "now",
+    expires_at: hoursFromNow(20),
+    window_days: 7,
+    confidence: { label: "Low", outliers: 1, channels: 1, basis: "first_mover", caps_applied: [], matching_videos: 0, rule_id: "news_v1" },
+    reference_videos: [reference(videos.practoSymptoms, "niche")],
+    sources: [{ publisher: "thehindu.com", url: "https://example.org/dengue", title: "Dengue cases rise across Hyderabad and Chennai after late rains", published_at: daysAgo(0.3), tier: "tier2_established" }],
+    statements: [],
   },
 ];
+
+const ownVideos = [videos.apolloProton, videos.apolloStroke, videos.apolloTour, videos.apolloCheckup, videos.apolloTransplantStory, videos.apolloKidneyDiet, videos.apolloKnee, videos.apolloDiabetes, videos.apolloAsk];
+
 
 export const ownPerformance: OwnPerformance = {
   youtube_public: {
     median_ratio_window: 1.3,
     median_ratio_prev_window: 1.1,
     comparison_age_days: 7,
-    videos_in_window: 9,
+    videos_in_window: ownVideos.length,
+    method_mix: ownVideos.reduce<Partial<Record<AgeMethod, number>>>((mix, item) => ({ ...mix, [item.views_at_age.method]: (mix[item.views_at_age.method] ?? 0) + 1 }), {}),
+    videos: ownVideos
+      .map((item) => ({ video_id: item.video_id, title: item.title, published_at: item.published_at, ratio: item.outlier_ratio, method: item.views_at_age.method, segment: item.segment }))
+      .sort((a, b) => Date.parse(a.published_at) - Date.parse(b.published_at)),
+    baseline: { age_days: 7, views: 2_900, method: "observed", n: 24 },
+    curves: [videos.apolloProton, videos.apolloStroke, videos.apolloTransplantStory].map(curve),
     best: [videos.apolloProton, videos.apolloStroke, videos.apolloTransplantStory],
     worst: [videos.apolloTour, videos.apolloCheckup],
   },
@@ -227,13 +348,13 @@ export const ownPerformance: OwnPerformance = {
 
 export const trending: TrendingReport = {
   items: [
-    { ...videos.practoSymptoms, velocity_per_hour: 1_840 },
-    { ...videos.doctorExplainsRobotic, velocity_per_hour: 1_120 },
-    { ...videos.medantaAngioVsBypass, velocity_per_hour: 640 },
+    { ...videos.practoSymptoms, views_per_day: 44_160 },
+    { ...videos.doctorExplainsRobotic, views_per_day: 26_880 },
+    { ...videos.medantaAngioVsBypass, views_per_day: 15_360 },
   ],
   rising_topics: [
-    { label: "Cost explainers", uploads_prev: 3, uploads_now: 7, outliers_prev: 1, outliers_now: 4 },
-    { label: "Second opinions", uploads_prev: 1, uploads_now: 4, outliers_prev: 0, outliers_now: 2 },
+    { topic_ref_id: "kw_bypass", label: "Cost explainers", uploads_prev: 3, uploads_now: 7, outliers_prev: 1, outliers_now: 4 },
+    { topic_ref_id: "kw_second_opinion", label: "Second opinions", uploads_prev: 1, uploads_now: 4, outliers_prev: 0, outliers_now: 2 },
   ],
 };
 

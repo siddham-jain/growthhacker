@@ -1,47 +1,76 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ReferenceStrip } from "@/components/cards/reference-strip";
-import { RefreshCard } from "@/components/cards/refresh-card";
+import { useState } from "react";
+import { RefreshList } from "@/components/cards/refresh-list";
+import { VideoList } from "@/components/cards/video-list";
+import { PerformanceChart } from "@/components/charts/performance-chart";
+import { ViewsAtAgeChart } from "@/components/charts/views-at-age-chart";
+import { VideoEvidenceDrawer } from "@/components/evidence/evidence-drawer";
 import { FreshnessLine } from "@/components/shell/freshness-line";
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState, ErrorState, LoadingBlock } from "@/components/states/states";
 import { Button } from "@/components/ui/button";
 import { OriginChip } from "@/components/ui/chips";
-import { Tab, TabList, TabPanel, Tabs } from "@/components/ui/primitives";
+import { Tab, TabList, TabPanel, Tabs, toast } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
 import { clientQuery, ownPerformanceQuery, refreshQuery } from "@/lib/api/queries";
-import type { ReferenceVideo, VideoMetricsView } from "@/lib/api/types";
-import { formatRatio } from "@/lib/format";
+import type { VideoMetricsView } from "@/lib/api/types";
 import { useTabParam, useViewParams } from "@/lib/url-state";
 import { useClientId } from "@/lib/use-client-id";
 
 const TABS = ["performance", "refresh", "conversion"] as const;
 
-function asReference(video: VideoMetricsView): ReferenceVideo {
-  return {
-    video_id: video.video_id,
-    url: `https://www.youtube.com/watch?v=${video.video_id}`,
-    title: video.title,
-    channel: video.channel_title,
-    channel_id: video.channel_id,
-    channel_role: "own",
-    published_at: video.published_at,
-    views_day7: video.views_at_age.views,
-    views_at_age: video.views_at_age,
-    outlier_ratio: video.outlier_ratio,
-  };
+async function connect(clientId: string) {
+  try {
+    const { authorization_url } = await api.integrations.youtubeConnect(clientId);
+    if (authorization_url.startsWith("http")) window.location.assign(authorization_url);
+    else toast("Connecting isn't available with demo data", { description: "With a real workspace this opens Google's consent screen." });
+  } catch {
+    toast.error("Couldn't start connecting. Try again.");
+  }
+}
+
+function ConnectPanel({ clientId }: { clientId: string }) {
+  return (
+    <section className="flex flex-col gap-3 rounded-card bg-card p-5 shadow-card">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-body-medium text-foreground">Subscribers gained, traffic sources, search terms</h3>
+        <OriginChip origin="YouTube Analytics (owner)" />
+      </div>
+      <p className="text-body-regular text-muted-foreground">
+        Connect your channel to see what brings viewers and which searches find you. Only your workspace sees these, and they stay separate from public YouTube numbers.
+      </p>
+      <Button variant="primary" size="small" className="w-fit" onClick={() => connect(clientId)}>
+        Connect with YouTube
+      </Button>
+    </section>
+  );
 }
 
 export default function ChannelPage() {
   const clientId = useClientId();
   const { windowDays, lens } = useViewParams();
   const [tab, setTab] = useTabParam(TABS, lens === "conversion" ? "conversion" : "performance");
+  const [inspected, setInspected] = useState<VideoMetricsView | null>(null);
   const client = useQuery(clientQuery(clientId));
   const own = useQuery(ownPerformanceQuery(clientId, windowDays));
   const refresh = useQuery(refreshQuery(clientId));
   const report = own.data?.data.youtube_public;
   const suggestions = (refresh.data?.data.items ?? []).filter((item) => item.basis !== "rule_based");
+  const openCount = suggestions.filter((item) => item.status === "open").length;
+
+  if (client.data && !client.data.own_channel) {
+    return (
+      <>
+        <PageHeader title="Your channel" subtitle="How are your videos doing against your own normal?" />
+        <EmptyState
+          title="No YouTube channel yet"
+          body="That's fine. We compare against similar channels until you have your own baseline. Add your channel in Settings once it's live."
+        />
+      </>
+    );
+  }
 
   return (
     <>
@@ -50,7 +79,9 @@ export default function ChannelPage() {
       <Tabs selectedKey={tab} onSelectionChange={(key) => setTab(key as (typeof TABS)[number])}>
         <TabList aria-label="Your channel sections">
           <Tab id="performance">Performance</Tab>
-          <Tab id="refresh" count={suggestions.length}>Refresh suggestions</Tab>
+          <Tab id="refresh" count={openCount}>
+            Refresh suggestions
+          </Tab>
           <Tab id="conversion">Conversion</Tab>
         </TabList>
         <TabPanel id="performance">
@@ -58,24 +89,25 @@ export default function ChannelPage() {
           {own.error ? <ErrorState error={own.error} onRetry={() => own.refetch()} /> : null}
           {report ? (
             <div className="flex flex-col gap-6">
-              <div className="flex flex-wrap items-end gap-6 rounded-card bg-card p-5 shadow-card">
-                <div>
-                  <OriginChip origin="YouTube public" />
-                  <p className="mt-2 text-metric text-foreground">{formatRatio(report.median_ratio_window)}</p>
-                  <p className="text-caption-1-regular text-muted-foreground">
-                    median of your last {report.videos_in_window} videos vs your normal, views at day {report.comparison_age_days}
-                  </p>
-                </div>
-                <p className="text-body-regular text-muted-foreground">Window before: {formatRatio(report.median_ratio_prev_window)}</p>
+              <div className="grid items-start gap-4 xl:grid-cols-2">
+                <PerformanceChart report={report} />
+                <ViewsAtAgeChart
+                  curves={report.curves}
+                  title="How your recent videos picked up views"
+                  baseline={report.baseline}
+                  baselineLabel={report.baseline ? `your normal at day ${report.baseline.age_days}, the median of ${report.baseline.n} videos` : "no baseline yet"}
+                />
               </div>
-              <section>
-                <h2 className="mb-3 text-eyebrow text-muted-foreground">Best against your normal</h2>
-                <ReferenceStrip videos={report.best.map(asReference)} />
+              <section aria-labelledby="best-heading">
+                <h2 id="best-heading" className="mb-3 text-eyebrow text-muted-foreground">
+                  Best against your normal
+                </h2>
+                <VideoList videos={report.best} onInspect={setInspected} />
               </section>
               <details className="rounded-card bg-card p-4 shadow-card">
                 <summary className="cursor-pointer text-body-medium">Below your normal · {report.worst.length}</summary>
                 <div className="mt-3">
-                  <ReferenceStrip videos={report.worst.map(asReference)} />
+                  <VideoList videos={report.worst} onInspect={setInspected} />
                 </div>
               </details>
             </div>
@@ -84,28 +116,41 @@ export default function ChannelPage() {
         <TabPanel id="refresh">
           <div className="flex flex-col gap-4">
             {refresh.isPending ? <LoadingBlock /> : null}
-            {suggestions.map((suggestion) => (
-              <RefreshCard key={suggestion.id} suggestion={suggestion} />
-            ))}
+            {suggestions.length ? (
+              <p className="text-body-regular text-muted-foreground">Your niche moves fast enough that a line or two can help old videos show up for new searches. We only ever add text; nothing you wrote is removed.</p>
+            ) : null}
+            {suggestions.length ? <RefreshList clientId={clientId} suggestions={suggestions} /> : null}
             {refresh.data && !suggestions.length ? (
               <EmptyState title="No updates needed" body="Your descriptions don't need updates right now. Businesses like yours rarely need them; we check monthly." />
             ) : null}
           </div>
         </TabPanel>
         <TabPanel id="conversion">
-          {client.data?.oauth_connected ? null : (
-            <EmptyState
-              title="Connect your channel"
-              body="Connect your channel to see subscribers gained, traffic sources and search terms. Only your workspace sees them, and they stay separate from public YouTube numbers."
-              action={
-                <Button variant="primary" size="small" onClick={() => api.integrations.youtubeConnect(clientId)}>
-                  Connect with YouTube
-                </Button>
-              }
-            />
-          )}
+          <div className="grid gap-4 lg:grid-cols-3">
+            {client.data?.oauth_connected && own.data?.data.youtube_analytics ? (
+              <section className="flex flex-col gap-2 rounded-card bg-card p-5 shadow-card">
+                <OriginChip origin="YouTube Analytics (owner)" />
+                <h3 className="text-body-medium text-foreground">Searches that found you</h3>
+                <p className="text-body-regular text-muted-foreground">{own.data.data.youtube_analytics.top_search_terms.slice(0, 5).join(" · ") || "No search terms yet"}</p>
+                <p className="text-caption-1-regular text-muted-foreground">last {windowDays} days · only your workspace sees this</p>
+              </section>
+            ) : (
+              <ConnectPanel clientId={clientId} />
+            )}
+            <section className="flex flex-col gap-2 rounded-card bg-card p-5 shadow-card">
+              <OriginChip origin="YouTube public" />
+              <h3 className="text-body-medium text-foreground">Calls to action in your descriptions</h3>
+              <p className="text-body-regular text-muted-foreground">Booking links, helplines and chapters, checked on every recent video. Fixes live in Channel hygiene.</p>
+            </section>
+            <section className="flex flex-col gap-2 rounded-card bg-card p-5 shadow-card">
+              <OriginChip origin="Website" />
+              <h3 className="text-body-medium text-foreground">Website actions</h3>
+              <p className="text-body-regular text-muted-foreground">Bookings and calls happen on your site, not on YouTube. We list them in your profile but never mix them into video numbers.</p>
+            </section>
+          </div>
         </TabPanel>
       </Tabs>
+      <VideoEvidenceDrawer video={inspected} onClose={() => setInspected(null)} />
     </>
   );
 }

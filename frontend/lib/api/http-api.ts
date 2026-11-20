@@ -1,8 +1,27 @@
-import type { GrowthHackerApi, RecommendationPage, TopicApi } from "./contract";
+import {
+  toClient,
+  toCompetitorDetail,
+  toEnvelope,
+  toEvent,
+  toGapMatrix,
+  toOutlierPage,
+  toOwnPerformance,
+  toProfilePatch,
+  toProfileView,
+  toRecommendation,
+  toRecommendationPage,
+  toRun,
+  toScorecard,
+  toTrending,
+} from "./adapters";
+import type { GrowthHackerApi, TopicApi } from "./contract";
 import { request, send } from "./http";
-import type { BuyerQuestionItem, KeywordItem, PipelineRun } from "./types";
+import type { components } from "./schema";
+import type { BuyerQuestionCreate, BuyerQuestionItem, KeywordCreate, KeywordItem, Page, ResultEnvelope } from "./types";
 
-function topicApi<T>(resource: "keywords" | "buyer-questions"): TopicApi<T> {
+type Wire = components["schemas"];
+
+function topicApi<T, C>(resource: "keywords" | "buyer-questions"): TopicApi<T, C> {
   const base = (clientId: string) => `/clients/${clientId}/${resource}`;
   return {
     list: (clientId, status) => request("GET", base(clientId), { query: { status } }),
@@ -13,105 +32,146 @@ function topicApi<T>(resource: "keywords" | "buyer-questions"): TopicApi<T> {
   };
 }
 
+// the profile patch is written against the domain profile last read, so keep that copy per client
+const rawProfiles = new Map<string, Wire["BusinessProfile"]>();
+
+async function sheets(clientId: string, windowDays: number) {
+  return request<ResultEnvelope<Wire["CompetitorSheet"][]>>("GET", `/clients/${clientId}/analytics/competitors`, { query: { window_days: windowDays } });
+}
+
+const run = async (pending: Promise<Wire["RunOut"]>) => toRun(await pending);
+
 export const httpApi: GrowthHackerApi = {
+  auth: {
+    login: (input) => request("POST", "/auth/login", { body: input }),
+    logout: () => request("POST", "/auth/logout"),
+    me: () => request("GET", "/me"),
+    switchWorkspace: (workspaceId) => request("POST", "/auth/workspace", { body: { workspace_id: workspaceId } }),
+  },
   clients: {
-    list: (query) => request("GET", "/clients", { query: { ...query } }),
-    create: (input, idempotencyKey) => request("POST", "/clients", { body: input, idempotencyKey }),
-    get: (clientId) => request("GET", `/clients/${clientId}`),
-    update: (clientId, patch, version) =>
-      request("PATCH", `/clients/${clientId}`, { body: patch, ifMatch: version, contentType: "application/merge-patch+json" }),
+    list: async (query) => {
+      const page = await request<Wire["Page_ClientOut_"]>("GET", "/clients", { query: { ...query } });
+      return { items: page.items.map(toClient), next_cursor: page.next_cursor ?? null, limit: page.limit, total: page.total ?? null };
+    },
+    create: async (input, idempotencyKey) => {
+      const created = await request<Wire["ClientCreatedOut"]>("POST", "/clients", { body: input, idempotencyKey });
+      return { client: toClient(created.client), onboarding_run: created.onboarding_run ? toRun(created.onboarding_run) : null };
+    },
+    get: async (clientId) => toClient(await request("GET", `/clients/${clientId}`)),
+    update: async (clientId, patch, version) => toClient((await request<Wire["ClientUpdateOut"]>("PATCH", `/clients/${clientId}`, { body: patch, ifMatch: version })).client),
+    attachChannel: async (clientId, channelId) => toClient(await request("POST", `/clients/${clientId}/channel/attach`, { body: { channel_id: channelId } })),
     remove: (clientId) => request("DELETE", `/clients/${clientId}`),
-    resolveChannel: (clientId, channelRef) =>
-      request("POST", `/clients/${clientId}/channel/resolve`, { body: { channel_ref: channelRef } }),
-    restartOnboarding: (clientId, input) => request("POST", `/clients/${clientId}/onboarding`, { body: input }),
-    confirmSetup: (clientId, windowDays, idempotencyKey) =>
-      request("POST", `/clients/${clientId}/confirm-setup`, { body: { window_days: windowDays }, idempotencyKey }),
+    resolveChannel: async (clientId, channelRef) => {
+      const out = await request<Wire["ChannelResolveOut"]>("POST", `/clients/${clientId}/channel/resolve`, { body: { channel_ref: channelRef } });
+      return { candidates: out.candidates.map((candidate) => ({ ...candidate, channel: { ...candidate.channel, title: candidate.channel.title ?? candidate.channel.channel_id, handle: candidate.channel.handle ?? null, thumbnail_url: candidate.channel.thumbnail_url ?? null, subscriber_count: candidate.channel.subscriber_count ?? null, verified_by: candidate.channel.verified_by ?? null } })) };
+    },
+    restartOnboarding: (clientId, input) => run(request("POST", `/clients/${clientId}/onboarding`, { body: input })),
+    confirmSetup: async (clientId, windowDays, idempotencyKey) => {
+      const out = await request<Wire["ConfirmSetupOut"]>("POST", `/clients/${clientId}/confirm-setup`, { body: { window_days: windowDays }, idempotencyKey });
+      return { run: toRun(out.run), validation: out.validation };
+    },
   },
   profile: {
-    get: (clientId) => request("GET", `/clients/${clientId}/profile`),
-    update: (clientId, patch, version) =>
-      request("PATCH", `/clients/${clientId}/profile`, { body: patch, ifMatch: version, contentType: "application/merge-patch+json" }),
-    recrawl: (clientId) => request("POST", `/clients/${clientId}/profile/recrawl`),
+    get: async (clientId) => {
+      const view = await request<Wire["BusinessProfileView"]>("GET", `/clients/${clientId}/profile`);
+      rawProfiles.set(clientId, view.effective);
+      return toProfileView(view);
+    },
+    update: async (clientId, patch, version) => {
+      const raw = rawProfiles.get(clientId);
+      const body = raw ? toProfilePatch(raw, patch as Parameters<typeof toProfilePatch>[1]) : patch;
+      const view = await request<Wire["BusinessProfileView"]>("PATCH", `/clients/${clientId}/profile`, { body, ifMatch: version, contentType: "application/merge-patch+json" });
+      rawProfiles.set(clientId, view.effective);
+      return toProfileView(view);
+    },
+    recrawl: (clientId) => run(request("POST", `/clients/${clientId}/profile/recrawl`)),
   },
-  keywords: topicApi<KeywordItem>("keywords"),
-  buyerQuestions: topicApi<BuyerQuestionItem>("buyer-questions"),
+  keywords: topicApi<KeywordItem, KeywordCreate>("keywords"),
+  buyerQuestions: topicApi<BuyerQuestionItem, BuyerQuestionCreate>("buyer-questions"),
   competitors: {
     list: (clientId, status) => request("GET", `/clients/${clientId}/competitors`, { query: { status } }),
-    add: (clientId, input, idempotencyKey) =>
-      request("POST", `/clients/${clientId}/competitors`, { body: input, idempotencyKey }),
-    suggest: (clientId) => request("POST", `/clients/${clientId}/competitors/suggest`),
+    add: (clientId, input, idempotencyKey) => request("POST", `/clients/${clientId}/competitors`, { body: input, idempotencyKey }),
+    suggest: (clientId) => run(request("POST", `/clients/${clientId}/competitors/suggest`)),
     confirm: (clientId, competitorId) => request("POST", `/clients/${clientId}/competitors/${competitorId}/confirm`),
-    reject: (clientId, competitorId, input) =>
-      request("POST", `/clients/${clientId}/competitors/${competitorId}/reject`, { body: input }),
+    reject: (clientId, competitorId, input) => request("POST", `/clients/${clientId}/competitors/${competitorId}/reject`, { body: input }),
     remove: (clientId, competitorId) => request("DELETE", `/clients/${clientId}/competitors/${competitorId}`),
+    move: (clientId, competitorId, role) => request("PATCH", `/clients/${clientId}/competitors/${competitorId}`, { body: { role } }),
   },
   runs: {
-    create: (clientId, input, idempotencyKey) =>
-      request("POST", `/clients/${clientId}/runs`, { body: input, idempotencyKey }),
-    list: (clientId, query) => request("GET", `/clients/${clientId}/runs`, { query: { ...query } }),
-    get: (runId) => request("GET", `/runs/${runId}`),
-    cancel: (runId, reason) => request("POST", `/runs/${runId}/cancel`, { body: { reason } }),
-    retry: (runId, fromStage) => request("POST", `/runs/${runId}/retry`, { body: { from_stage: fromStage } }),
-    events: (runId, afterSeq, limit = 200) =>
-      request("GET", `/runs/${runId}/events.json`, { query: { after_seq: afterSeq, limit } }),
+    create: (clientId, input, idempotencyKey) => run(request("POST", `/clients/${clientId}/runs`, { body: input, idempotencyKey })),
+    list: async (clientId, query) => {
+      const page = await request<Wire["Page_RunOut_"]>("GET", `/clients/${clientId}/runs`, { query: { ...query } });
+      return { items: page.items.map(toRun), next_cursor: page.next_cursor ?? null, limit: page.limit, total: page.total ?? null };
+    },
+    get: (runId) => run(request("GET", `/runs/${runId}`)),
+    cancel: (runId, reason) => run(request("POST", `/runs/${runId}/cancel`, { body: { reason } })),
+    retry: (runId, fromStage) => run(request("POST", `/runs/${runId}/retry`, { body: { from_stage: fromStage } })),
+    events: async (runId, afterSeq, limit = 200) => {
+      const page = await request<Wire["EventsPage"]>("GET", `/runs/${runId}/events.json`, { query: { after_seq: afterSeq, limit } });
+      return { items: page.items.map(toEvent), last_seq: page.last_seq, run_status: page.run_status };
+    },
     streamToken: (runId) => request("POST", `/runs/${runId}/stream-token`),
   },
   analytics: {
-    ownPerformance: (clientId, windowDays) =>
-      request("GET", `/clients/${clientId}/analytics/own-performance`, { query: { window_days: windowDays } }),
-    competitors: (clientId, windowDays, sort) =>
-      request("GET", `/clients/${clientId}/analytics/competitors`, { query: { window_days: windowDays, sort } }),
-    competitor: (clientId, channelId, windowDays) =>
-      request("GET", `/clients/${clientId}/analytics/competitors/${channelId}`, { query: { window_days: windowDays } }),
-    competitorVideos: (clientId, channelId, query) =>
-      request("GET", `/clients/${clientId}/analytics/competitors/${channelId}/videos`, { query: { ...query } }),
-    trending: (clientId, windowDays) =>
-      request("GET", `/clients/${clientId}/analytics/trending`, { query: { window_days: windowDays } }),
-    outliers: (clientId, query) => request("GET", `/clients/${clientId}/analytics/outliers`, { query: { ...query } }),
-    patterns: (clientId, scope, windowDays) =>
-      request("GET", `/clients/${clientId}/analytics/patterns`, { query: { scope, window_days: windowDays } }),
-    topics: (clientId, windowDays) =>
-      request("GET", `/clients/${clientId}/analytics/topics`, { query: { window_days: windowDays } }),
+    ownPerformance: async (clientId, windowDays) =>
+      toEnvelope(await request<ResultEnvelope<Wire["OwnPerformanceData"]>>("GET", `/clients/${clientId}/analytics/own-performance`, { query: { window_days: windowDays } }), toOwnPerformance),
+    competitors: async (clientId, windowDays) => toEnvelope(await sheets(clientId, windowDays), (items) => items.map((sheet) => toScorecard(sheet.channel, sheet.scorecard, sheet.top_outliers))),
+    competitor: async (clientId, channelId, windowDays) =>
+      toEnvelope(await request<ResultEnvelope<Wire["CompetitorDetail"]>>("GET", `/clients/${clientId}/analytics/competitors/${channelId}`, { query: { window_days: windowDays } }), toCompetitorDetail),
+    competitorVideos: async (clientId, channelId, query) => {
+      const envelope = await request<ResultEnvelope<Wire["Page_VideoRow_"]>>("GET", `/clients/${clientId}/analytics/competitors/${channelId}/videos`, { query: { ...query } });
+      return { items: [], next_cursor: envelope.data.next_cursor ?? null, limit: envelope.data.limit, total: null };
+    },
+    trending: async (clientId, windowDays) => toEnvelope(await request<ResultEnvelope<Wire["TrendingData"]>>("GET", `/clients/${clientId}/analytics/trending`, { query: { window_days: windowDays } }), toTrending),
+    outliers: async (clientId, query) => toEnvelope(await request<ResultEnvelope<Wire["Page_OutlierRow_"]>>("GET", `/clients/${clientId}/analytics/outliers`, { query: { ...query } }), toOutlierPage),
+    patterns: async (clientId, scope, windowDays) => toEnvelope(await request<ResultEnvelope<Wire["TraitLift"][]>>("GET", `/clients/${clientId}/analytics/patterns`, { query: { scope, window_days: windowDays } }), (items) => toCompetitorDetail({ trait_lift: items } as Wire["CompetitorDetail"]).trait_lift),
+    topics: async (clientId, windowDays) => toEnvelope(await request<ResultEnvelope<Wire["TopicSummary"][]>>("GET", `/clients/${clientId}/analytics/topics`, { query: { window_days: windowDays } }), (items) => items),
+    gaps: async (clientId, windowDays) => {
+      const [sheetEnvelope, questions, topics] = await Promise.all([
+        sheets(clientId, windowDays),
+        request<Page<Wire["BuyerQuestionItem"]>>("GET", `/clients/${clientId}/buyer-questions`, { query: { status: "confirmed" } }),
+        request<ResultEnvelope<Wire["TopicSummary"][]>>("GET", `/clients/${clientId}/analytics/topics`, { query: { window_days: windowDays } }),
+      ]);
+      return toEnvelope(sheetEnvelope, (items) => toGapMatrix(items, questions.items, topics.data));
+    },
   },
   recommendations: {
     list: async (clientId, query) => {
-      const response = await send<RecommendationPage | { cards_run: PipelineRun }>(
-        "GET",
-        `/clients/${clientId}/recommendations`,
-        { query: { ...query } },
-      );
-      if (response.status === 202 && "cards_run" in response.data) {
-        return { state: "writing", cards_run: response.data.cards_run };
-      }
-      return { state: "ready", envelope: response.data as RecommendationPage };
+      const response = await send<Wire["ResultEnvelope_RecommendationsData_"] | { cards_run: Wire["RunOut"] }>("GET", `/clients/${clientId}/recommendations`, { query: { ...query } });
+      if (response.status === 202 && "cards_run" in response.data) return { state: "writing", cards_run: toRun(response.data.cards_run) };
+      return { state: "ready", envelope: toRecommendationPage(response.data as Wire["ResultEnvelope_RecommendationsData_"]) };
     },
-    get: (recommendationId) => request("GET", `/recommendations/${recommendationId}`),
-    feedback: (recommendationId, input, idempotencyKey) =>
-      request("PUT", `/recommendations/${recommendationId}/feedback`, { body: input, idempotencyKey }),
+    get: async (recommendationId) => toRecommendation(await request("GET", `/recommendations/${recommendationId}`)),
+    feedback: (recommendationId, input, idempotencyKey) => request("PUT", `/recommendations/${recommendationId}/feedback`, { body: input, idempotencyKey }),
   },
   news: {
-    opportunities: (clientId, query) =>
-      request("GET", `/clients/${clientId}/news/opportunities`, { query: { ...query } }),
+    opportunities: (clientId, query) => request("GET", `/clients/${clientId}/news/opportunities`, { query: { ...query } }),
     signals: (clientId, query) => request("GET", `/clients/${clientId}/news/signals`, { query: { ...query } }),
+    earlySignals: (clientId, windowDays) => request("GET", `/clients/${clientId}/early-signals`, { query: { window_days: windowDays } }),
     dismiss: (opportunityId) => request("POST", `/news/opportunities/${opportunityId}/dismiss`),
   },
   refresh: {
     list: (clientId, query) => request("GET", `/clients/${clientId}/refresh-suggestions`, { query: { ...query } }),
     applied: (suggestionId, input) => request("POST", `/refresh-suggestions/${suggestionId}/applied`, { body: input }),
     dismiss: (suggestionId) => request("POST", `/refresh-suggestions/${suggestionId}/dismiss`),
+    hygiene: (clientId) => request("GET", `/clients/${clientId}/hygiene`),
   },
   creators: {
-    list: (clientId, windowDays, query) =>
-      request("GET", `/clients/${clientId}/creators`, { query: { window_days: windowDays, ...query } }),
+    list: (clientId, windowDays, query) => request("GET", `/clients/${clientId}/creators`, { query: { window_days: windowDays, ...query } }),
+  },
+  settings: {
+    llm: () => request("GET", "/settings/llm"),
+    updateLlm: (input) => request("PUT", "/settings/llm", { body: input }),
+    notifications: (clientId) => request("GET", `/clients/${clientId}/notification-settings`),
+    updateNotifications: (clientId, patch) => request("PATCH", `/clients/${clientId}/notification-settings`, { body: patch, contentType: "application/merge-patch+json" }),
   },
   integrations: {
     youtubeConnect: (clientId) => request("GET", "/integrations/youtube/connect", { query: { client_id: clientId } }),
     youtubeDisconnect: (clientId) => request("DELETE", `/clients/${clientId}/integrations/youtube`),
   },
   evaluation: {
-    startBacktest: (input) => request("POST", "/evaluation/backtests", { body: input }),
-    outlierLabels: (clientId, query) =>
-      request("GET", "/evaluation/outlier-labels", { query: { client_id: clientId, ...query } }),
+    startBacktest: (input) => run(request("POST", "/evaluation/backtests", { body: input })),
+    outlierLabels: (clientId, query) => request("GET", "/evaluation/outlier-labels", { query: { client_id: clientId, ...query } }),
     putOutlierLabel: (videoId, label) => request("PUT", `/evaluation/outlier-labels/${videoId}`, { body: label }),
     outlierPrecision: (clientId) => request("GET", "/evaluation/outlier-precision", { query: { client_id: clientId } }),
     submitReview: (rating) => request("POST", "/evaluation/reviews", { body: rating }),

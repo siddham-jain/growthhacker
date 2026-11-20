@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { RiArrowRightLine } from "@remixicon/react";
+import { ConfidenceMeter } from "@/components/ui/confidence-meter";
 import { Chip } from "@/components/ui/primitives";
 import type { BriefItem } from "@/lib/brief";
 import { formatCountdown } from "@/lib/format";
@@ -9,13 +10,18 @@ export function BriefList({ items, now, startAt = 1 }: { items: BriefItem[]; now
     <ol className="flex flex-col gap-2.5">
       {items.map((item, index) => (
         <li key={item.id}>
-          <Link href={item.href} className="group flex items-center gap-3 rounded-card bg-card px-4 py-3.5 shadow-card transition-shadow hover:shadow-raised">
+          <Link href={item.href} data-coach={index === 0 ? "brief-row" : undefined} className="group flex items-center gap-3 rounded-card bg-card px-4 py-3.5 shadow-card transition-shadow hover:shadow-raised">
             <span aria-hidden className="grid size-6 shrink-0 place-items-center rounded-full bg-primary text-caption-1-semibold text-primary-foreground">
               {index + startAt}
             </span>
             <span className="min-w-0 flex-1">
               <span className="line-clamp-2 text-headline text-foreground">{item.headline}</span>
               <span className="mt-0.5 line-clamp-1 text-caption-1-regular text-muted-foreground">{item.evidenceLine}</span>
+              {item.confidence ? (
+                <span className="mt-1.5 flex" data-coach={index === 0 ? "confidence" : undefined}>
+                  <ConfidenceMeter confidence={item.confidence} />
+                </span>
+              ) : null}
             </span>
             {item.expiresAt ? (
               <Chip variant="caption" color="orange" className="hidden sm:inline-flex">

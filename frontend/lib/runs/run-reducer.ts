@@ -1,4 +1,4 @@
-import type { ContextSourceKind, EventPayload, PipelineRun, RunEvent, RunKind, RunStatus, StageStatus } from "@/lib/api/types";
+import type { EventPayload, PipelineRun, RunEvent, RunKind, RunStatus, StageStatus } from "@/lib/api/types";
 import type { ConnectionState } from "./stream";
 import { RUN_STAGES, STAGE_LABELS } from "./stages";
 
@@ -12,11 +12,10 @@ export interface StageView {
   steps: string[];
 }
 
+// the 03 §14 cascade as the backend reports it: each source_fallback closes one source and opens the next
 export interface SourceStepView {
-  sourceKind: ContextSourceKind;
-  tier: number;
-  target: string;
-  outcome: "reading" | "blocked" | "used";
+  source: string;
+  outcome: "used" | "fell_back";
   reason: string | null;
   pages: PayloadOf<"page_read">[];
 }
@@ -115,27 +114,23 @@ function addStep(state: LiveRunState, event: RunEvent): LiveRunState {
   return { ...state, stages: { ...state.stages, [id]: { ...stage, steps: [...stage.steps, event.message] } } };
 }
 
-function updateSource(state: LiveRunState, sourceKind: ContextSourceKind, patch: (step: SourceStepView) => SourceStepView): LiveRunState {
-  const index = state.sources.findLastIndex((step) => step.sourceKind === sourceKind);
-  if (index === -1) return state;
-  const sources = [...state.sources];
-  sources[index] = patch(sources[index]);
-  return { ...state, sources };
+function withSource(state: LiveRunState, source: string): LiveRunState {
+  return state.sources.length ? state : { ...state, sources: [{ source, outcome: "used", reason: null, pages: [] }] };
 }
 
 function applyPayload(state: LiveRunState, event: RunEvent, payload: EventPayload): LiveRunState {
   switch (payload.kind) {
-    case "source_started":
-      return {
-        ...state,
-        sources: [...state.sources, { sourceKind: payload.source_kind, tier: payload.tier, target: payload.target, outcome: "reading", reason: null, pages: [] }],
-      };
-    case "source_blocked":
-      return updateSource(state, payload.source_kind, (step) => ({ ...step, outcome: "blocked", reason: payload.reason }));
+    case "source_fallback": {
+      const sources = withSource(state, payload.from_source).sources.map((step, index, all) =>
+        index === all.length - 1 ? { ...step, outcome: "fell_back" as const, reason: payload.reason ?? null } : step,
+      );
+      return { ...state, sources: [...sources, { source: payload.to_source, outcome: "used", reason: null, pages: [] }] };
+    }
     case "page_read": {
-      const kind = payload.source_kind ?? state.sources.at(-1)?.sourceKind;
-      if (!kind) return state;
-      return updateSource(state, kind, (step) => ({ ...step, outcome: "used", pages: [...step.pages, payload] }));
+      const sources = [...withSource(state, "site_direct").sources];
+      const last = sources[sources.length - 1];
+      sources[sources.length - 1] = { ...last, pages: [...last.pages, payload] };
+      return { ...state, sources };
     }
     case "page_skipped":
       return { ...state, skippedPages: state.skippedPages + 1 };

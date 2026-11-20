@@ -36,7 +36,7 @@ function Section({ index, title, subtitle, children }: { index: number; title: s
 }
 
 function activeIds(items: { id: string; status: string }[] | undefined): Set<string> {
-  return new Set((items ?? []).filter((item) => item.status !== "rejected").map((item) => item.id));
+  return new Set((items ?? []).filter((item) => item.status !== "rejected" && item.status !== "retired").map((item) => item.id));
 }
 
 function initialDecisions(items: CompetitorView[] | undefined): Record<string, "confirmed" | "rejected"> {
@@ -105,11 +105,12 @@ export default function ConfirmPage() {
       const rejectedKeywords = (keywords.data?.items ?? []).filter((item) => !keywordSelection.has(item.id)).map((item) => item.id);
       const rejectedQuestions = (questions.data?.items ?? []).filter((item) => !questionSelection.has(item.id)).map((item) => item.id);
       await Promise.all([
-        api.keywords.bulkStatus(clientId, { ids: [...keywordSelection], status: "active" }),
-        api.buyerQuestions.bulkStatus(clientId, { ids: [...questionSelection], status: "active" }),
+        api.keywords.bulkStatus(clientId, { ids: [...keywordSelection], status: "confirmed" }),
+        api.buyerQuestions.bulkStatus(clientId, { ids: [...questionSelection], status: "confirmed" }),
         rejectedKeywords.length ? api.keywords.bulkStatus(clientId, { ids: rejectedKeywords, status: "rejected" }) : null,
         rejectedQuestions.length ? api.buyerQuestions.bulkStatus(clientId, { ids: rejectedQuestions, status: "rejected" }) : null,
       ]);
+      if (needsChannel && channelChoice) await api.clients.attachChannel(clientId, channelChoice);
       const { run } = await api.clients.confirmSetup(clientId, client.data?.window_days, idempotencyKey);
       router.push(`/c/${clientId}/setup/analysis?run=${run.id}`);
     } catch (error) {

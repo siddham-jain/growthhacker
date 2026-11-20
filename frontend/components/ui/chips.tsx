@@ -1,6 +1,6 @@
-import type { ContextSourceKind, Lens, RecType } from "@/lib/api/types";
+import type { AgeMethod, ContextSourceKind, Lens, RecType } from "@/lib/api/types";
 import { cx } from "@/lib/cx";
-import { LENS_LABELS, REC_TYPE_LABELS, SOURCE_KIND_LABELS } from "@/lib/labels";
+import { LENS_LABELS, METHOD_LABELS, REC_TYPE_LABELS, SOURCE_KIND_LABELS } from "@/lib/labels";
 import { Chip } from "./primitives";
 
 export function TypeChip({ type }: { type: RecType }) {
@@ -52,6 +52,16 @@ export function OriginChip({ origin }: { origin: "YouTube public" | "YouTube Ana
   return (
     <Chip variant="caption" color="soft">
       {origin}
+    </Chip>
+  );
+}
+
+// observed and interpolated values are measured; proxies are estimates and say so
+export function MethodBadge({ method }: { method: AgeMethod }) {
+  const label = METHOD_LABELS[method];
+  return (
+    <Chip variant="caption" color={label.proxy ? "yellow" : "soft"} title={label.description}>
+      {label.label}
     </Chip>
   );
 }

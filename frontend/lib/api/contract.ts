@@ -14,9 +14,22 @@ import type {
   CompetitorRejectIn,
   CompetitorView,
   ConfirmSetupOut,
-  CreatorView,
   FeedbackIn,
   FeedbackStatus,
+  GapMatrixView,
+  LlmSettings,
+  LlmSettingsIn,
+  BuyerQuestionCreate,
+  CreatorsData,
+  EarlySignalView,
+  HygieneData,
+  KeywordCreate,
+  NewsSignal,
+  TopicPatch,
+  LoginIn,
+  Me,
+  NotificationSettings,
+  CompetitorRole,
   KeywordItem,
   Lens,
   NewsOpportunityView,
@@ -36,8 +49,6 @@ import type {
   RunEventsPage,
   RunKind,
   RunStatus,
-  TopicCoverage,
-  TopicCreate,
   TopicStatus,
   TraitLiftView,
   TrendingReport,
@@ -68,20 +79,29 @@ export type RecommendationsResult =
   | { state: "ready"; envelope: RecommendationPage }
   | { state: "writing"; cards_run: PipelineRun };
 
-export interface TopicApi<T> {
+export type TopicSummary = import("./schema").components["schemas"]["TopicSummary"];
+
+export interface TopicApi<T, C> {
   list(clientId: string, status?: TopicStatus): Promise<Page<T>>;
-  create(clientId: string, input: TopicCreate): Promise<T>;
-  update(clientId: string, id: string, patch: Partial<Pick<KeywordItem, "text" | "status" | "priority">>): Promise<T>;
+  create(clientId: string, input: C): Promise<T>;
+  update(clientId: string, id: string, patch: TopicPatch): Promise<T>;
   remove(clientId: string, id: string): Promise<void>;
   bulkStatus(clientId: string, input: BulkStatusIn): Promise<{ updated: number }>;
 }
 
 export interface GrowthHackerApi {
+  auth: {
+    login(input: LoginIn): Promise<{ status: string }>;
+    logout(): Promise<void>;
+    me(): Promise<Me>;
+    switchWorkspace(workspaceId: string): Promise<{ status: string }>;
+  };
   clients: {
     list(query?: Paging & { lifecycle?: ClientLifecycle; q?: string }): Promise<Page<Client>>;
     create(input: ClientCreate, idempotencyKey: string): Promise<ClientCreated>;
     get(clientId: string): Promise<Client>;
     update(clientId: string, patch: ClientPatch, version: number): Promise<Client>;
+    attachChannel(clientId: string, channelId: string | null): Promise<Client>;
     remove(clientId: string): Promise<{ status: "deleting" }>;
     resolveChannel(clientId: string, channelRef: string): Promise<ChannelResolveOut>;
     restartOnboarding(clientId: string, input: { website_url?: string; channel_ref?: string }): Promise<PipelineRun>;
@@ -92,14 +112,16 @@ export interface GrowthHackerApi {
     update(clientId: string, patch: ProfilePatch, version: number): Promise<BusinessProfileView>;
     recrawl(clientId: string): Promise<PipelineRun>;
   };
-  keywords: TopicApi<KeywordItem>;
-  buyerQuestions: TopicApi<BuyerQuestionItem>;
+  keywords: TopicApi<KeywordItem, KeywordCreate>;
+  buyerQuestions: TopicApi<BuyerQuestionItem, BuyerQuestionCreate>;
   competitors: {
     list(clientId: string, status?: CompetitorView["status"]): Promise<Page<CompetitorView>>;
     add(clientId: string, input: CompetitorAddIn, idempotencyKey: string): Promise<CompetitorView>;
     suggest(clientId: string): Promise<PipelineRun>;
     confirm(clientId: string, competitorId: string): Promise<CompetitorView>;
     reject(clientId: string, competitorId: string, input: CompetitorRejectIn): Promise<CompetitorView>;
+    // proposed in plan 13 §13.4: move a channel between the competitor, niche and benchmark sets
+    move(clientId: string, competitorId: string, role: CompetitorRole): Promise<CompetitorView>;
     remove(clientId: string, competitorId: string): Promise<void>;
   };
   runs: {
@@ -119,7 +141,9 @@ export interface GrowthHackerApi {
     trending(clientId: string, windowDays: WindowDays): Promise<ResultEnvelope<TrendingReport>>;
     outliers(clientId: string, query: Paging & { scope: "own" | "competitors" | "niche"; window_days: WindowDays; min_ratio?: number }): Promise<ResultEnvelope<Page<VideoMetricsView>>>;
     patterns(clientId: string, scope: "competitors" | "niche", windowDays: WindowDays): Promise<ResultEnvelope<TraitLiftView[]>>;
-    topics(clientId: string, windowDays: WindowDays): Promise<ResultEnvelope<TopicCoverage[]>>;
+    topics(clientId: string, windowDays: WindowDays): Promise<ResultEnvelope<TopicSummary[]>>;
+    // buyer questions × tracked competitors, assembled from each sheet's topic_coverage counts
+    gaps(clientId: string, windowDays: WindowDays): Promise<ResultEnvelope<GapMatrixView>>;
   };
   recommendations: {
     list(clientId: string, query: RecommendationQuery): Promise<RecommendationsResult>;
@@ -128,16 +152,24 @@ export interface GrowthHackerApi {
   };
   news: {
     opportunities(clientId: string, query?: Paging & { status?: NewsOpportunityView["status"] }): Promise<ResultEnvelope<Page<NewsOpportunityView>>>;
-    signals(clientId: string, query?: Paging): Promise<Page<NewsOpportunityView["news"]>>;
+    signals(clientId: string, query?: Paging): Promise<Page<NewsSignal>>;
+    earlySignals(clientId: string, windowDays: WindowDays): Promise<ResultEnvelope<EarlySignalView[]>>;
     dismiss(opportunityId: string): Promise<NewsOpportunityView>;
   };
   refresh: {
     list(clientId: string, query?: Paging & { status?: RefreshSuggestionView["status"]; video_id?: string }): Promise<ResultEnvelope<Page<RefreshSuggestionView>>>;
     applied(suggestionId: string, input: RefreshAppliedIn): Promise<RefreshSuggestionView>;
     dismiss(suggestionId: string): Promise<RefreshSuggestionView>;
+    hygiene(clientId: string): Promise<ResultEnvelope<HygieneData>>;
   };
   creators: {
-    list(clientId: string, windowDays: WindowDays, query?: Paging): Promise<ResultEnvelope<Page<CreatorView>>>;
+    list(clientId: string, windowDays: WindowDays, query?: Paging & { sort?: string }): Promise<ResultEnvelope<CreatorsData>>;
+  };
+  settings: {
+    llm(): Promise<LlmSettings>;
+    updateLlm(input: LlmSettingsIn): Promise<LlmSettings>;
+    notifications(clientId: string): Promise<NotificationSettings>;
+    updateNotifications(clientId: string, patch: Partial<NotificationSettings>): Promise<NotificationSettings>;
   };
   integrations: {
     youtubeConnect(clientId: string): Promise<{ authorization_url: string }>;

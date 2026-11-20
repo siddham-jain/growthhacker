@@ -12,9 +12,9 @@ export function SourcesUsed({ sources }: { sources: ProfileSource[] }) {
       </h3>
       <ul className="flex flex-wrap gap-2">
         {sources.map((source) => {
-          const blocked = source.pages === 0 && (source.source_kind === "site_direct" || source.source_kind === "site_rendered");
+          const blocked = source.claims === 0 && (source.source_kind === "site_direct" || source.source_kind === "site_rendered");
           return (
-            <li key={`${source.source_kind}-${source.url}`} className="flex items-center gap-1.5 rounded-full border border-border bg-card py-1 pr-3 pl-1 text-caption-1-regular text-muted-foreground" title={source.title}>
+            <li key={`${source.source_kind}-${source.url}`} className="flex items-center gap-1.5 rounded-full border border-border bg-card py-1 pr-3 pl-1 text-caption-1-regular text-muted-foreground" title={source.url}>
               <SourceKindChip kind={source.source_kind} className="rounded-full" />
               {blocked ? (
                 <span className="inline-flex items-center gap-1 text-danger">
@@ -22,7 +22,7 @@ export function SourcesUsed({ sources }: { sources: ProfileSource[] }) {
                 </span>
               ) : (
                 <span className="tabular-nums">
-                  {source.pages} {source.pages === 1 ? "page" : "pages"}
+                  {source.claims} {source.claims === 1 ? "fact" : "facts"}
                   {source.snapshot_at ? ` · snapshot ${formatDate(source.snapshot_at)}` : ""}
                 </span>
               )}

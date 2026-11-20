@@ -14,16 +14,19 @@ interface ThumbnailProps {
   className?: string;
 }
 
+const VIDEO_ID = /^[\w-]{11}$/;
+
 // youtube thumbnails are hotlinked unaltered (never proxied or re-encoded); missing ones fall back to a neutral tile
 export function Thumbnail({ videoId, title, url, channelTitle, badge, linked = true, className }: ThumbnailProps) {
   const [failed, setFailed] = useState(false);
-  const showImage = Boolean(url) && !failed;
+  const source = url ?? (VIDEO_ID.test(videoId) ? `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg` : null);
+  const showImage = Boolean(source) && !failed;
   const frameClass = cx("group relative block aspect-video overflow-hidden rounded-control bg-secondary", className);
   const content = (
     <>
       {showImage ? (
         // eslint-disable-next-line @next/next/no-img-element -- next/image would store derived copies of youtube thumbnails
-        <img src={url ?? undefined} alt={title} loading="lazy" decoding="async" className="size-full object-cover" onError={() => setFailed(true)} />
+        <img src={source ?? undefined} alt={title} width={320} height={180} loading="lazy" decoding="async" className="size-full object-cover" onError={() => setFailed(true)} />
       ) : (
         <span className="flex size-full flex-col items-center justify-center gap-1 bg-gradient-to-br from-secondary to-muted px-2 text-center">
           <RiPlayFill aria-hidden className="size-5 text-subtle-foreground transition-colors group-hover:text-foreground" />

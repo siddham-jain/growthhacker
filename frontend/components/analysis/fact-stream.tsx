@@ -19,17 +19,16 @@ const BADGE_TONE: Record<ContextSourceKind, string> = {
 
 export function FactStream({ state }: { state: LiveRunState }) {
   if (!state.facts.length) return null;
-  const chunks: ContextChunk[] = state.facts.map((fact) => {
-    const kinds = fact.source_kinds ?? [];
-    const lead = kinds[0] ?? "site_direct";
-    return {
-      title: PROFILE_FIELD_LABELS[fact.field] ?? fact.field,
-      chars: `${fact.count} found`,
-      body: fact.preview.join(" · "),
-      source: kinds.length ? `From ${kinds.map((kind) => SOURCE_KIND_LABELS[kind].label.toLowerCase()).join(", ")}` : "From your website",
-      badge: SOURCE_KIND_LABELS[lead].short.slice(0, 3).toUpperCase(),
-      tone: BADGE_TONE[lead],
-    };
-  });
+  // facts carry no source of their own; the sources read so far are what they came from (per-fact sources live in the profile)
+  const read = state.sources.filter((step) => step.pages.length).map((step) => step.source as ContextSourceKind).filter((kind) => kind in SOURCE_KIND_LABELS);
+  const lead = read[0] ?? "site_direct";
+  const chunks: ContextChunk[] = state.facts.map((fact) => ({
+    title: PROFILE_FIELD_LABELS[fact.field] ?? fact.field,
+    chars: `${fact.count} found`,
+    body: fact.preview.join(" · "),
+    source: read.length ? `From ${read.map((kind) => SOURCE_KIND_LABELS[kind].label.toLowerCase()).join(", ")}` : "From your website",
+    badge: SOURCE_KIND_LABELS[lead].short.slice(0, 3).toUpperCase(),
+    tone: BADGE_TONE[lead],
+  }));
   return <ContextCards chunks={chunks} labels={{ header: "What we learned", count: String(chunks.length) }} className="max-w-none" />;
 }

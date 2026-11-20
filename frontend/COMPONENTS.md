@@ -17,18 +17,25 @@ Installed with `pnpm dlx shadcn@latest add https://myzeusui.com/r/<name>.json` (
 | `web-search` (+ `avatar`, `social-button`) | `application/web-search`, `base/avatar`, `base/social-button` | source routing trail (pages read per source) |
 | `selene-shimmer` | `application/selene/shimmer.tsx` | loading skeletons |
 | `use-count-up`, `use-selection-bounds`, `use-hydrated-reduced-motion`, `cx` | `hooks/*`, `lib/cx.ts` | registry dependencies |
+| `chart-card` (+ `tooltip`) | `application/charts/{chart-card,card-surface,chart-cell,chart-plot}.tsx`, `base/tooltip/tooltip.tsx` | the shared frame of every chart (headline, legend, plot sizing). Our marks are SVG in `components/charts/*` instead of the recharts-based cards, which would add ~100 KB gz. `components/charts/gap-matrix.tsx` is a **fork** of `heatmap-chart-card` (rows × columns of tinted cells) without its `pro-chart` period picker; cells are links with screen-reader text. Copied from the registry JSON. |
 | `artemis-folder-card` | `application/artemis/folder-card.tsx` | **fork** of `components/cards/variants/04-folder.tsx`: props instead of demo copy, our tokens instead of `artemis-tokens`, focus lifts like hover. Copied from the registry JSON rather than the CLI, because the item pulls `artemis-controls` (headlessui, lucide, 22 files) for two easing constants. Wrapped by `components/competitors/competitor-folder.tsx`. |
 
 The `tokens` item (theme, typography, 30 KB preflight) is not used; `styles/kits/zeus.css` defines only the semantic names the vendored files reference.
 
 ## BoardUI (free tier)
 
-Installed with the BoardUI MCP `install_components` (`drawer`, `theme-toggle`), then moved from `components/{base,foundations,application}` and `utils/` into `components/kits/boardui/` with imports rewritten.
+Installed with the BoardUI MCP `install_components` (`drawer`, `theme-toggle`, later `toast`, `command-palette`, `popover`, `select`, `meter`, `switch-card`), then moved from `components/{base,foundations,application}` and `utils/` into `components/kits/boardui/` with imports rewritten.
 
 | Item | Used for |
 |---|---|
 | `drawer` (+ `modal`, `close-button`, `button`, `spinner`, `scroll-fade`, `direction`, `directional-icon`, `cx`) | activity drawer, mobile navigation |
 | `theme-toggle` (+ `switch`, `template-copy`) | light/dark switch; storage key mirrored in `app/layout.tsx` to avoid a flash |
+| `toast` (+ `notification`, `avatar`) | saved / dismissed (with Undo) / copied / run started |
+| `command-palette` (+ `kbd`) | ⌘K sections, clients and actions; loaded on first open (`components/shell/command-menu.tsx`) |
+| `popover` (+ `use-dismiss-on-outside-press`) | mark done (video link), dismiss reasons, account and workspace menu |
+| `select` (+ `menu-styles`, `chevrons`, `label`, `hint-text`) | creator sort, competitor set, refresh hour |
+| `meter` (+ `progress`) | description byte budget against YouTube's 5,000 |
+| `switch-card` | fallback provider, pause client, notification choices |
 
 BoardUI shares Zeus's semantic token vocabulary, so `styles/kits/zeus.css` covers both.
 
@@ -50,6 +57,10 @@ Installed with `pnpm dlx shadcn@latest add https://www.beautifului.dev/r/<name>.
 |---|---|
 | `thinking-orbs` 0.3.2 | analysis orb; state follows the active stage, paused with reduced motion |
 | `border-beam` 1.4.1 | glow on the single active run panel; off with reduced motion |
+
+## Our own (no kit equivalent)
+
+`components/shell/coach-marks.tsx` (three one-time tips; Zeus/BoardUI tooltips close on blur, which suits hover help, not a guided first run) and `components/cards/description-diff.tsx` (insert-only diff read from the backend's unified `preview_diff`; Zeus `review-diff` is a paid item).
 
 ## Not used
 

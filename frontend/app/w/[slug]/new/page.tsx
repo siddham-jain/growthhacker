@@ -76,7 +76,7 @@ export default function NewClientPage() {
         idempotencyKey,
       );
       const runQuery = client.onboarding_run ? `?run=${client.onboarding_run.id}` : "";
-      router.push(`/c/${client.id}/setup/analyze${runQuery}`);
+      router.push(`/c/${client.client.id}/setup/analyze${runQuery}`);
     } catch (caught) {
       if (isApiError(caught) && caught.code === "client_exists") setExisting(caught.message);
       else setError(isApiError(caught) ? caught.message : "Something went wrong. Try again.");

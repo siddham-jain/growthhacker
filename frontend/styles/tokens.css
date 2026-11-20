@@ -12,7 +12,7 @@
   --secondary: hsl(0 0% 94%);
   --muted: hsl(0 0% 96%);
   --muted-foreground: hsl(0 0% 32%);
-  --subtle-foreground: hsl(0 0% 46%);
+  --subtle-foreground: hsl(0 0% 41%);
   --border: hsl(216 22% 91%);
   --border-strong: hsl(216 14% 84%);
   --input: hsl(0 0% 54%);
@@ -70,7 +70,7 @@
   --secondary: hsl(0 0% 16%);
   --muted: hsl(0 0% 15%);
   --muted-foreground: hsl(0 0% 69%);
-  --subtle-foreground: hsl(0 0% 56%);
+  --subtle-foreground: hsl(0 0% 62%);
   --border: hsl(0 0% 18%);
   --border-strong: hsl(0 0% 26%);
   --input: hsl(0 0% 40%);

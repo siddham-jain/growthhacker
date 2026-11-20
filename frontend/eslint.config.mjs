@@ -20,8 +20,10 @@ const eslintConfig = defineConfig([
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/immutability": "off",
       "react-hooks/exhaustive-deps": "off",
+      "react-hooks/refs": "off",
       "@next/next/no-img-element": "off",
     },
+    linterOptions: { reportUnusedDisableDirectives: "off" },
   },
   globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
 ]);

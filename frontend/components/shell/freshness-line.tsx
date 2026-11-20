@@ -3,7 +3,8 @@ import type { ResultEnvelope } from "@/lib/api/types";
 import { formatDateTime } from "@/lib/format";
 
 export function FreshnessLine({ envelope }: { envelope: Pick<ResultEnvelope<unknown>, "freshness" | "window_days"> | undefined }) {
-  if (!envelope) return null;
+  // reserves the line's height while loading so the content below doesn't jump
+  if (!envelope) return <p aria-hidden className="mb-5 h-4" />;
   const { freshness, window_days } = envelope;
   if (freshness.stale) {
     return (

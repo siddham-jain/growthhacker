@@ -1,4 +1,5 @@
 import { API_BASE } from "@/lib/env";
+import { getApiKey } from "./credentials";
 import { ApiError } from "./errors";
 import type { Problem } from "./types";
 
@@ -34,7 +35,10 @@ async function toApiError(response: Response): Promise<ApiError> {
 }
 
 export async function send<T>(method: string, path: string, options: RequestOptions = {}): Promise<HttpResponse<T>> {
-  const headers = new Headers({ Accept: "application/json" });
+  // cookie-authenticated writes need a header a cross-site form cannot set
+  const headers = new Headers({ Accept: "application/json", "X-Requested-With": "fetch" });
+  const apiKey = getApiKey();
+  if (apiKey) headers.set("Authorization", `Bearer ${apiKey}`);
   if (options.body !== undefined) headers.set("Content-Type", options.contentType ?? "application/json");
   if (options.idempotencyKey) headers.set("Idempotency-Key", options.idempotencyKey);
   if (options.ifMatch !== undefined) headers.set("If-Match", `"${options.ifMatch}"`);

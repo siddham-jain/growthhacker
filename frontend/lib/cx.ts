@@ -29,9 +29,13 @@ const TEXT_FAMILIES = [
 
 const TEXT_WEIGHTS = ["regular", "medium", "semibold", "bold"] as const;
 
-const TEXT_STYLE_SUFFIXES = TEXT_FAMILIES.flatMap((family) =>
-  TEXT_WEIGHTS.map((weight) => `${family}-${weight}`),
-);
+// growthhacker's own single-token text styles from app/globals.css
+const PRODUCT_TEXT_STYLES = ["display", "greeting", "title", "section", "headline", "metric", "eyebrow"];
+
+const TEXT_STYLE_SUFFIXES = [
+  ...TEXT_FAMILIES.flatMap((family) => TEXT_WEIGHTS.map((weight) => `${family}-${weight}`)),
+  ...PRODUCT_TEXT_STYLES,
+];
 
 const twMerge = extendTailwindMerge({
   extend: {

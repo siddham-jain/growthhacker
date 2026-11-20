@@ -76,12 +76,32 @@ export const outliersQuery = (clientId: string, windowDays: WindowDays) =>
 export const newsQuery = (clientId: string) =>
   queryOptions({ queryKey: [...clientKey(clientId), "news"], queryFn: () => api.news.opportunities(clientId), staleTime: MINUTE });
 
+export const earlySignalsQuery = (clientId: string, windowDays: WindowDays) =>
+  queryOptions({ queryKey: [...clientKey(clientId), "early-signals", windowDays], queryFn: () => api.news.earlySignals(clientId, windowDays), staleTime: MINUTE });
+
+export const hygieneQuery = (clientId: string) =>
+  queryOptions({ queryKey: [...clientKey(clientId), "hygiene"], queryFn: () => api.refresh.hygiene(clientId), staleTime: MINUTE });
+
 export const refreshQuery = (clientId: string) =>
   queryOptions({ queryKey: [...clientKey(clientId), "refresh"], queryFn: () => api.refresh.list(clientId), staleTime: MINUTE });
 
-export const creatorsQuery = (clientId: string, windowDays: WindowDays) =>
+export const creatorsQuery = (clientId: string, windowDays: WindowDays, sort?: string) =>
   queryOptions({
-    queryKey: [...clientKey(clientId), "creators", windowDays],
-    queryFn: () => api.creators.list(clientId, windowDays),
+    queryKey: [...clientKey(clientId), "creators", windowDays, sort ?? "default"],
+    queryFn: () => api.creators.list(clientId, windowDays, { sort }),
     staleTime: MINUTE,
   });
+
+export const meQuery = () => queryOptions({ queryKey: ["me"], queryFn: () => api.auth.me(), staleTime: 5 * MINUTE });
+
+export const gapsQuery = (clientId: string, windowDays: WindowDays) =>
+  queryOptions({
+    queryKey: [...clientKey(clientId), "gaps", windowDays],
+    queryFn: () => api.analytics.gaps(clientId, windowDays),
+    staleTime: MINUTE,
+  });
+
+export const llmSettingsQuery = () => queryOptions({ queryKey: ["settings", "llm"], queryFn: () => api.settings.llm() });
+
+export const notificationSettingsQuery = (clientId: string) =>
+  queryOptions({ queryKey: [...clientKey(clientId), "notification-settings"], queryFn: () => api.settings.notifications(clientId) });

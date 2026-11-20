@@ -1,13 +1,14 @@
 "use client";
 
-import { RiArrowDownSLine, RiBookmarkLine, RiCheckLine, RiCloseLine } from "@remixicon/react";
+import { RiArrowDownSLine } from "@remixicon/react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { LensChip, TypeChip } from "@/components/ui/chips";
 import { ConfidenceMeter } from "@/components/ui/confidence-meter";
-import type { FeedbackStatus, LensFilter, RecommendationOut } from "@/lib/api/types";
+import type { FeedbackIn, LensFilter, RecommendationOut } from "@/lib/api/types";
 import { cx } from "@/lib/cx";
 import { formatDate } from "@/lib/format";
+import { FeedbackActions } from "./feedback-actions";
 import { ReferenceStrip } from "./reference-strip";
 
 interface RecommendationCardProps {
@@ -15,11 +16,12 @@ interface RecommendationCardProps {
   lensFilter: LensFilter;
   defaultExpanded?: boolean;
   highlighted?: boolean;
-  onFeedback: (status: FeedbackStatus | null) => void;
+  onFeedback: (input: FeedbackIn) => void;
+  onEvidence: () => void;
 }
 
 // l1 shows summary, buyer question and one reason; l2 (expand in place) shows every reason, fit, range and references
-export function RecommendationCard({ recommendation: rec, lensFilter, defaultExpanded = false, highlighted = false, onFeedback }: RecommendationCardProps) {
+export function RecommendationCard({ recommendation: rec, lensFilter, defaultExpanded = false, highlighted = false, onFeedback, onEvidence }: RecommendationCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const status = rec.feedback?.status ?? null;
   const [firstReason, ...moreReasons] = rec.why_it_works;
@@ -28,7 +30,7 @@ export function RecommendationCard({ recommendation: rec, lensFilter, defaultExp
     return (
       <div className="flex items-center justify-between rounded-card border border-dashed border-border px-5 py-3 text-body-regular text-muted-foreground">
         <span>Dismissed · {rec.summary}</span>
-        <Button variant="secondary" size="xs" onClick={() => onFeedback(null)}>
+        <Button variant="secondary" size="xs" onClick={() => onFeedback({ status: null })}>
           Undo
         </Button>
       </div>
@@ -48,7 +50,7 @@ export function RecommendationCard({ recommendation: rec, lensFilter, defaultExp
         {rec.lens.map((lens) => (
           <LensChip key={lens} lens={lens} emphasised={lensFilter === lens} />
         ))}
-        <span className="ml-auto">
+        <span className="ml-auto" data-coach="confidence">
           <ConfidenceMeter confidence={rec.confidence} />
         </span>
       </header>
@@ -92,20 +94,7 @@ export function RecommendationCard({ recommendation: rec, lensFilter, defaultExp
         </div>
       ) : null}
 
-      <footer className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
-        <Button variant="secondary" size="xs" leadingIcon={RiBookmarkLine} aria-pressed={status === "saved"} onClick={() => onFeedback(status === "saved" ? null : "saved")}>
-          {status === "saved" ? "Saved" : "Save"}
-        </Button>
-        <Button variant="secondary" size="xs" leadingIcon={RiCheckLine} aria-pressed={status === "done"} onClick={() => onFeedback(status === "done" ? null : "done")}>
-          {status === "done" ? "Done" : "Mark done"}
-        </Button>
-        <Button variant="secondary" size="xs" leadingIcon={RiCloseLine} onClick={() => onFeedback("dismissed")}>
-          Dismiss
-        </Button>
-        <span className="ml-auto text-caption-1-regular text-subtle-foreground">
-          window {rec.window_days}d · {formatDate(rec.generated_at)}
-        </span>
-      </footer>
+      <FeedbackActions feedback={rec.feedback} onFeedback={onFeedback} onEvidence={onEvidence} meta={`window ${rec.window_days}d · ${formatDate(rec.generated_at)}`} />
     </article>
   );
 }

@@ -5,9 +5,11 @@ import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { BriefList } from "@/components/brief/brief-list";
 import { ChangeTile } from "@/components/brief/what-changed";
+import { CoachMarks, type CoachStep } from "@/components/shell/coach-marks";
+import { NoticeList } from "@/components/states/notice-list";
 import { FreshnessLine } from "@/components/shell/freshness-line";
 import { PageHeader } from "@/components/shell/page-header";
-import { ErrorState, LoadingBlock } from "@/components/states/states";
+import { EmptyState, ErrorState, LoadingBlock } from "@/components/states/states";
 import { ThinDataPrompt } from "@/components/states/thin-data-prompt";
 import { Eyebrow } from "@/components/ui/surface";
 import { clientQuery, newsQuery, outliersQuery, ownPerformanceQuery, recommendationsQuery, refreshQuery } from "@/lib/api/queries";
@@ -15,6 +17,12 @@ import { BRIEF_CONFIG, composeBrief } from "@/lib/brief";
 import { formatRatio } from "@/lib/format";
 import { useViewParams } from "@/lib/url-state";
 import { useClientId } from "@/lib/use-client-id";
+
+const COACH_STEPS: CoachStep[] = [
+  { id: "today-window", target: '[data-coach="window"]', text: "Change how far back we look. Wider windows find more evidence in quiet niches." },
+  { id: "today-confidence", target: '[data-coach="confidence"]', text: "How sure we are, and how many outlier videos and channels back it." },
+  { id: "today-evidence", target: '[data-coach="brief-row"]', text: "Open any action to see the videos behind every number." },
+];
 
 function briefEyebrow(now: number): string {
   const time = new Date(now).toLocaleString("en-GB", { weekday: "long", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
@@ -43,7 +51,10 @@ export default function TodayPage() {
     setupGap: null,
     thinNotice,
     now,
+    limit: BRIEF_CONFIG.maxItems + BRIEF_CONFIG.alsoWorthALook,
   });
+  const brief = items.slice(0, BRIEF_CONFIG.maxItems);
+  const more = items.slice(BRIEF_CONFIG.maxItems);
   const channelsSeen = new Set(envelope?.data.items.flatMap((rec) => rec.reference_videos.map((video) => video.channel_id))).size;
   const openNews = news.data?.data.items.filter((item) => item.urgency !== "evergreen_window" && Date.parse(item.expires_at) > now).length;
   const ownReport = own.data?.data.youtube_public;
@@ -54,9 +65,10 @@ export default function TodayPage() {
       <PageHeader
         eyebrow={<Eyebrow className="mb-2">{briefEyebrow(now)}</Eyebrow>}
         title={<span className="text-greeting">{title}</span>}
-        subtitle={`${items.length} actions. Evidence from ${channelsSeen} channels in the last ${windowDays} days.`}
+        subtitle={`${brief.length} ${brief.length === 1 ? "action" : "actions"}. Evidence from ${channelsSeen} channels in the last ${windowDays} days.`}
       />
       <FreshnessLine envelope={envelope} />
+      {envelope ? <NoticeList notices={envelope.notices} className="mb-5" /> : null}
 
       <section aria-labelledby="what-changed" className="mb-8">
         <h2 id="what-changed" className="mb-3 text-eyebrow text-muted-foreground">
@@ -84,13 +96,31 @@ export default function TodayPage() {
         </h2>
         {recommendations.isPending ? <LoadingBlock /> : null}
         {recommendations.error ? <ErrorState error={recommendations.error} onRetry={() => recommendations.refetch()} /> : null}
-        {items.length ? <BriefList items={items.slice(0, BRIEF_CONFIG.maxItems)} now={now} /> : null}
-        {thinNotice && items.length >= BRIEF_CONFIG.minItems ? (
+        {brief.length ? <BriefList items={brief} now={now} /> : null}
+        {envelope && !brief.length && !thinNotice ? (
+          <EmptyState
+            title="Nothing met our evidence bar"
+            body={`No idea in the last ${windowDays} days had 3 or more recent reference videos. Adding 2–3 more channels to watch gives us more to learn from.`}
+          />
+        ) : null}
+        {thinNotice && brief.length >= BRIEF_CONFIG.minItems ? (
           <div className="mt-4">
             <ThinDataPrompt notice={thinNotice} />
           </div>
         ) : null}
+        {more.length ? (
+          <details className="group mt-6">
+            <summary className="flex w-fit cursor-pointer list-none items-center gap-2 rounded-control text-body-medium text-muted-foreground hover:text-foreground">
+              <span aria-hidden className="transition-transform group-open:rotate-90">›</span>
+              Also worth a look · {more.length}
+            </summary>
+            <div className="mt-3">
+              <BriefList items={more} now={now} startAt={BRIEF_CONFIG.maxItems + 1} />
+            </div>
+          </details>
+        ) : null}
       </section>
+      <CoachMarks steps={COACH_STEPS} active={firstBrief && brief.length > 0} />
     </>
   );
 }

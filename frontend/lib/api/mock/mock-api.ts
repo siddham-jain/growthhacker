@@ -1,10 +1,29 @@
 import type { GrowthHackerApi, TopicApi } from "../contract";
+import { getApiKey } from "../credentials";
 import { ApiError } from "../errors";
-import type { BuyerQuestionItem, Client, CompetitorView, KeywordItem, Page, PipelineRun } from "../types";
+import type {
+  BuyerQuestionItem,
+  Client,
+  CompetitorView,
+  FeedbackIn,
+  KeywordItem,
+  BuyerQuestionCreate,
+  KeywordCreate,
+  LlmProviderOut,
+  LlmSettings,
+  Me,
+  NewsOpportunityView,
+  NotificationSettings,
+  Page,
+  PipelineRun,
+  RecommendationOut,
+  RefreshSuggestionView,
+} from "../types";
 import { channels, CLIENT_ID, daysAgo, envelope, NOW } from "./fixtures/base";
-import { competitorDetail, competitorViews, scorecards } from "./fixtures/competitors";
+import { competitorDetail, competitorViews, gapMatrix, scorecards } from "./fixtures/competitors";
 import {
   creators,
+  earlySignals,
   newsOpportunities,
   outliers,
   ownPerformance,
@@ -50,13 +69,54 @@ const competitorState = new Map(competitorViews.map((item) => [item.id, item]));
 const keywordState = new Map(keywords.map((item) => [item.id, item]));
 const questionState = new Map(buyerQuestions.map((item) => [item.id, item]));
 
+let profileState = profileView;
+const feedbackState = new Map<string, FeedbackIn>();
+const newsState = new Map<string, NewsOpportunityView>(newsOpportunities.map((item) => [item.id, item]));
+const refreshState = new Map<string, RefreshSuggestionView>(refreshSuggestions.map((item) => [item.id, item]));
+
+const WORKSPACES: Me["workspaces"] = [
+  { id: "ws_demo", name: "Demo agency", slug: "demo", role: "owner" },
+  { id: "ws_apollo", name: "Apollo in-house", slug: "apollo-inhouse", role: "viewer" },
+];
+let activeWorkspaceId = WORKSPACES[0].id;
+const SIGNED_OUT_KEY = "gh:mock:signed-out";
+
+function signedOut(): boolean {
+  return typeof sessionStorage !== "undefined" && sessionStorage.getItem(SIGNED_OUT_KEY) === "1";
+}
+
+function setSignedOut(value: boolean) {
+  if (typeof sessionStorage === "undefined") return;
+  if (value) sessionStorage.setItem(SIGNED_OUT_KEY, "1");
+  else sessionStorage.removeItem(SIGNED_OUT_KEY);
+}
+
+function provider(kind: LlmProviderOut["kind"], baseUrl: string | null, keySet: boolean): LlmProviderOut {
+  return { kind, base_url: baseUrl, api_key_set: keySet, api_key_source: keySet ? "environment" : null, configured: keySet && (kind === "anthropic" || Boolean(baseUrl)), models: { low: null, medium: null, high: null } };
+}
+
+let llmSettings: LlmSettings = {
+  enabled: true,
+  provider_order: ["anthropic", "openai_compat"],
+  providers: { anthropic: provider("anthropic", "https://api.anthropic.com", true), openai_compat: provider("openai_compatible", null, false) },
+  updated_at: null,
+};
+const notificationState = new Map<string, NotificationSettings>();
+
+function withFeedback(rec: RecommendationOut): RecommendationOut {
+  const feedback = feedbackState.get(rec.id);
+  return feedback ? { ...rec, feedback: { status: feedback.status ?? null, reason: feedback.reason ?? null, linked_video_id: feedback.linked_video_id ?? null } } : rec;
+}
+
 startMockRun(CLIENT_ID, "onboarding", 30, Date.parse(daysAgo(12)));
 startMockRun(CLIENT_ID, "analysis", 30, Date.parse(daysAgo(12)) + 600_000);
 startMockRun(CLIENT_ID, "analysis", 30, Date.parse(daysAgo(0.2)));
 
+// clients added in this tab are rebuilt from the demo client after a reload, the way runs are rebuilt from their ids
 function requireClient(clientId: string): Client {
-  const client = clients.get(clientId);
+  const client = clients.get(clientId) ?? (clientId.startsWith(`${CLIENT_ID}_`) ? { ...apollo, id: clientId } : undefined);
   if (!client) throw new ApiError(404, "not_found", "We couldn't find that client.");
+  clients.set(clientId, client);
   return client;
 }
 
@@ -68,18 +128,19 @@ function updateCompetitor(competitorId: string, patch: Partial<CompetitorView>):
   return next;
 }
 
-function topicApi<T extends KeywordItem | BuyerQuestionItem>(state: Map<string, T>, prefix: string): TopicApi<T> {
+function topicApi<T extends KeywordItem | BuyerQuestionItem, C extends KeywordCreate | BuyerQuestionCreate>(state: Map<string, T>, prefix: string): TopicApi<T, C> {
   return {
     list: (_clientId, status) => respond(page([...state.values()].filter((item) => !status || item.status === status))),
     create: (_clientId, input) => {
-      const item = { ...[...state.values()][0], id: `${prefix}_${Date.now()}`, text: input.text, status: input.status ?? "active", source: "user", priority: input.priority ?? 3, created_at: new Date().toISOString() } as T;
+      // created topics start confirmed, as the backend does for user-added ones
+      const item = { ...[...state.values()][0], ...input, id: `${prefix}_${Date.now()}`, text: input.text, status: "confirmed", source: "user", created_at: new Date().toISOString(), updated_at: new Date().toISOString() } as T;
       state.set(item.id, item);
       return respond(item);
     },
     update: (_clientId, id, patch) => {
       const current = state.get(id);
       if (!current) throw new ApiError(404, "not_found", "We couldn't find that topic.");
-      const next = { ...current, ...patch } as T;
+      const next = { ...current, ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== null && value !== undefined)) } as T;
       state.set(id, next);
       return respond(next);
     },
@@ -105,8 +166,34 @@ function requireRunFor(clientId: string, kind: PipelineRun["kind"]): PipelineRun
 }
 
 export const mockApi: GrowthHackerApi = {
+  auth: {
+    login: (input) => {
+      if (!input.email.includes("@") || !input.password) throw new ApiError(401, "invalid_credentials", "That email and password don't match.");
+      setSignedOut(false);
+      return respond({ status: "signed_in" });
+    },
+    logout: () => {
+      setSignedOut(true);
+      return respond(undefined);
+    },
+    me: () => {
+      if (signedOut() && !getApiKey()) return Promise.reject(new ApiError(401, "unauthenticated", "Please sign in again."));
+      return respond({
+        principal: getApiKey() ? ("api_key" as const) : ("user" as const),
+        user: getApiKey() ? null : { id: "usr_demo", email: "priya@demo-agency.in", display_name: "Priya" },
+        workspaces: WORKSPACES,
+        active_workspace_id: activeWorkspaceId,
+        role: WORKSPACES.find((item) => item.id === activeWorkspaceId)?.role ?? "owner",
+      });
+    },
+    switchWorkspace: (workspaceId) => {
+      if (!WORKSPACES.some((item) => item.id === workspaceId)) throw new ApiError(404, "not_found", "We couldn't find that workspace.");
+      activeWorkspaceId = workspaceId;
+      return respond({ status: "switched" });
+    },
+  },
   clients: {
-    list: () => respond(page([...clients.values()])),
+    list: () => respond(page(activeWorkspaceId === WORKSPACES[0].id ? [...clients.values()] : [])),
     create: (input) => {
       const id = `${CLIENT_ID}_${(clients.size + 1).toString()}`;
       const client: Client = {
@@ -124,11 +211,18 @@ export const mockApi: GrowthHackerApi = {
       };
       clients.set(id, client);
       const onboarding_run = requireRunFor(id, "onboarding");
-      return respond({ ...requireClient(id), onboarding_run });
+      return respond({ client: requireClient(id), onboarding_run });
     },
     get: (clientId) => respond(requireClient(clientId)),
     update: (clientId, patch) => {
       const next = { ...requireClient(clientId), ...patch, version: requireClient(clientId).version + 1 };
+      clients.set(clientId, next);
+      return respond(next);
+    },
+    attachChannel: (clientId, channelId) => {
+      const client = requireClient(clientId);
+      const chosen = Object.values(channels).find((item) => item.channel_id === channelId) ?? null;
+      const next: Client = { ...client, own_channel: chosen ? { ...chosen, verified: true, verified_by: "manual" } : null, version: client.version + 1 };
       clients.set(clientId, next);
       return respond(next);
     },
@@ -146,20 +240,24 @@ export const mockApi: GrowthHackerApi = {
     restartOnboarding: (clientId) => respond(requireRunFor(clientId, "onboarding")),
     confirmSetup: (clientId) => {
       const run = requireRunFor(clientId, "analysis");
-      const confirmed = [...competitorState.values()].filter((item) => item.status === "confirmed").length;
+      const confirmed = [...competitorState.values()].filter((item) => item.role === "competitor_set" && (item.status === "confirmed" || item.status === "user_added")).length;
       return respond({
         run,
         validation: {
           competitors_confirmed: confirmed,
-          keywords_active: [...keywordState.values()].filter((item) => item.status === "active").length,
-          buyer_questions_active: [...questionState.values()].filter((item) => item.status === "active").length,
+          keywords_active: [...keywordState.values()].filter((item) => item.status === "confirmed").length,
+          buyer_questions_active: [...questionState.values()].filter((item) => item.status === "confirmed").length,
         },
       });
     },
   },
   profile: {
-    get: () => respond(profileView),
-    update: (_clientId, patch) => respond({ ...profileView, overrides: patch, version: profileView.version + 1 }),
+    get: () => respond(profileState),
+    update: (_clientId, patch, version) => {
+      if (version !== profileState.version) return Promise.reject(new ApiError(412, "precondition_failed", "Someone else changed this. We loaded the latest version."));
+      profileState = { ...profileState, overrides: { ...profileState.overrides, ...patch }, effective: { ...profileState.effective, ...(patch as Partial<typeof profileState.effective>) }, version: profileState.version + 1 };
+      return respond(profileState);
+    },
     recrawl: (clientId) => respond(startMockRun(clientId, "recrawl", 30)),
   },
   keywords: topicApi(keywordState, "kw"),
@@ -168,23 +266,25 @@ export const mockApi: GrowthHackerApi = {
     list: (_clientId, status) => respond(page([...competitorState.values()].filter((item) => !status || item.status === status))),
     add: (_clientId, input) => {
       const handle = input.channel_ref.startsWith("@") ? input.channel_ref : `@${input.channel_ref}`;
+      const channel = { ...channels.fortis, channel_id: `UCuser${Date.now()}`, title: handle, handle, subscriber_count: null };
       const added: CompetitorView = {
         ...competitorViews[0],
         id: `cmp_user_${Date.now()}`,
-        status: "confirmed",
-        name: input.name ?? handle,
-        channel: { ...channels.fortis, channel_id: `UCuser${Date.now()}`, title: input.name ?? handle, handle, subscriber_count: null },
+        status: "user_added",
+        role: input.role,
+        name: handle,
+        channel,
+        channels: (competitorViews[0].channels ?? []).map((item) => ({ ...item, channel, preview_video_ids: [] })),
         added_by: "user",
-        source: "user",
+        sources: ["user"],
         evidence_summary: "Added by you",
-        preview_video_ids: [],
       };
       competitorState.set(added.id, added);
       return respond(added);
     },
     suggest: (clientId) => respond(startMockRun(clientId, "onboarding", 30)),
     confirm: (_clientId, competitorId) => {
-      const confirmed = [...competitorState.values()].filter((item) => item.status === "confirmed").length;
+      const confirmed = [...competitorState.values()].filter((item) => item.role === "competitor_set" && (item.status === "confirmed" || item.status === "user_added")).length;
       if (confirmed >= 10) throw new ApiError(422, "competitors_out_of_range", "You can track up to 10. Move extras to 'Also watch'.");
       return respond(updateCompetitor(competitorId, { status: "confirmed", reject_reason: null }));
     },
@@ -194,6 +294,7 @@ export const mockApi: GrowthHackerApi = {
       competitorState.delete(competitorId);
       return respond(undefined);
     },
+    move: (_clientId, competitorId, role) => respond(updateCompetitor(competitorId, { role })),
   },
   runs: {
     create: (clientId, input) => respond(requireRunFor(clientId, input.kind)),
@@ -226,13 +327,14 @@ export const mockApi: GrowthHackerApi = {
       return respond(envelope(page(scoped), query.window_days));
     },
     patterns: (_clientId, _scope, windowDays) => respond(envelope(competitorDetail(channels.fortis.channel_id)?.trait_lift ?? [], windowDays)),
+    gaps: (_clientId, windowDays) => respond(envelope(gapMatrix(), windowDays)),
     topics: (_clientId, windowDays) =>
-      respond(envelope(buyerQuestions.map((item, index) => ({ topic_ref: { id: item.id, label: item.text }, own_videos: index % 3, competitor_videos: 6 - index, outliers: index % 2, review_flagged: false })), windowDays)),
+      respond(envelope(buyerQuestions.map((item, index) => ({ topic_ref: { id: item.id, label: item.text }, own_videos: index % 3, competitor_videos: 6 - index, outliers: index % 2, review_flagged: 0 })), windowDays)),
   },
   recommendations: {
     list: (_clientId, query) => {
       const windowDays = query.window_days ?? 30;
-      const items = recommendations.filter((item) => (!query.type || item.type === query.type) && (!query.lens || item.lens.includes(query.lens)));
+      const items = recommendations.map(withFeedback).filter((item) => (!query.type || item.type === query.type) && (!query.lens || item.lens.includes(query.lens)));
       const thin = windowDays === 7;
       return respond({
         state: "ready" as const,
@@ -246,34 +348,87 @@ export const mockApi: GrowthHackerApi = {
     get: (recommendationId) => {
       const found = recommendations.find((item) => item.id === recommendationId);
       if (!found) throw new ApiError(404, "not_found", "We couldn't find that recommendation.");
-      return respond(found);
+      return respond(withFeedback(found));
     },
-    feedback: (_recommendationId, input) => respond({ feedback: input }),
+    feedback: (recommendationId, input) => {
+      if (input.status === null) feedbackState.delete(recommendationId);
+      else feedbackState.set(recommendationId, input);
+      return respond({ feedback: input });
+    },
   },
   news: {
-    opportunities: () => respond(envelope(page(newsOpportunities), 30)),
-    signals: () => respond(page(newsOpportunities.map((item) => item.news))),
+    opportunities: () =>
+      respond({
+        ...envelope(page([...newsState.values()]), 30),
+        notices: [{ code: "news_partial", level: "warning" as const, message: "One news source didn't respond this morning, so this list may be missing a story or two." }],
+      }),
+    signals: () => respond(page([])),
+    earlySignals: (_clientId, windowDays) => respond(envelope(earlySignals, windowDays)),
     dismiss: (opportunityId) => {
-      const found = newsOpportunities.find((item) => item.id === opportunityId);
+      const found = newsState.get(opportunityId);
       if (!found) throw new ApiError(404, "not_found", "We couldn't find that opportunity.");
-      return respond({ ...found, status: "dismissed" as const });
+      const next = { ...found, status: "dismissed" as const };
+      newsState.set(opportunityId, next);
+      return respond(next);
     },
   },
   refresh: {
-    list: () => respond(envelope(page(refreshSuggestions), 30)),
+    list: () => respond(envelope(page([...refreshState.values()].filter((item) => item.basis !== "rule_based")), 30)),
+    hygiene: () => {
+      const items = [...refreshState.values()].filter((item) => item.basis === "rule_based");
+      return respond(envelope({ items, limit: 25, next_cursor: null, headline: "Two small fixes, each from a fixed rule.", eligibility: null }, 30));
+    },
     applied: (suggestionId) => {
-      const found = refreshSuggestions.find((item) => item.id === suggestionId);
+      const found = refreshState.get(suggestionId);
       if (!found) throw new ApiError(404, "not_found", "We couldn't find that suggestion.");
-      return respond({ ...found, status: "applied" as const, applied_at: new Date().toISOString() });
+      const next = { ...found, status: "applied" as const, applied_at: new Date().toISOString() };
+      refreshState.set(suggestionId, next);
+      return respond(next);
     },
     dismiss: (suggestionId) => {
-      const found = refreshSuggestions.find((item) => item.id === suggestionId);
+      const found = refreshState.get(suggestionId);
       if (!found) throw new ApiError(404, "not_found", "We couldn't find that suggestion.");
-      return respond({ ...found, status: "dismissed" as const });
+      const next = { ...found, status: "dismissed" as const };
+      refreshState.set(suggestionId, next);
+      return respond(next);
     },
   },
   creators: {
-    list: (_clientId, windowDays) => respond(envelope(page(creators), windowDays)),
+    list: (_clientId, windowDays, query) => {
+      const sort = query?.sort ?? "match_share";
+      const value = (item: (typeof creators)[number]) => (sort === "subscribers" ? (item.channel.subscriber_count ?? 0) : sort === "uploads_90d" ? item.uploads_90d : item.match_share);
+      const items = [...creators].sort((a, b) => value(b) - value(a)).map((item, index) => ({ ...item, sort, sort_value: value(item), position: index + 1 }));
+      return respond(envelope({ items, sort, available_sorts: ["match_share", "subscribers", "uploads_90d"], limit: 25, next_cursor: null }, windowDays));
+    },
+  },
+  settings: {
+    llm: () => respond(llmSettings),
+    updateLlm: (input) => {
+      const providers = { ...llmSettings.providers };
+      for (const [id, patch] of Object.entries(input.providers ?? {})) {
+        const current = providers[id];
+        if (!current || !patch) continue;
+        const keySet = patch.clear_api_key ? false : patch.api_key ? true : current.api_key_set;
+        const baseUrl = patch.base_url === undefined ? current.base_url : patch.base_url;
+        providers[id] = {
+          ...current,
+          base_url: baseUrl,
+          api_key_set: keySet,
+          api_key_source: keySet ? (patch.api_key ? "workspace" : current.api_key_source) : null,
+          configured: keySet && (current.kind === "anthropic" || Boolean(baseUrl)),
+          models: { ...current.models, ...(patch.models ?? {}) },
+        };
+      }
+      llmSettings = { enabled: input.enabled ?? llmSettings.enabled, provider_order: input.provider_order ?? llmSettings.provider_order, providers, updated_at: new Date().toISOString() };
+      return respond(llmSettings);
+    },
+    notifications: (clientId) =>
+      respond(notificationState.get(clientId) ?? { email: "priya@demo-agency.in", first_brief_ready: true, daily_digest: false, news_closing_soon: true }),
+    updateNotifications: (clientId, patch) => {
+      const next = { email: null, first_brief_ready: true, daily_digest: false, news_closing_soon: true, ...notificationState.get(clientId), ...patch };
+      notificationState.set(clientId, next);
+      return respond(next);
+    },
   },
   integrations: {
     youtubeConnect: () => respond({ authorization_url: "#oauth-not-available-in-mock-mode" }),

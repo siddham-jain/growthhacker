@@ -16,4 +16,8 @@ export const videos = {
   apolloTour: video("ap-campus-tour", channels.apollo, "Inside our new Navi Mumbai campus", 24, 1_100, 0.4),
   apolloCheckup: video("ap-prohealth", channels.apollo, "What happens during a ProHealth check, step by step", 28, 2_300, 0.9),
   apolloTransplantStory: video("ap-transplant-story", channels.apollo, "A second chance: a kidney transplant story from Chennai", 12, 3_900, 1.5),
+  apolloKidneyDiet: video("ap-kidney-diet", channels.apollo, "Eating well with kidney disease: a dietitian's guide", 26, 2_600, 0.9),
+  apolloKnee: video("ap-knee-robotic", channels.apollo, "Robotic knee replacement: what recovery really looks like", 16, 4_700, 1.6),
+  apolloDiabetes: video("ap-diabetes-myths", channels.apollo, "मधुमेह के 5 मिथक | 5 diabetes myths, busted", 9, 3_300, 1.1, "short_form"),
+  apolloAsk: video("ap-ask-cardio", channels.apollo, "Ask a cardiologist: your top 10 heart questions", 2, 2_100, 0.7),
 };

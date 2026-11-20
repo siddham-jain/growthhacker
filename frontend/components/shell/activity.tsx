@@ -15,6 +15,7 @@ const KIND_LABELS: Record<RunKind, string> = {
   news_scan: "News scan",
   cards: "Writing cards",
   recrawl: "Re-reading website",
+  backtest: "Backtest",
 };
 
 const ACTIVE = new Set(["queued", "running"]);
@@ -41,7 +42,7 @@ export function ActivityPill() {
   const active = items.find((run) => ACTIVE.has(run.status));
   return (
     <DrawerTrigger>
-      <Button variant="secondary" size="small" aria-label="Activity">
+      <Button variant="secondary" size="small">
         <span className="inline-flex items-center gap-2">
           <StatusDot color={active ? "indigo" : "green"} />
           {active ? `Analysing · ${Math.round(active.percent)}%` : "Up to date"}

@@ -4,7 +4,9 @@ import type { ClientLifecycle } from "@/lib/api/types";
 const COLOR: Record<ClientLifecycle, "green" | "yellow" | "indigo"> = {
   active: "green",
   paused: "yellow",
-  failed: "yellow",
+  created: "indigo",
+  onboarding_failed: "yellow",
+  archived: "yellow",
   deleting: "yellow",
   onboarding: "indigo",
   analyzing: "indigo",
@@ -14,7 +16,9 @@ const COLOR: Record<ClientLifecycle, "green" | "yellow" | "indigo"> = {
 const LABEL: Record<ClientLifecycle, string> = {
   active: "Active",
   paused: "Paused",
-  failed: "Needs attention",
+  created: "Setting up",
+  onboarding_failed: "Needs attention",
+  archived: "Archived",
   deleting: "Deleting",
   onboarding: "Setting up",
   analyzing: "Analysing",

@@ -20,7 +20,7 @@ export function PageHeader({ title, subtitle, eyebrow, controls = "window-lens",
         <h1 className="text-title text-foreground">{title}</h1>
         <p className="mt-1 max-w-2xl text-body-regular text-muted-foreground">{subtitle}</p>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end">
         {actions}
         {controls === "none" ? null : <ViewControls showLens={controls === "window-lens"} />}
         <ActivityPill />

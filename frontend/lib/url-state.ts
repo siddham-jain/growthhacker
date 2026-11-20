@@ -42,3 +42,14 @@ export function useTabParam<T extends string>(tabs: readonly T[], fallback: T, k
   const value = params.get(key) as T;
   return [tabs.includes(value) ? value : fallback, (next: T) => setParam(key, next === fallback ? null : next)] as const;
 }
+
+// the evidence drawer is the deepest disclosure level; its target lives in the url so a link lands on it
+export function useEvidenceParam() {
+  const params = useSearchParams();
+  const setParam = useSetParam();
+  return {
+    evidenceId: params.get("evidence"),
+    openEvidence: (id: string) => setParam("evidence", id),
+    closeEvidence: () => setParam("evidence", null),
+  };
+}
