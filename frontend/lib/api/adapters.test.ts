@@ -28,20 +28,19 @@ describe("adapters", () => {
     expect(sheet).toMatchObject({ role: "competitor_set", subscriber_hidden: true, median_views_at_age: { views: 8600, method: "observed" }, relation: null });
   });
 
-  it("assembles the gap matrix from each sheet's topic coverage, confirmed questions only", () => {
-    const sheets = [
-      { channel: { channel_id: "UC1", title: "Fortis", verified: true }, scorecard: { role: "competitor", topic_coverage: { q1: { n_videos: 3, n_outliers: 1, best_ratio: 4 } } } },
-      { channel: { channel_id: "UC2", title: "Practo", verified: true }, scorecard: { role: "niche", topic_coverage: {} } },
-    ] as unknown as Wire["CompetitorSheet"][];
-    const questions = [
-      { id: "q1", text: "Cost?", status: "confirmed" },
-      { id: "q2", text: "Recovery?", status: "proposed" },
-    ] as unknown as Wire["BuyerQuestionItem"][];
-    const matrix = toGapMatrix(sheets, questions, [{ topic_ref: { id: "q1" }, own_videos: 0 } as unknown as Wire["TopicSummary"]]);
-    expect(matrix.channels.map((channel) => channel.channel_id)).toEqual(["UC1"]);
-    expect(matrix.topics.map((topic) => topic.id)).toEqual(["q1"]);
-    expect(matrix.cells.q1.UC1).toEqual({ n_videos: 3, n_outliers: 1, best_ratio: 4 });
-    expect(matrix.own.q1).toBe(0);
+  it("maps the server gap matrix onto rows, columns and the client's own counts", () => {
+    const cell = (n_videos: number, n_outliers: number, best_ratio: number | null) => ({ n_videos, n_outliers, best_ratio, latest_published_at: null });
+    const matrix = toGapMatrix({
+      rows: [{ topic_ref_id: "tr1", label: "Cost?", kind: "buyer_question" }],
+      channels: [{ channel_id: "UC1", title: "Fortis", verified: false }],
+      cells: { tr1: { UC1: cell(3, 1, 4) } },
+      own_channel: { channel_id: "UC0", title: "Apollo", verified: true },
+      own: { tr1: cell(0, 0, null) },
+    } as Wire["GapMatrixData"]);
+    expect(matrix.channels).toEqual([{ channel_id: "UC1", title: "Fortis" }]);
+    expect(matrix.topics).toEqual([{ id: "tr1", label: "Cost?" }]);
+    expect(matrix.cells.tr1.UC1).toEqual({ n_videos: 3, n_outliers: 1, best_ratio: 4 });
+    expect(matrix.own.tr1).toBe(0);
   });
 
   it("writes profile edits back onto the domain objects without dropping their other fields", () => {

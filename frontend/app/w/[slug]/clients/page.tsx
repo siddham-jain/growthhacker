@@ -18,7 +18,7 @@ export default function ClientsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-title text-foreground">Clients</h1>
+          <h1 className="text-greeting text-foreground">Clients</h1>
           <p className="mt-1 text-body-regular text-muted-foreground">Every business you advise, with its latest brief.</p>
         </div>
         <LinkButton href={`/w/${slug}/new`} variant="primary" size="medium" trailingIcon={RiAddLine}>

@@ -1,31 +1,21 @@
 "use client";
 
 import { RiArrowUpDownLine, RiCheckLine, RiLogoutBoxRLine } from "@remixicon/react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Popover, PopoverTrigger, toast } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
 import { setApiKey } from "@/lib/api/credentials";
-import { meQuery } from "@/lib/api/queries";
 import type { MeWorkspace } from "@/lib/api/types";
 import { cx } from "@/lib/cx";
-import { DEMO_WORKSPACE } from "@/lib/env";
+import { useActiveWorkspace } from "./workspace";
 
 const ROLE_LABELS: Record<MeWorkspace["role"], string> = { owner: "Owner", editor: "Editor", viewer: "Viewer" };
 
-export function useActiveWorkspace() {
-  const me = useQuery(meQuery());
-  const workspace = me.data?.workspaces.find((item) => item.id === me.data?.active_workspace_id) ?? me.data?.workspaces[0];
-  return { me: me.data, workspace };
-}
-
-export function useWorkspaceSlug(): string {
-  return useActiveWorkspace().workspace?.slug ?? DEMO_WORKSPACE;
-}
-
 // workspace switcher and sign-out in one place; the switch list only appears with more than one workspace
-export function AccountMenu({ compact = false }: { compact?: boolean }) {
+// loaded lazily (it needs react-aria), and it renders nothing until the account has loaded anyway
+export default function AccountMenu({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { me, workspace } = useActiveWorkspace();

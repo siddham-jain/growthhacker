@@ -2,23 +2,29 @@
 
 import { RiRefreshLine } from "@remixicon/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { CompetitorsEditor } from "@/components/settings/competitors-editor";
-import { EngineSettings } from "@/components/settings/engine-settings";
-import { ProfileEditor } from "@/components/settings/profile-editor";
-import { ScheduleSettings } from "@/components/settings/schedule-settings";
+import { useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
+import { useEffect, useState } from "react";
 import { SettingsSection } from "@/components/settings/section";
-import { TopicsEditor } from "@/components/settings/topics-editor";
-import { useActiveWorkspace } from "@/components/shell/account-menu";
+import { useActiveWorkspace } from "@/components/shell/workspace";
 import { PageHeader } from "@/components/shell/page-header";
 import { ErrorState, LoadingBlock } from "@/components/states/states";
 import { Button } from "@/components/ui/button";
-import { Tab, TabList, TabPanel, Tabs, toast } from "@/components/ui/primitives";
+import { Chip, Tab, TabList, TabPanel, Tabs, toast } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
+import { isApiError } from "@/lib/api/errors";
 import { buyerQuestionsQuery, clientKey, clientQuery, competitorsQuery, keywordsQuery, llmSettingsQuery, notificationSettingsQuery, profileQuery } from "@/lib/api/queries";
 import { useTabParam } from "@/lib/url-state";
 import { useClientId } from "@/lib/use-client-id";
+import { oauthReason, startYouTubeConnect } from "@/lib/youtube-connect";
+
+// each tab's editor renders after its own fetch, so its code (selects, switches) loads alongside
+const loadingEditor = () => <LoadingBlock />;
+const ProfileEditor = dynamic(() => import("@/components/settings/profile-editor").then((module) => module.ProfileEditor), { ssr: false, loading: loadingEditor });
+const TopicsEditor = dynamic(() => import("@/components/settings/topics-editor").then((module) => module.TopicsEditor), { ssr: false, loading: loadingEditor });
+const CompetitorsEditor = dynamic(() => import("@/components/settings/competitors-editor").then((module) => module.CompetitorsEditor), { ssr: false, loading: loadingEditor });
+const EngineSettings = dynamic(() => import("@/components/settings/engine-settings").then((module) => module.EngineSettings), { ssr: false, loading: loadingEditor });
+const ScheduleSettings = dynamic(() => import("@/components/settings/schedule-settings").then((module) => module.ScheduleSettings), { ssr: false, loading: loadingEditor });
 
 const TABS = ["profile", "topics", "competitors", "integrations", "engine", "schedule"] as const;
 
@@ -48,6 +54,55 @@ function RerunBanner({ clientId, activeRunId }: { clientId: string; activeRunId:
   );
 }
 
+function YouTubeIntegration({ clientId, connected, canEdit }: { clientId: string; connected: boolean; canEdit: boolean }) {
+  const queryClient = useQueryClient();
+  const disconnect = useMutation({
+    mutationFn: () => api.integrations.youtubeDisconnect(clientId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: clientKey(clientId) });
+      toast.success("YouTube disconnected", { description: "Owner analytics for this client were deleted." });
+    },
+    onError: (caught) => toast.error(isApiError(caught) ? caught.message : "Couldn't disconnect. Try again."),
+  });
+  return (
+    <SettingsSection
+      title="YouTube owner analytics"
+      description="Connecting adds exact day-N views, subscribers gained, traffic sources and search terms. They're shown only to your workspace and never mixed with public numbers."
+      action={connected ? <Chip variant="caption" color="lime">Connected</Chip> : null}
+    >
+      <div className="flex flex-wrap gap-2">
+        <Button variant="primary" size="small" disabled={!canEdit} onClick={() => startYouTubeConnect(clientId)}>
+          {connected ? "Reconnect" : "Connect with YouTube"}
+        </Button>
+        {connected ? (
+          <Button variant="ghost" size="small" disabled={!canEdit || disconnect.isPending} onClick={() => disconnect.mutate()}>
+            Disconnect
+          </Button>
+        ) : null}
+      </div>
+    </SettingsSection>
+  );
+}
+
+// google sends the browser back here with ?oauth=connected or ?oauth=error&reason=…
+function useOAuthResult(clientId: string) {
+  const params = useSearchParams();
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const outcome = params.get("oauth");
+  const reason = params.get("reason");
+  useEffect(() => {
+    if (!outcome) return;
+    if (outcome === "connected") {
+      queryClient.invalidateQueries({ queryKey: clientKey(clientId) });
+      toast.success("YouTube connected", { description: "Owner analytics arrive with the next analysis." });
+    } else {
+      toast.error("YouTube wasn't connected", { description: oauthReason(reason) });
+    }
+    router.replace(`/c/${clientId}/settings?tab=integrations`, { scroll: false });
+  }, [clientId, outcome, queryClient, reason, router]);
+}
+
 export default function SettingsPage() {
   const clientId = useClientId();
   const [tab, setTab] = useTabParam(TABS, "profile");
@@ -62,6 +117,7 @@ export default function SettingsPage() {
   const llm = useQuery({ ...llmSettingsQuery(), enabled: tab === "engine" });
   const notifications = useQuery({ ...notificationSettingsQuery(clientId), enabled: tab === "schedule" });
   const canEdit = me?.role !== "viewer";
+  useOAuthResult(clientId);
 
   return (
     <>
@@ -90,23 +146,7 @@ export default function SettingsPage() {
           {competitors.data ? <CompetitorsEditor clientId={clientId} competitors={competitors.data.items} onChanged={markChanged} /> : null}
         </TabPanel>
         <TabPanel id="integrations">
-          <SettingsSection
-            title="YouTube owner analytics"
-            description="Connecting adds exact day-N views, subscribers gained, traffic sources and search terms. They're shown only to your workspace and never mixed with public numbers."
-          >
-            <Button
-              variant="primary"
-              size="small"
-              className="w-fit"
-              onClick={async () => {
-                const { authorization_url } = await api.integrations.youtubeConnect(clientId);
-                if (authorization_url.startsWith("http")) window.location.assign(authorization_url);
-                else toast("Connecting isn't available with demo data", { description: "With a real workspace this opens Google's consent screen." });
-              }}
-            >
-              {client.data?.oauth_connected ? "Reconnect" : "Connect with YouTube"}
-            </Button>
-          </SettingsSection>
+          <YouTubeIntegration clientId={clientId} connected={Boolean(client.data?.oauth_connected)} canEdit={canEdit} />
         </TabPanel>
         <TabPanel id="engine">
           {llm.isPending ? <LoadingBlock /> : null}

@@ -6,9 +6,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { VideoList } from "@/components/cards/video-list";
-import { CadenceChart } from "@/components/charts/cadence-chart";
-import { ViewsAtAgeChart } from "@/components/charts/views-at-age-chart";
-import { VideoEvidenceDrawer } from "@/components/evidence/evidence-drawer";
+import { CadenceChart, ViewsAtAgeChart } from "@/components/charts/lazy";
+import { VideoEvidenceDrawer } from "@/components/evidence/lazy-drawers";
 import { FreshnessLine } from "@/components/shell/freshness-line";
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState, ErrorState, InfoNote, LoadingBlock } from "@/components/states/states";
@@ -19,6 +18,7 @@ import type { ChannelScorecard, CompetitorDetail, VideoMetricsView } from "@/lib
 import { formatCompact, formatRatio, plural } from "@/lib/format";
 import { METRIC_DISCLOSURE, RELATION_LABELS } from "@/lib/labels";
 import { useTabParam, useViewParams } from "@/lib/url-state";
+import { cx } from "@/lib/cx";
 import { useClientId } from "@/lib/use-client-id";
 
 const TABS = ["overview", "working", "outliers", "gap"] as const;
@@ -221,7 +221,7 @@ export default function CompetitorDetailPage() {
             <div className="flex flex-col gap-4">
               {card.days_since_last_upload > 45 ? <InfoNote tone="warning">No uploads in {card.days_since_last_upload} days, so they&apos;re left out of cadence comparisons.</InfoNote> : null}
               <EvidenceSheet detail={data} windowDays={windowDays} />
-              <div className="grid items-start gap-4 xl:grid-cols-2">
+              <div className={cx("grid items-start gap-4", data.curves.length && "xl:grid-cols-2")}>
                 <CadenceChart weeks={data.cadence_series} scorecard={card} />
                 <ViewsAtAgeChart
                   curves={data.curves}

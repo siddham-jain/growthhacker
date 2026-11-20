@@ -17,7 +17,7 @@ import {
 import type { GrowthHackerApi, TopicApi } from "./contract";
 import { request, send } from "./http";
 import type { components } from "./schema";
-import type { BuyerQuestionCreate, BuyerQuestionItem, KeywordCreate, KeywordItem, Page, ResultEnvelope } from "./types";
+import type { BuyerQuestionCreate, BuyerQuestionItem, KeywordCreate, KeywordItem, ResultEnvelope } from "./types";
 
 type Wire = components["schemas"];
 
@@ -34,10 +34,6 @@ function topicApi<T, C>(resource: "keywords" | "buyer-questions"): TopicApi<T, C
 
 // the profile patch is written against the domain profile last read, so keep that copy per client
 const rawProfiles = new Map<string, Wire["BusinessProfile"]>();
-
-async function sheets(clientId: string, windowDays: number) {
-  return request<ResultEnvelope<Wire["CompetitorSheet"][]>>("GET", `/clients/${clientId}/analytics/competitors`, { query: { window_days: windowDays } });
-}
 
 const run = async (pending: Promise<Wire["RunOut"]>) => toRun(await pending);
 
@@ -115,25 +111,15 @@ export const httpApi: GrowthHackerApi = {
   analytics: {
     ownPerformance: async (clientId, windowDays) =>
       toEnvelope(await request<ResultEnvelope<Wire["OwnPerformanceData"]>>("GET", `/clients/${clientId}/analytics/own-performance`, { query: { window_days: windowDays } }), toOwnPerformance),
-    competitors: async (clientId, windowDays) => toEnvelope(await sheets(clientId, windowDays), (items) => items.map((sheet) => toScorecard(sheet.channel, sheet.scorecard, sheet.top_outliers))),
+    competitors: async (clientId, windowDays) =>
+      toEnvelope(await request<ResultEnvelope<Wire["CompetitorSheet"][]>>("GET", `/clients/${clientId}/analytics/competitors`, { query: { window_days: windowDays } }), (items) => items.map((sheet) => toScorecard(sheet.channel, sheet.scorecard, sheet.top_outliers))),
     competitor: async (clientId, channelId, windowDays) =>
       toEnvelope(await request<ResultEnvelope<Wire["CompetitorDetail"]>>("GET", `/clients/${clientId}/analytics/competitors/${channelId}`, { query: { window_days: windowDays } }), toCompetitorDetail),
-    competitorVideos: async (clientId, channelId, query) => {
-      const envelope = await request<ResultEnvelope<Wire["Page_VideoRow_"]>>("GET", `/clients/${clientId}/analytics/competitors/${channelId}/videos`, { query: { ...query } });
-      return { items: [], next_cursor: envelope.data.next_cursor ?? null, limit: envelope.data.limit, total: null };
-    },
     trending: async (clientId, windowDays) => toEnvelope(await request<ResultEnvelope<Wire["TrendingData"]>>("GET", `/clients/${clientId}/analytics/trending`, { query: { window_days: windowDays } }), toTrending),
     outliers: async (clientId, query) => toEnvelope(await request<ResultEnvelope<Wire["Page_OutlierRow_"]>>("GET", `/clients/${clientId}/analytics/outliers`, { query: { ...query } }), toOutlierPage),
     patterns: async (clientId, scope, windowDays) => toEnvelope(await request<ResultEnvelope<Wire["TraitLift"][]>>("GET", `/clients/${clientId}/analytics/patterns`, { query: { scope, window_days: windowDays } }), (items) => toCompetitorDetail({ trait_lift: items } as Wire["CompetitorDetail"]).trait_lift),
     topics: async (clientId, windowDays) => toEnvelope(await request<ResultEnvelope<Wire["TopicSummary"][]>>("GET", `/clients/${clientId}/analytics/topics`, { query: { window_days: windowDays } }), (items) => items),
-    gaps: async (clientId, windowDays) => {
-      const [sheetEnvelope, questions, topics] = await Promise.all([
-        sheets(clientId, windowDays),
-        request<Page<Wire["BuyerQuestionItem"]>>("GET", `/clients/${clientId}/buyer-questions`, { query: { status: "confirmed" } }),
-        request<ResultEnvelope<Wire["TopicSummary"][]>>("GET", `/clients/${clientId}/analytics/topics`, { query: { window_days: windowDays } }),
-      ]);
-      return toEnvelope(sheetEnvelope, (items) => toGapMatrix(items, questions.items, topics.data));
-    },
+    gaps: async (clientId, windowDays) => toEnvelope(await request<ResultEnvelope<Wire["GapMatrixData"]>>("GET", `/clients/${clientId}/analytics/gaps`, { query: { window_days: windowDays } }), toGapMatrix),
   },
   recommendations: {
     list: async (clientId, query) => {
@@ -162,8 +148,9 @@ export const httpApi: GrowthHackerApi = {
   settings: {
     llm: () => request("GET", "/settings/llm"),
     updateLlm: (input) => request("PUT", "/settings/llm", { body: input }),
+    testLlm: (provider) => request("POST", "/settings/llm/test", { body: { provider } }),
     notifications: (clientId) => request("GET", `/clients/${clientId}/notification-settings`),
-    updateNotifications: (clientId, patch) => request("PATCH", `/clients/${clientId}/notification-settings`, { body: patch, contentType: "application/merge-patch+json" }),
+    updateNotifications: (clientId, patch) => request("PATCH", `/clients/${clientId}/notification-settings`, { body: patch }),
   },
   integrations: {
     youtubeConnect: (clientId) => request("GET", "/integrations/youtube/connect", { query: { client_id: clientId } }),

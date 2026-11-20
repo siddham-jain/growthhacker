@@ -5,20 +5,15 @@ import { CreatorCard } from "@/components/cards/creator-card";
 import { FreshnessLine } from "@/components/shell/freshness-line";
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState, ErrorState, LoadingBlock } from "@/components/states/states";
-import { Select, SelectItem } from "@/components/ui/primitives";
 import { creatorsQuery } from "@/lib/api/queries";
 import type { CreatorView } from "@/lib/api/types";
 import { useViewParams } from "@/lib/url-state";
 import { useClientId } from "@/lib/use-client-id";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-const SORT_LABELS: Record<string, string> = {
-  match_share: "Share of videos on your topics",
-  subscribers: "Subscribers",
-  uploads_90d: "Uploads in 90 days",
-  median_outlier_ratio: "Median vs their normal",
-  hit_rate: "Videos beating their normal",
-};
+// the select needs react-aria and shows only once creators have loaded
+const CreatorSort = dynamic(() => import("@/components/cards/creator-sort"), { ssr: false, loading: () => <div aria-hidden className="h-[4.5rem]" /> });
 
 const GROUPS: { id: CreatorView["group"]; title: string; rule: string }[] = [
   { id: "strong", title: "Mostly on your topics", rule: "Most of their recent videos match your keywords." },
@@ -48,13 +43,7 @@ export default function CreatorsPage() {
       <FreshnessLine envelope={creators.data} />
       {data ? (
         <div className="mb-5">
-          <Select label="Sort within each group by" selectedKey={data.sort} onSelectionChange={(key) => key && setSort(String(key))} className="w-64">
-            {data.available_sorts.map((id) => (
-              <SelectItem key={id} id={id} textValue={SORT_LABELS[id] ?? id}>
-                {SORT_LABELS[id] ?? id.replace(/_/g, " ")}
-              </SelectItem>
-            ))}
-          </Select>
+          <CreatorSort sorts={data.available_sorts} selected={data.sort} onChange={setSort} />
         </div>
       ) : null}
       {creators.isPending ? <LoadingBlock /> : null}

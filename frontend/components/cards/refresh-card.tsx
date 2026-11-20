@@ -16,6 +16,8 @@ interface RefreshCardProps {
   onApplied: (appliedText: string) => void;
   onDismiss: () => void;
   pending?: boolean;
+  // the list already warned about review once, so the card only carries a chip
+  reviewNoted?: boolean;
 }
 
 function OperationsOnly({ suggestion }: { suggestion: RefreshSuggestionView }) {
@@ -34,11 +36,13 @@ function OperationsOnly({ suggestion }: { suggestion: RefreshSuggestionView }) {
   );
 }
 
-export function RefreshCard({ suggestion, onApplied, onDismiss, pending = false }: RefreshCardProps) {
+export function RefreshCard({ suggestion, onApplied, onDismiss, pending = false, reviewNoted = false }: RefreshCardProps) {
   const rows = suggestion.preview_diff ? parseUnifiedDiff(suggestion.preview_diff, suggestion.operations) : null;
   const insertions = rows ? addedText(rows) : suggestion.operations.map((operation) => operation.text).join("\n");
   const keywords = [...new Set(suggestion.operations.flatMap((operation) => operation.keywords_added))];
   const usage = suggestion.resulting_bytes / DESCRIPTION_LIMIT_BYTES;
+  // some rule-based fixes need details only the owner has (a booking link, a phone number), so there's nothing to paste
+  const nothingToPaste = suggestion.operations.length === 0;
 
   if (suggestion.status !== "open") {
     return (
@@ -60,7 +64,12 @@ export function RefreshCard({ suggestion, onApplied, onDismiss, pending = false 
             <Chip variant="caption" color="gray">
               {suggestion.basis === "rule_based" ? "Hygiene fix" : "Refresh"}
             </Chip>
-            {suggestion.operations.some((operation) => operation.kind === "link_fix") ? (
+            {suggestion.review_required && reviewNoted ? (
+              <Chip variant="caption" color="orange">
+                Needs review
+              </Chip>
+            ) : null}
+            {nothingToPaste ? null : suggestion.operations.some((operation) => operation.kind === "link_fix") ? (
               <Chip variant="caption" color="soft">
                 Link fix
               </Chip>
@@ -81,17 +90,25 @@ export function RefreshCard({ suggestion, onApplied, onDismiss, pending = false 
       </header>
       <p className="text-body-regular text-foreground">
         <span className="text-muted-foreground">Why now: </span>
-        {suggestion.warranted_because.join(" ")}
+        {suggestion.warranted_because.join("; ")}
       </p>
-      {suggestion.review_required ? <InfoNote tone="warning">Needs medical review before you paste. Health wording must be checked by your team.</InfoNote> : null}
-      {suggestion.description_changed ? (
+      {suggestion.advisories.map((advisory) => (
+        <p key={advisory.kind} className="text-caption-1-regular text-muted-foreground">
+          {advisory.message}
+        </p>
+      ))}
+      {suggestion.review_required && !reviewNoted ? <InfoNote tone="warning">Needs medical review before you paste. Health wording must be checked by your team.</InfoNote> : null}
+      {nothingToPaste ? (
+        <InfoNote>There&apos;s no text to paste for this one: it needs details only you have. Fix it in YouTube Studio, then mark it applied.</InfoNote>
+      ) : suggestion.description_changed ? (
         <InfoNote>Your description changed since we wrote this, so we won&apos;t show a diff against an old version. We&apos;ll re-check it tonight.</InfoNote>
       ) : rows ? (
         <DescriptionDiff rows={rows} />
       ) : (
         <OperationsOnly suggestion={suggestion} />
       )}
-      <div className="flex flex-col gap-1">
+      {nothingToPaste ? null : (
+        <div className="flex flex-col gap-1">
           <Meter
             aria-label="Description length"
             value={suggestion.resulting_bytes}
@@ -104,7 +121,8 @@ export function RefreshCard({ suggestion, onApplied, onDismiss, pending = false 
             {formatExact(DESCRIPTION_LIMIT_BYTES)}
             {keywords.length ? ` · keywords added: ${keywords.join(", ")}` : ""}
           </p>
-      </div>
+        </div>
+      )}
       <p className="text-body-regular text-muted-foreground">{suggestion.expected_effect}</p>
       <footer className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
         {suggestion.operations.length > 1 ? (

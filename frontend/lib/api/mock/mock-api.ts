@@ -91,8 +91,22 @@ function setSignedOut(value: boolean) {
   else sessionStorage.removeItem(SIGNED_OUT_KEY);
 }
 
+const MOCK_TIERS: Record<"anthropic" | "openai_compatible", LlmProviderOut["tiers"]> = {
+  anthropic: {
+    low: { model: "claude-haiku-4-5", max_tokens: 2048, timeout_s: 20, max_retries: 1, effort: null },
+    medium: { model: "claude-sonnet-5-5", max_tokens: 4096, timeout_s: 35, max_retries: 1, effort: "low" },
+    high: { model: "claude-sonnet-5-5", max_tokens: 8192, timeout_s: 60, max_retries: 1, effort: "medium" },
+  },
+  openai_compatible: {
+    low: { model: null, max_tokens: 4096, timeout_s: 25, max_retries: 1, effort: null },
+    medium: { model: null, max_tokens: 4096, timeout_s: 35, max_retries: 1, effort: null },
+    high: { model: null, max_tokens: 8192, timeout_s: 60, max_retries: 1, effort: null },
+  },
+};
+
 function provider(kind: LlmProviderOut["kind"], baseUrl: string | null, keySet: boolean): LlmProviderOut {
-  return { kind, base_url: baseUrl, api_key_set: keySet, api_key_source: keySet ? "environment" : null, configured: keySet && (kind === "anthropic" || Boolean(baseUrl)), models: { low: null, medium: null, high: null } };
+  const openai = kind === "openai_compatible" ? { extra_params: {}, extra_body: {}, structured_dialect: "openai_json_schema_strict" as const, token_param: "max_completion_tokens" as const, supports_reasoning_effort: false } : null;
+  return { kind, enabled: true, base_url: baseUrl, tiers: MOCK_TIERS[kind], max_concurrency: kind === "anthropic" ? 8 : 4, connect_timeout_s: 5, openai, api_key_set: keySet, api_key_source: keySet ? "environment" : null, configured: keySet && (kind === "anthropic" || Boolean(baseUrl)), overridden: [] };
 }
 
 let llmSettings: LlmSettings = {
@@ -319,8 +333,6 @@ export const mockApi: GrowthHackerApi = {
       if (!detail) throw new ApiError(404, "not_found", "We couldn't find that competitor.");
       return respond(envelope(detail, windowDays));
     },
-    competitorVideos: (_clientId, channelId) =>
-      respond(page(competitorDetail(channelId)?.top_outliers ?? [])),
     trending: (_clientId, windowDays) => respond(envelope(trending, windowDays)),
     outliers: (_clientId, query) => {
       const scoped = query.scope === "own" ? [] : outliers;
@@ -395,10 +407,10 @@ export const mockApi: GrowthHackerApi = {
   },
   creators: {
     list: (_clientId, windowDays, query) => {
-      const sort = query?.sort ?? "match_share";
-      const value = (item: (typeof creators)[number]) => (sort === "subscribers" ? (item.channel.subscriber_count ?? 0) : sort === "uploads_90d" ? item.uploads_90d : item.match_share);
+      const sort = query?.sort ?? "matching_uploads";
+      const value = (item: (typeof creators)[number]) => (sort === "uploads_90d" ? item.uploads_90d : item.match_share);
       const items = [...creators].sort((a, b) => value(b) - value(a)).map((item, index) => ({ ...item, sort, sort_value: value(item), position: index + 1 }));
-      return respond(envelope({ items, sort, available_sorts: ["match_share", "subscribers", "uploads_90d"], limit: 25, next_cursor: null }, windowDays));
+      return respond(envelope({ items, sort, available_sorts: ["matching_uploads", "uploads_90d"], limit: 25, next_cursor: null }, windowDays));
     },
   },
   settings: {
@@ -408,24 +420,42 @@ export const mockApi: GrowthHackerApi = {
       for (const [id, patch] of Object.entries(input.providers ?? {})) {
         const current = providers[id];
         if (!current || !patch) continue;
-        const keySet = patch.clear_api_key ? false : patch.api_key ? true : current.api_key_set;
-        const baseUrl = patch.base_url === undefined ? current.base_url : patch.base_url;
+        const base = patch.reset ? provider(current.kind, current.kind === "anthropic" ? "https://api.anthropic.com" : null, current.api_key_set) : current;
+        const keySet = patch.clear_api_key ? false : patch.api_key ? true : base.api_key_set;
+        const baseUrl = patch.base_url === undefined ? base.base_url : patch.base_url;
+        const tiers = { ...base.tiers };
+        for (const tier of ["low", "medium", "high"] as const) {
+          const change = patch.tiers?.[tier];
+          if (change) tiers[tier] = { ...tiers[tier], ...Object.fromEntries(Object.entries(change).filter(([, value]) => value !== null && value !== undefined)) };
+        }
         providers[id] = {
-          ...current,
+          ...base,
+          enabled: patch.enabled ?? base.enabled,
           base_url: baseUrl,
+          tiers,
           api_key_set: keySet,
-          api_key_source: keySet ? (patch.api_key ? "workspace" : current.api_key_source) : null,
-          configured: keySet && (current.kind === "anthropic" || Boolean(baseUrl)),
-          models: { ...current.models, ...(patch.models ?? {}) },
+          api_key_source: keySet ? (patch.api_key ? "workspace" : base.api_key_source) : null,
+          configured: keySet && (base.kind === "anthropic" || Boolean(baseUrl)),
         };
       }
       llmSettings = { enabled: input.enabled ?? llmSettings.enabled, provider_order: input.provider_order ?? llmSettings.provider_order, providers, updated_at: new Date().toISOString() };
       return respond(llmSettings);
     },
+    testLlm: (id) =>
+      respond({
+        ok: true,
+        checked_at: new Date().toISOString(),
+        checks: (id ? [id] : (["anthropic", "openai_compat"] as const)).map((name) => {
+          const current = llmSettings.providers[name];
+          return current?.configured
+            ? { provider: name, model: current.tiers.medium.model, status: "ok" as const, detail: "ready" }
+            : { provider: name, model: null, status: "not_configured" as const, detail: "add an API key" };
+        }),
+      }),
     notifications: (clientId) =>
-      respond(notificationState.get(clientId) ?? { email: "priya@demo-agency.in", first_brief_ready: true, daily_digest: false, news_closing_soon: true }),
+      respond(notificationState.get(clientId) ?? { email: "priya@demo-agency.in", first_brief_ready: true, daily_digest: false, news_closing_soon: true, delivery_enabled: false }),
     updateNotifications: (clientId, patch) => {
-      const next = { email: null, first_brief_ready: true, daily_digest: false, news_closing_soon: true, ...notificationState.get(clientId), ...patch };
+      const next: NotificationSettings = { email: null, first_brief_ready: true, daily_digest: false, news_closing_soon: true, delivery_enabled: false, ...notificationState.get(clientId), ...Object.fromEntries(Object.entries(patch).filter(([key, value]) => value !== null || key === "email")), updated_at: new Date().toISOString() };
       notificationState.set(clientId, next);
       return respond(next);
     },

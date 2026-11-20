@@ -184,7 +184,7 @@ export function toScorecard(channel: Wire["ChannelRef"], scorecard: Wire["Channe
 export function toCompetitorDetail(detail: Wire["CompetitorDetail"]): CompetitorDetail {
   return {
     scorecard: toScorecard(detail.channel, detail.scorecard, detail.top_outliers),
-    you: null,
+    you: detail.own ? toScorecard(detail.own.channel, detail.own.scorecard, []) : null,
     cadence_series: detail.cadence_series ?? [],
     curves: [],
     top_outliers: toVideos(detail.top_outliers),
@@ -211,7 +211,7 @@ export function toCompetitorDetail(detail: Wire["CompetitorDetail"]): Competitor
 }
 
 export function toOutlierPage(page: Wire["Page_OutlierRow_"]): Page<VideoMetricsView> {
-  return { items: toVideos(page.items), next_cursor: page.next_cursor ?? null, limit: page.limit, total: null };
+  return { items: toVideos(page.items), next_cursor: page.next_cursor ?? null, limit: page.limit, total: page.total ?? null };
 }
 
 export function toTrending(data: Wire["TrendingData"]): TrendingReport {
@@ -331,26 +331,12 @@ export function toProfilePatch(raw: Wire["BusinessProfile"], patch: Partial<Reco
   return out;
 }
 
-export function toGapMatrix(sheets: Wire["CompetitorSheet"][], questions: Wire["BuyerQuestionItem"][], topics: Wire["TopicSummary"][]): GapMatrixView {
-  const tracked = sheets.filter((sheet) => sheet.scorecard.role === "competitor");
-  const active = questions.filter((question) => question.status === "confirmed");
-  const own: GapMatrixView["own"] = {};
-  for (const topic of topics) {
-    const id = String((topic.topic_ref as { id?: string }).id ?? "");
-    if (id) own[id] = topic.own_videos;
-  }
-  const cells: GapMatrixView["cells"] = {};
-  for (const question of active) {
-    cells[question.id] = {};
-    for (const sheet of tracked) {
-      const cell = sheet.scorecard.topic_coverage[question.id];
-      if (cell) cells[question.id][sheet.channel.channel_id] = { n_videos: cell.n_videos, n_outliers: cell.n_outliers, best_ratio: cell.best_ratio };
-    }
-  }
+export function toGapMatrix(data: Wire["GapMatrixData"]): GapMatrixView {
+  const cell = (value: Wire["GapCell"]) => ({ n_videos: value.n_videos, n_outliers: value.n_outliers, best_ratio: value.best_ratio ?? null });
   return {
-    topics: active.map((question) => ({ id: question.id, label: question.text })),
-    channels: tracked.map((sheet) => ({ channel_id: sheet.channel.channel_id, title: sheet.channel.title ?? sheet.channel.handle ?? sheet.channel.channel_id })),
-    cells,
-    own,
+    topics: data.rows.map((row) => ({ id: row.topic_ref_id, label: row.label })),
+    channels: data.channels.map((channel) => ({ channel_id: channel.channel_id, title: channel.title ?? channel.handle ?? channel.channel_id })),
+    cells: Object.fromEntries(Object.entries(data.cells).map(([topic, row]) => [topic, Object.fromEntries(Object.entries(row).map(([channel, value]) => [channel, cell(value)]))])),
+    own: Object.fromEntries(Object.entries(data.own ?? {}).map(([topic, value]) => [topic, value.n_videos])),
   };
 }

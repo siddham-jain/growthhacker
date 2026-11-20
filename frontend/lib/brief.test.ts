@@ -34,9 +34,14 @@ describe("composeBrief", () => {
     expect(items.map((item) => item.id)).toEqual([recommendations[0].id]);
   });
 
+  it("keeps a thin-data notice without a wider window out of the brief", () => {
+    const items = composeBrief({ ...base, news: [], refresh: [], recommendations: recommendations.slice(0, 1), thinNotice: { code: "thin_data", level: "info", message: "No pattern yet." } });
+    expect(items.some((item) => item.id === "thin")).toBe(false);
+  });
+
   it("offers widening when there are fewer than three items and a thin-data notice", () => {
     const items = composeBrief({ ...base, news: [], refresh: [], recommendations: recommendations.slice(0, 1), thinNotice: { code: "thin_data", level: "info", message: "Not enough outliers in 7 days.", suggest: { widen_window_to: 30 } } });
-    expect(items.at(-1)).toMatchObject({ id: "thin", actionLabel: "Widen to 30" });
+    expect(items.at(-1)).toMatchObject({ id: "thin", actionLabel: "Widen to 30 days" });
   });
 
   it("fills an overflow list for Also worth a look without changing the first five", () => {

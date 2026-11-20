@@ -562,17 +562,17 @@ export interface TrendingReport {
 export type LlmTier = "low" | "medium" | "high";
 export type LlmProviderId = Wire["LLMSettingsIn"]["provider_order"] extends (infer T)[] | null | undefined ? T : never;
 export type LlmSettings = Wire["LLMSettingsOut"];
-export type LlmSettingsIn = Wire["LLMSettingsIn"];
+// the generated input types mark defaulted flags as required; every field is optional on the wire
+export type LlmProviderIn = Partial<Wire["LLMProviderIn"]>;
+export type LlmSettingsIn = Omit<Wire["LLMSettingsIn"], "providers"> & { providers?: Partial<Record<LlmProviderId, LlmProviderIn>> };
 export type LlmProviderOut = Wire["LLMProviderOut"];
-export type LlmProviderIn = Wire["LLMProviderIn"];
 
-// proposed: no backend endpoint yet, served by mock mode only
-export interface NotificationSettings {
-  email: string | null;
-  first_brief_ready: boolean;
-  daily_digest: boolean;
-  news_closing_soon: boolean;
-}
+export type LlmTestOut = Wire["LLMTestOut"];
+export type LlmTierOut = Wire["TierOut"];
+
+// per-client delivery choices; delivery_enabled stays false until the server has an email sender
+export type NotificationSettings = Wire["NotificationSettingsOut"];
+export type NotificationSettingsPatch = Wire["NotificationSettingsPatch"];
 
 // ops and evaluation (12's report objects are not frozen yet)
 

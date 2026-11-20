@@ -82,8 +82,10 @@ export function composeBrief(input: BriefInput): BriefItem[] {
 
   ideas.filter((rec) => rec.type !== "creator").forEach(pushRec);
 
-  if (items.length < BRIEF_CONFIG.minItems && input.thinNotice) {
-    push({ id: "thin", kind: "setup", headline: input.thinNotice.message, evidenceLine: "Widening the window gives us more videos to learn from.", href: `/c/${input.clientId}/today?w=${input.thinNotice.suggest?.widen_window_to ?? 30}`, actionLabel: `Widen to ${input.thinNotice.suggest?.widen_window_to ?? 30}`, expiresAt: null });
+  // only a notice that names a wider window becomes an action; otherwise it stays a plain notice
+  const widen = input.thinNotice?.suggest?.widen_window_to;
+  if (items.length < BRIEF_CONFIG.minItems && input.thinNotice && widen) {
+    push({ id: "thin", kind: "setup", headline: input.thinNotice.message, evidenceLine: "Widening the window gives us more videos to learn from.", href: `/c/${input.clientId}/today?w=${widen}`, actionLabel: `Widen to ${widen} days`, expiresAt: null });
   }
   return items;
 }

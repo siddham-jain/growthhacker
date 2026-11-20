@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { RecommendationCard } from "@/components/cards/recommendation-card";
-import { RecommendationEvidenceDrawer } from "@/components/evidence/evidence-drawer";
+import { RecommendationEvidenceDrawer } from "@/components/evidence/lazy-drawers";
 import { NoticeList } from "@/components/states/notice-list";
 import { FreshnessLine } from "@/components/shell/freshness-line";
 import { PageHeader } from "@/components/shell/page-header";

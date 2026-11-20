@@ -4,32 +4,21 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { RefreshList } from "@/components/cards/refresh-list";
 import { VideoList } from "@/components/cards/video-list";
-import { PerformanceChart } from "@/components/charts/performance-chart";
-import { ViewsAtAgeChart } from "@/components/charts/views-at-age-chart";
-import { VideoEvidenceDrawer } from "@/components/evidence/evidence-drawer";
+import { PerformanceChart, ViewsAtAgeChart } from "@/components/charts/lazy";
+import { VideoEvidenceDrawer } from "@/components/evidence/lazy-drawers";
 import { FreshnessLine } from "@/components/shell/freshness-line";
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState, ErrorState, LoadingBlock } from "@/components/states/states";
 import { Button } from "@/components/ui/button";
 import { OriginChip } from "@/components/ui/chips";
-import { Tab, TabList, TabPanel, Tabs, toast } from "@/components/ui/primitives";
-import { api } from "@/lib/api";
+import { Tab, TabList, TabPanel, Tabs } from "@/components/ui/primitives";
 import { clientQuery, ownPerformanceQuery, refreshQuery } from "@/lib/api/queries";
 import type { VideoMetricsView } from "@/lib/api/types";
 import { useTabParam, useViewParams } from "@/lib/url-state";
 import { useClientId } from "@/lib/use-client-id";
+import { startYouTubeConnect } from "@/lib/youtube-connect";
 
 const TABS = ["performance", "refresh", "conversion"] as const;
-
-async function connect(clientId: string) {
-  try {
-    const { authorization_url } = await api.integrations.youtubeConnect(clientId);
-    if (authorization_url.startsWith("http")) window.location.assign(authorization_url);
-    else toast("Connecting isn't available with demo data", { description: "With a real workspace this opens Google's consent screen." });
-  } catch {
-    toast.error("Couldn't start connecting. Try again.");
-  }
-}
 
 function ConnectPanel({ clientId }: { clientId: string }) {
   return (
@@ -41,7 +30,7 @@ function ConnectPanel({ clientId }: { clientId: string }) {
       <p className="text-body-regular text-muted-foreground">
         Connect your channel to see what brings viewers and which searches find you. Only your workspace sees these, and they stay separate from public YouTube numbers.
       </p>
-      <Button variant="primary" size="small" className="w-fit" onClick={() => connect(clientId)}>
+      <Button variant="primary" size="small" className="w-fit" onClick={() => startYouTubeConnect(clientId)}>
         Connect with YouTube
       </Button>
     </section>

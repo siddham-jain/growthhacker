@@ -8,7 +8,7 @@ import { ConfidenceMeter } from "@/components/ui/confidence-meter";
 import type { FeedbackIn, LensFilter, RecommendationOut } from "@/lib/api/types";
 import { cx } from "@/lib/cx";
 import { formatDate } from "@/lib/format";
-import { FeedbackActions } from "./feedback-actions";
+import { LazyFeedbackActions as FeedbackActions } from "./lazy-feedback-actions";
 import { ReferenceStrip } from "./reference-strip";
 
 interface RecommendationCardProps {

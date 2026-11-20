@@ -2,8 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { RiGridLine } from "@remixicon/react";
-import dynamic from "next/dynamic";
 import Link from "next/link";
+import { GapMatrix } from "@/components/charts/lazy";
 import { CompetitorFolder } from "@/components/competitors/competitor-folder";
 import { FreshnessLine } from "@/components/shell/freshness-line";
 import { PageHeader } from "@/components/shell/page-header";
@@ -17,7 +17,6 @@ import { RELATION_LABELS } from "@/lib/labels";
 import { useTabParam, useViewParams } from "@/lib/url-state";
 import { useClientId } from "@/lib/use-client-id";
 
-const GapMatrix = dynamic(() => import("@/components/charts/gap-matrix").then((module) => module.GapMatrix), { loading: () => <LoadingBlock rows={1} /> });
 
 const SORTS = ["outliers", "cadence", "median", "name"] as const;
 const VIEWS = ["folders", "gaps"] as const;
@@ -90,7 +89,7 @@ export default function CompetitorsPage() {
               previews={card.top_outliers.map((video) => ({ videoId: video.video_id, title: video.title, badge: formatRatio(video.outlier_ratio) }))}
               count={card.outliers_in_window}
               countLabel={`outliers of ${card.videos_in_window} videos`}
-              meta={`${card.uploads_per_week}/week`}
+              meta={`${card.uploads_per_week.toFixed(1)}/week`}
             />
             <p className="px-1 text-caption-1-regular text-muted-foreground">
               median {formatRatio(card.median_ratio)} their normal
@@ -113,7 +112,7 @@ export default function CompetitorsPage() {
                   {card.role === "benchmark_set" ? "Benchmark: used for format and title ideas only" : "Niche"}
                 </Chip>
                 <span className="ml-auto text-caption-1-regular text-muted-foreground">
-                  {card.outliers_in_window} outliers · {card.uploads_per_week}/week
+                  {card.outliers_in_window} outliers · {card.uploads_per_week.toFixed(1)}/week
                 </span>
               </li>
             ))}

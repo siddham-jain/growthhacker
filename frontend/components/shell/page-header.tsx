@@ -17,7 +17,7 @@ export function PageHeader({ title, subtitle, eyebrow, controls = "window-lens",
     <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
       <div className="min-w-0">
         {eyebrow}
-        <h1 className="text-title text-foreground">{title}</h1>
+        <h1 className="text-greeting text-balance text-foreground">{title}</h1>
         <p className="mt-1 max-w-2xl text-body-regular text-muted-foreground">{subtitle}</p>
       </div>
       <div className="flex flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end">

@@ -143,6 +143,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/clients/{client_id}/analytics/gaps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Analytics Gaps */
+        get: operations["analytics_gaps"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/clients/{client_id}/analytics/outliers": {
         parameters: {
             query?: never;
@@ -589,6 +606,24 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/clients/{client_id}/notification-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Notification Settings Get */
+        get: operations["notification_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Notification Settings Patch */
+        patch: operations["notification_settings_patch"];
         trace?: never;
     };
     "/api/v1/clients/{client_id}/onboarding": {
@@ -1132,6 +1167,23 @@ export interface paths {
         /** Settings Llm Put */
         put: operations["settings_llm_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/llm/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Settings Llm Test */
+        post: operations["settings_llm_test"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2092,6 +2144,7 @@ export interface components {
              * @default []
              */
             collaborations: components["schemas"]["CollabMention"][];
+            own?: components["schemas"]["OwnSide"] | null;
             scorecard: components["schemas"]["ChannelScorecard"];
             /**
              * Top Outliers
@@ -2268,6 +2321,11 @@ export interface components {
          * @enum {string}
          */
         ConfirmationStatus: "confirmed" | "officially_announced_upcoming" | "reported" | "rumour_or_leak" | "speculative";
+        /** ConnectOut */
+        ConnectOut: {
+            /** Authorization Url */
+            authorization_url: string;
+        };
         /** ConsistencyStats */
         ConsistencyStats: {
             /** Gap Cv */
@@ -3062,6 +3120,36 @@ export interface components {
             /** Window Outliers Total */
             window_outliers_total: number;
         };
+        /** GapMatrixData */
+        GapMatrixData: {
+            /** Cells */
+            cells: {
+                [key: string]: {
+                    [key: string]: components["schemas"]["GapCell"];
+                };
+            };
+            /** Channels */
+            channels: components["schemas"]["ChannelRef"][];
+            /**
+             * Own
+             * @default {}
+             */
+            own: {
+                [key: string]: components["schemas"]["GapCell"];
+            };
+            own_channel?: components["schemas"]["ChannelRef"] | null;
+            /** Rows */
+            rows: components["schemas"]["GapRow"][];
+        };
+        /** GapRow */
+        GapRow: {
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Topic Ref Id */
+            topic_ref_id: string;
+        };
         /** GroundedEntity */
         GroundedEntity: {
             /** Canonical */
@@ -3255,7 +3343,32 @@ export interface components {
              * @default false
              */
             clear_api_key: boolean;
-            models?: components["schemas"]["TierModelsIn"] | null;
+            /** Connect Timeout S */
+            connect_timeout_s?: number | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Extra Body */
+            extra_body?: {
+                [key: string]: unknown;
+            } | null;
+            /** Extra Params */
+            extra_params?: {
+                [key: string]: unknown;
+            } | null;
+            /** Max Concurrency */
+            max_concurrency?: number | null;
+            /**
+             * Reset
+             * @default false
+             */
+            reset: boolean;
+            /** Structured Dialect */
+            structured_dialect?: ("openai_json_schema_strict" | "openai_json_schema" | "openai_json_object" | "prompt_only") | null;
+            /** Supports Reasoning Effort */
+            supports_reasoning_effort?: boolean | null;
+            tiers?: components["schemas"]["TiersIn"] | null;
+            /** Token Param */
+            token_param?: ("max_completion_tokens" | "max_tokens") | null;
         };
         /** LLMProviderOut */
         LLMProviderOut: {
@@ -3267,12 +3380,38 @@ export interface components {
             base_url: string | null;
             /** Configured */
             configured: boolean;
+            /** Connect Timeout S */
+            connect_timeout_s: number;
+            /** Enabled */
+            enabled: boolean;
             /**
              * Kind
              * @enum {string}
              */
             kind: "anthropic" | "openai_compatible";
-            models: components["schemas"]["TierModels"];
+            /** Max Concurrency */
+            max_concurrency: number;
+            openai: components["schemas"]["OpenAICompatOptions"] | null;
+            /** Overridden */
+            overridden: string[];
+            tiers: components["schemas"]["TiersOut"];
+        };
+        /** LLMRouteCheck */
+        LLMRouteCheck: {
+            /** Detail */
+            detail: string;
+            /** Model */
+            model: string | null;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "anthropic" | "openai_compat";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "degraded" | "failed" | "not_configured";
         };
         /** LLMSettingsIn */
         LLMSettingsIn: {
@@ -3300,6 +3439,23 @@ export interface components {
             };
             /** Updated At */
             updated_at?: string | null;
+        };
+        /** LLMTestIn */
+        LLMTestIn: {
+            /** Provider */
+            provider?: ("anthropic" | "openai_compat") | null;
+        };
+        /** LLMTestOut */
+        LLMTestOut: {
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /** Checks */
+            checks: components["schemas"]["LLMRouteCheck"][];
+            /** Ok */
+            ok: boolean;
         };
         /** LLMUsage */
         LLMUsage: {
@@ -3811,6 +3967,32 @@ export interface components {
             /** Weight */
             weight: number;
         };
+        /** NotificationSettingsOut */
+        NotificationSettingsOut: {
+            /** Daily Digest */
+            daily_digest: boolean;
+            /** Delivery Enabled */
+            delivery_enabled: boolean;
+            /** Email */
+            email: string | null;
+            /** First Brief Ready */
+            first_brief_ready: boolean;
+            /** News Closing Soon */
+            news_closing_soon: boolean;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** NotificationSettingsPatch */
+        NotificationSettingsPatch: {
+            /** Daily Digest */
+            daily_digest?: boolean | null;
+            /** Email */
+            email?: string | null;
+            /** First Brief Ready */
+            first_brief_ready?: boolean | null;
+            /** News Closing Soon */
+            news_closing_soon?: boolean | null;
+        };
         /** Offering */
         Offering: {
             /**
@@ -3897,6 +4079,29 @@ export interface components {
             channel_ref?: string | null;
             /** Website Url */
             website_url?: string | null;
+        };
+        /** OpenAICompatOptions */
+        OpenAICompatOptions: {
+            /** Extra Body */
+            extra_body: {
+                [key: string]: unknown;
+            };
+            /** Extra Params */
+            extra_params: {
+                [key: string]: unknown;
+            };
+            /**
+             * Structured Dialect
+             * @enum {string}
+             */
+            structured_dialect: "openai_json_schema_strict" | "openai_json_schema" | "openai_json_object" | "prompt_only";
+            /** Supports Reasoning Effort */
+            supports_reasoning_effort: boolean;
+            /**
+             * Token Param
+             * @enum {string}
+             */
+            token_param: "max_completion_tokens" | "max_tokens";
         };
         /** OpsQuotaOut */
         OpsQuotaOut: {
@@ -4099,6 +4304,16 @@ export interface components {
             window_days: 7 | 30 | 90;
             /** Worst */
             worst: string[];
+        };
+        /** OwnSide */
+        OwnSide: {
+            /**
+             * Cadence Series
+             * @default []
+             */
+            cadence_series: components["schemas"]["CadencePoint"][];
+            channel: components["schemas"]["ChannelRef"];
+            scorecard: components["schemas"]["ChannelScorecard"];
         };
         /**
          * OwnershipLabel
@@ -4977,6 +5192,32 @@ export interface components {
             /** Window Days */
             window_days: number;
         };
+        /** ResultEnvelope[GapMatrixData] */
+        ResultEnvelope_GapMatrixData_: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            data: components["schemas"]["GapMatrixData"];
+            freshness: components["schemas"]["Freshness"];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Notices
+             * @default []
+             */
+            notices: components["schemas"]["RunNotice"][];
+            /** Prev Run Id */
+            prev_run_id?: string | null;
+            /** Run Id */
+            run_id: string;
+            /** Window Days */
+            window_days: number;
+        };
         /** ResultEnvelope[HygieneData] */
         ResultEnvelope_HygieneData_: {
             /**
@@ -5575,7 +5816,10 @@ export interface components {
             /** N */
             n: number;
         };
-        /** SetupCounts */
+        /**
+         * SetupCounts
+         * @description confirmed inputs at request time; the frozen set is validated in the worker and reported on the run.
+         */
         SetupCounts: {
             /** Buyer Questions Active */
             buyer_questions_active: number;
@@ -5871,23 +6115,43 @@ export interface components {
             /** Word Count Band */
             word_count_band: string | null;
         };
-        /** TierModels */
-        TierModels: {
-            /** High */
-            high?: string | null;
-            /** Low */
-            low?: string | null;
-            /** Medium */
-            medium?: string | null;
+        /** TierIn */
+        TierIn: {
+            /** Effort */
+            effort?: ("low" | "medium" | "high") | null;
+            /** Max Retries */
+            max_retries?: number | null;
+            /** Max Tokens */
+            max_tokens?: number | null;
+            /** Model */
+            model?: string | null;
+            /** Timeout S */
+            timeout_s?: number | null;
         };
-        /** TierModelsIn */
-        TierModelsIn: {
-            /** High */
-            high?: string | null;
-            /** Low */
-            low?: string | null;
-            /** Medium */
-            medium?: string | null;
+        /** TierOut */
+        TierOut: {
+            /** Effort */
+            effort: ("low" | "medium" | "high") | null;
+            /** Max Retries */
+            max_retries: number;
+            /** Max Tokens */
+            max_tokens: number;
+            /** Model */
+            model: string | null;
+            /** Timeout S */
+            timeout_s: number;
+        };
+        /** TiersIn */
+        TiersIn: {
+            high?: components["schemas"]["TierIn"] | null;
+            low?: components["schemas"]["TierIn"] | null;
+            medium?: components["schemas"]["TierIn"] | null;
+        };
+        /** TiersOut */
+        TiersOut: {
+            high: components["schemas"]["TierOut"];
+            low: components["schemas"]["TierOut"];
+            medium: components["schemas"]["TierOut"];
         };
         /** TimingTraits */
         TimingTraits: {
@@ -7944,6 +8208,131 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResultEnvelope_Page_VideoRow__"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    analytics_gaps: {
+        parameters: {
+            query?: {
+                window_days?: (7 | 30 | 90) | null;
+            };
+            header?: never;
+            path: {
+                /** @description cl_… id */
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultEnvelope_GapMatrixData_"];
                 };
             };
             /** @description Bad Request */
@@ -10462,6 +10851,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description joined the analysis already confirming this setup */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfirmSetupOut"];
+                };
+            };
             /** @description Successful Response */
             202: {
                 headers: {
@@ -11979,6 +12377,256 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_NewsSignal_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    notification_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description cl_… id */
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSettingsOut"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    notification_settings_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description cl_… id */
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationSettingsPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSettingsOut"];
                 };
             };
             /** @description Bad Request */
@@ -14127,8 +14775,9 @@ export interface operations {
     integrations_youtube_callback: {
         parameters: {
             query: {
-                code: string;
                 state: string;
+                code?: string | null;
+                error?: string | null;
             };
             header?: never;
             path?: never;
@@ -14265,7 +14914,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConnectOut"];
                 };
             };
             /** @description Bad Request */
@@ -16372,6 +17021,130 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LLMSettingsOut"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    settings_llm_test: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LLMTestIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LLMTestOut"];
                 };
             };
             /** @description Bad Request */

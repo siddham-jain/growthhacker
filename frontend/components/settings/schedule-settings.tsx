@@ -8,7 +8,7 @@ import { SegmentedControl, SegmentedControlItem, Select, SelectItem, SwitchCard,
 import { TextField } from "@/components/ui/text-field";
 import { api } from "@/lib/api";
 import { clientKey, notificationSettingsQuery } from "@/lib/api/queries";
-import type { Client, ClientPatch, NotificationSettings, WindowDays } from "@/lib/api/types";
+import type { Client, ClientPatch, NotificationSettings, NotificationSettingsPatch, WindowDays } from "@/lib/api/types";
 import { SettingsSection } from "./section";
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
@@ -32,7 +32,7 @@ export function ScheduleSettings({ client, notifications, onChanged }: { client:
     onError: () => toast.error("Couldn't save. Try again."),
   });
   const patchNotifications = useMutation({
-    mutationFn: async (patch: Partial<NotificationSettings>) => api.settings.updateNotifications(client.id, patch),
+    mutationFn: async (patch: NotificationSettingsPatch) => api.settings.updateNotifications(client.id, patch),
     onSuccess: (next) => {
       queryClient.setQueryData(notificationSettingsQuery(client.id).queryKey, next);
       toast.success("Notification settings saved");
@@ -68,7 +68,7 @@ export function ScheduleSettings({ client, notifications, onChanged }: { client:
           onChange={(paused) => patchClient.mutate({ paused })}
         />
       </SettingsSection>
-      <SettingsSection title="Notifications" description="Email delivery isn't switched on yet. We save your choices now and start sending once it is.">
+      <SettingsSection title="Notifications" description={notifications.delivery_enabled ? "Sent by email to the address below." : "Email delivery isn't switched on for this server yet. Your choices are saved and apply once it is."}>
         <form
           className="flex items-end gap-2"
           onSubmit={(event) => {

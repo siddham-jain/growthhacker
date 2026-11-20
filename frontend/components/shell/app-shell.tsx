@@ -1,26 +1,37 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { RiMenuLine } from "@remixicon/react";
 import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Drawer, DrawerBody } from "@/components/ui/primitives";
 import { clientQuery } from "@/lib/api/queries";
 import { CommandMenu } from "./command-menu";
-import { Brand, Sidebar, SidebarNav } from "./sidebar";
+import { Brand, Sidebar } from "./sidebar";
+
+// loaded on first open, like the activity drawer
+const NavDrawer = dynamic(() => import("./nav-drawer"), { ssr: false });
 
 function MobileBar({ clientId }: { clientId: string }) {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   return (
     <div className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-background/90 px-4 py-2 backdrop-blur lg:hidden">
       <Brand />
-      <Button variant="secondary" size="small" iconOnly leadingIcon={RiMenuLine} aria-label="Open navigation" onClick={() => setOpen(true)} />
-      <Drawer placement="start" size="sm" isOpen={open} onOpenChange={setOpen} aria-label="Navigation">
-        <DrawerBody>
-          <SidebarNav clientId={clientId} onNavigate={() => setOpen(false)} />
-        </DrawerBody>
-      </Drawer>
+      <Button
+        variant="secondary"
+        size="small"
+        iconOnly
+        leadingIcon={RiMenuLine}
+        aria-label="Open navigation"
+        aria-haspopup="dialog"
+        onClick={() => {
+          setMounted(true);
+          setOpen(true);
+        }}
+      />
+      {mounted ? <NavDrawer clientId={clientId} isOpen={open} onOpenChange={setOpen} /> : null}
     </div>
   );
 }

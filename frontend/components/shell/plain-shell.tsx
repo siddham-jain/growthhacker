@@ -1,7 +1,6 @@
 import { Suspense, type ReactNode } from "react";
 import { LoadingBlock } from "@/components/states/states";
-import { ThemeToggle } from "@/components/ui/primitives";
-import { AccountMenu } from "./account-menu";
+import { AccountMenu, ThemeToggle } from "./lazy-chrome";
 import { Brand } from "./sidebar";
 
 // chrome for workspace and onboarding screens, which have no client navigation yet

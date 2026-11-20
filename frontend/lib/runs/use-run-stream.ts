@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useReducedMotion } from "motion/react";
+import { usePrefersReducedMotion } from "@/hooks/use-media-state";
 import { useEffect, useReducer, useRef } from "react";
 import { runQuery } from "@/lib/api/queries";
 import type { RunEvent } from "@/lib/api/types";
@@ -21,7 +21,7 @@ function isPaced(event: RunEvent): boolean {
 
 export function useRunStream(runId: string | null) {
   const [state, dispatch] = useReducer(runReducer, runId ?? "", initialRunState);
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = usePrefersReducedMotion();
   const pending = useRef<RunEvent[]>([]);
   const ticker = useRef<ReturnType<typeof setTimeout> | null>(null);
   const run = useQuery({ ...runQuery(runId ?? ""), enabled: Boolean(runId) });

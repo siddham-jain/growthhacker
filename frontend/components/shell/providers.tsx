@@ -1,9 +1,12 @@
 "use client";
 
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import dynamic from "next/dynamic";
 import { useState, type ReactNode } from "react";
-import { Toaster } from "@/components/ui/primitives";
 import { isApiError } from "@/lib/api/errors";
+
+// the renderer pulls in the motion library, so it loads after hydration; queued toasts show once it does
+const Toaster = dynamic(() => import("@/components/ui/toaster").then((module) => module.Toaster), { ssr: false });
 
 function shouldRetry(failureCount: number, error: unknown): boolean {
   if (isApiError(error) && error.status >= 400 && error.status < 500) return false;

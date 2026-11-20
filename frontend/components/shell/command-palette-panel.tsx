@@ -8,7 +8,7 @@ import { CommandPalette, CommandPaletteItem, CommandPaletteSection, toast } from
 import { api } from "@/lib/api";
 import { clientKey, clientsQuery } from "@/lib/api/queries";
 import { NAV_ITEMS } from "./nav";
-import { useWorkspaceSlug } from "./account-menu";
+import { useWorkspaceSlug } from "./workspace";
 
 // sections, clients and a few actions; every action is something a header button already does
 export default function CommandPalettePanel({ clientId, open, onOpenChange }: { clientId: string; open: boolean; onOpenChange: (open: boolean) => void }) {

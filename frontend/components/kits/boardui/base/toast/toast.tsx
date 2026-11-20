@@ -1,15 +1,10 @@
 "use client";
 
 import { useEffect, useId, useState, useSyncExternalStore } from "react";
-import type { ComponentType, ReactNode } from "react";
-import {
-  Notification,
-  NotificationViewport,
-  type NotificationAction,
-  type NotificationAvatar,
-  type NotificationPosition,
-  type NotificationStatus,
-} from "@/components/kits/boardui/base/notification/notification";
+import { Notification, NotificationViewport, type NotificationPosition } from "@/components/kits/boardui/base/notification/notification";
+import { remove, snapshot, subscribe, toast, trim } from "./toast-store";
+
+export { toast, type ToastId, type ToastOptions } from "./toast-store";
 import { cx } from "@/components/kits/boardui/utils/cx";
 
 /**
@@ -31,90 +26,6 @@ import { cx } from "@/components/kits/boardui/utils/cx";
  * countdown pauses while the pointer or keyboard focus is inside the stack,
  * so nobody loses a toast while reading it or reaching for its action.
  */
-
-type IconComponent = ComponentType<{ className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
-
-export type ToastId = string | number;
-
-export interface ToastOptions {
-  /** Reuse an id to replace a toast that is still showing. */
-  id?: ToastId;
-  description?: ReactNode;
-  status?: NotificationStatus;
-  /** Custom leading icon; defaults to the status icon. */
-  icon?: IconComponent;
-  avatar?: NotificationAvatar;
-  /** Small buttons under the message. Pressing one also dismisses the toast. */
-  actions?: NotificationAction[];
-  /** Milliseconds before it dismisses itself; `Infinity` keeps it until closed. Default from the Toaster (5000). */
-  duration?: number;
-  /** Show the close button. Default true. */
-  dismissible?: boolean;
-  /** Called once the toast has left the screen. */
-  onDismiss?: () => void;
-}
-
-interface ToastRecord extends ToastOptions {
-  id: ToastId;
-  title: ReactNode;
-  dismissed: boolean;
-}
-
-/* -------------------------------------------------------------------- store */
-
-let toasts: ToastRecord[] = [];
-let nextId = 1;
-const listeners = new Set<() => void>();
-
-function emit() {
-  for (const listener of listeners) listener();
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-function show(title: ReactNode, options: ToastOptions = {}): ToastId {
-  const id = options.id ?? nextId++;
-  const record: ToastRecord = { ...options, id, title, dismissed: false };
-  const existing = toasts.findIndex((item) => item.id === id);
-  toasts = existing >= 0 ? toasts.map((item, index) => (index === existing ? record : item)) : [...toasts, record];
-  emit();
-  return id;
-}
-
-function remove(id: ToastId) {
-  const record = toasts.find((item) => item.id === id);
-  toasts = toasts.filter((item) => item.id !== id);
-  emit();
-  record?.onDismiss?.();
-}
-
-/** Show a toast. Returns its id, for `toast.update` and `toast.dismiss`. */
-export function toast(title: ReactNode, options?: ToastOptions): ToastId {
-  return show(title, options);
-}
-
-toast.success = (title: ReactNode, options?: Omit<ToastOptions, "status">) => show(title, { ...options, status: "success" });
-toast.error = (title: ReactNode, options?: Omit<ToastOptions, "status">) => show(title, { ...options, status: "error" });
-toast.info = (title: ReactNode, options?: Omit<ToastOptions, "status">) => show(title, { ...options, status: "information" });
-
-/** Change a toast that is showing. A new `duration` restarts its countdown. */
-toast.update = (id: ToastId, options: ToastOptions & { title?: ReactNode }) => {
-  const current = toasts.find((item) => item.id === id && !item.dismissed);
-  if (!current) return;
-  const { title = current.title, ...rest } = options;
-  show(title, { ...current, ...rest, id });
-};
-
-/** Dismiss one toast, or every toast when called without an id. */
-toast.dismiss = (id?: ToastId) => {
-  toasts = toasts.map((item) => (id === undefined || item.id === id ? { ...item, dismissed: true } : item));
-  emit();
-};
 
 /* ------------------------------------------------------------------ toaster */
 
@@ -153,7 +64,7 @@ export function Toaster({
   className,
 }: ToasterProps) {
   const ownerId = useId();
-  const items = useSyncExternalStore(subscribe, () => toasts, () => toasts);
+  const items = useSyncExternalStore(subscribe, snapshot, snapshot);
   const isOwner = useSyncExternalStore(subscribeOwners, () => owners[0] === ownerId, () => false);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -167,15 +78,8 @@ export function Toaster({
     };
   }, [ownerId]);
 
-  // Past the limit, the oldest toasts play their exit and make room.
   useEffect(() => {
-    if (!isOwner) return;
-    const active = items.filter((item) => !item.dismissed);
-    if (active.length > limit) {
-      const overflow = new Set(active.slice(0, active.length - limit).map((item) => item.id));
-      toasts = toasts.map((item) => (overflow.has(item.id) ? { ...item, dismissed: true } : item));
-      emit();
-    }
+    if (isOwner) trim(limit);
   }, [items, limit, isOwner]);
 
   // A toast removed from under the pointer or focus fires no leave or blur,

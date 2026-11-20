@@ -19,6 +19,9 @@ import type {
   GapMatrixView,
   LlmSettings,
   LlmSettingsIn,
+  LlmProviderId,
+  LlmTestOut,
+  NotificationSettingsPatch,
   BuyerQuestionCreate,
   CreatorsData,
   EarlySignalView,
@@ -137,12 +140,11 @@ export interface GrowthHackerApi {
     ownPerformance(clientId: string, windowDays: WindowDays): Promise<ResultEnvelope<OwnPerformance>>;
     competitors(clientId: string, windowDays: WindowDays, sort?: string): Promise<ResultEnvelope<ChannelScorecard[]>>;
     competitor(clientId: string, channelId: string, windowDays: WindowDays): Promise<ResultEnvelope<CompetitorDetail>>;
-    competitorVideos(clientId: string, channelId: string, query: Paging & { window_days: WindowDays; sort?: string; topic_ref_id?: string }): Promise<Page<VideoMetricsView>>;
     trending(clientId: string, windowDays: WindowDays): Promise<ResultEnvelope<TrendingReport>>;
     outliers(clientId: string, query: Paging & { scope: "own" | "competitors" | "niche"; window_days: WindowDays; min_ratio?: number }): Promise<ResultEnvelope<Page<VideoMetricsView>>>;
     patterns(clientId: string, scope: "competitors" | "niche", windowDays: WindowDays): Promise<ResultEnvelope<TraitLiftView[]>>;
     topics(clientId: string, windowDays: WindowDays): Promise<ResultEnvelope<TopicSummary[]>>;
-    // buyer questions × tracked competitors, assembled from each sheet's topic_coverage counts
+    // buyer questions × tracked competitors, counts only
     gaps(clientId: string, windowDays: WindowDays): Promise<ResultEnvelope<GapMatrixView>>;
   };
   recommendations: {
@@ -168,8 +170,10 @@ export interface GrowthHackerApi {
   settings: {
     llm(): Promise<LlmSettings>;
     updateLlm(input: LlmSettingsIn): Promise<LlmSettings>;
+    // checks the saved key and model ids against the provider; spends no tokens
+    testLlm(provider?: LlmProviderId): Promise<LlmTestOut>;
     notifications(clientId: string): Promise<NotificationSettings>;
-    updateNotifications(clientId: string, patch: Partial<NotificationSettings>): Promise<NotificationSettings>;
+    updateNotifications(clientId: string, patch: NotificationSettingsPatch): Promise<NotificationSettings>;
   };
   integrations: {
     youtubeConnect(clientId: string): Promise<{ authorization_url: string }>;

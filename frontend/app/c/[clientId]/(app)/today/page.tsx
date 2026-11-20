@@ -103,7 +103,7 @@ export default function TodayPage() {
             body={`No idea in the last ${windowDays} days had 3 or more recent reference videos. Adding 2–3 more channels to watch gives us more to learn from.`}
           />
         ) : null}
-        {thinNotice && brief.length >= BRIEF_CONFIG.minItems ? (
+        {thinNotice && !brief.some((item) => item.id === "thin") ? (
           <div className="mt-4">
             <ThinDataPrompt notice={thinNotice} />
           </div>

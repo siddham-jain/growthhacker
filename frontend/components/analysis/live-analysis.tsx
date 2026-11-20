@@ -19,15 +19,16 @@ import { SourceCascade } from "./source-cascade";
 import { StageRail } from "./stage-rail";
 
 const ORB_BY_STAGE: Record<string, OrbState> = {
-  crawl: "searching",
-  profile: "weaving",
-  resolve: "connecting",
-  discover: "searching",
+  resolve_inputs: "connecting",
+  crawl_site: "searching",
+  build_profile: "weaving",
+  discover_competitors: "searching",
+  niche_discovery: "searching",
   ingest: "working",
-  metrics: "solving",
-  patterns: "shaping",
   news: "searching",
-  write: "composing",
+  analytics: "solving",
+  recommend: "shaping",
+  write_cards: "composing",
   refresh: "working",
 };
 
@@ -110,7 +111,7 @@ export function LiveAnalysis({ runId, step, headline, subtitle, doneHref, doneLa
   }, [finished, doneHref, router]);
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(320px,440px)_1fr] lg:gap-12">
+    <div className="grid gap-8 lg:grid-cols-[minmax(320px,440px)_minmax(0,1fr)] lg:gap-12">
       <div className="order-2 flex flex-col gap-6 lg:order-1">
         <div className="flex flex-col gap-3">
           <Eyebrow dot>{step}</Eyebrow>
@@ -124,9 +125,9 @@ export function LiveAnalysis({ runId, step, headline, subtitle, doneHref, doneLa
         {error ? <InfoNote tone="warning">We couldn&apos;t load this run. It may have finished or been removed.</InfoNote> : null}
       </div>
 
-      <div className="order-1 rounded-hero p-3 shadow-hero sm:p-5 lg:order-2" style={{ background: "var(--hero-surface)" }}>
+      <div className="order-1 min-w-0 rounded-hero p-3 shadow-hero sm:p-5 lg:order-2" style={{ background: "var(--hero-surface)" }}>
         <ActiveBeam active={!finished && !failed}>
-          <div className="flex flex-col gap-6 rounded-panel bg-card p-5 sm:p-6">
+          <div className="flex min-w-0 flex-col gap-6 rounded-panel bg-card p-5 sm:p-6">
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-3">
                 <AnalysisOrb state={finished ? "breathing" : (ORB_BY_STAGE[stage ?? ""] ?? "working")} label="Analysis in progress" />

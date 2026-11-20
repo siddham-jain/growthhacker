@@ -2449,6 +2449,16 @@
             "title": "Collaborations",
             "type": "array"
           },
+          "own": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OwnSide"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "scorecard": {
             "$ref": "#/components/schemas/ChannelScorecard"
           },
@@ -2928,6 +2938,19 @@
         ],
         "title": "ConfirmationStatus",
         "type": "string"
+      },
+      "ConnectOut": {
+        "properties": {
+          "authorization_url": {
+            "title": "Authorization Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authorization_url"
+        ],
+        "title": "ConnectOut",
+        "type": "object"
       },
       "ConsistencyStats": {
         "additionalProperties": false,
@@ -5026,6 +5049,82 @@
         "title": "GapEvidence",
         "type": "object"
       },
+      "GapMatrixData": {
+        "properties": {
+          "cells": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/GapCell"
+              },
+              "type": "object"
+            },
+            "title": "Cells",
+            "type": "object"
+          },
+          "channels": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelRef"
+            },
+            "title": "Channels",
+            "type": "array"
+          },
+          "own": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/GapCell"
+            },
+            "default": {},
+            "title": "Own",
+            "type": "object"
+          },
+          "own_channel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChannelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/GapRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rows",
+          "channels",
+          "cells"
+        ],
+        "title": "GapMatrixData",
+        "type": "object"
+      },
+      "GapRow": {
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "topic_ref_id": {
+            "title": "Topic Ref Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic_ref_id",
+          "label",
+          "kind"
+        ],
+        "title": "GapRow",
+        "type": "object"
+      },
       "GroundedEntity": {
         "additionalProperties": false,
         "properties": {
@@ -5565,15 +5664,124 @@
             "title": "Clear Api Key",
             "type": "boolean"
           },
-          "models": {
+          "connect_timeout_s": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/TierModelsIn"
+                "maximum": 60.0,
+                "minimum": 1.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connect Timeout S"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "extra_body": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Body"
+          },
+          "extra_params": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Params"
+          },
+          "max_concurrency": {
+            "anyOf": [
+              {
+                "maximum": 32.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Concurrency"
+          },
+          "reset": {
+            "default": false,
+            "title": "Reset",
+            "type": "boolean"
+          },
+          "structured_dialect": {
+            "anyOf": [
+              {
+                "enum": [
+                  "openai_json_schema_strict",
+                  "openai_json_schema",
+                  "openai_json_object",
+                  "prompt_only"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Structured Dialect"
+          },
+          "supports_reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supports Reasoning Effort"
+          },
+          "tiers": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TiersIn"
               },
               {
                 "type": "null"
               }
             ]
+          },
+          "token_param": {
+            "anyOf": [
+              {
+                "enum": [
+                  "max_completion_tokens",
+                  "max_tokens"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Param"
           }
         },
         "title": "LLMProviderIn",
@@ -5615,6 +5823,14 @@
             "title": "Configured",
             "type": "boolean"
           },
+          "connect_timeout_s": {
+            "title": "Connect Timeout S",
+            "type": "number"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
           "kind": {
             "enum": [
               "anthropic",
@@ -5623,19 +5839,90 @@
             "title": "Kind",
             "type": "string"
           },
-          "models": {
-            "$ref": "#/components/schemas/TierModels"
+          "max_concurrency": {
+            "title": "Max Concurrency",
+            "type": "integer"
+          },
+          "openai": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OpenAICompatOptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "overridden": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Overridden",
+            "type": "array"
+          },
+          "tiers": {
+            "$ref": "#/components/schemas/TiersOut"
           }
         },
         "required": [
           "kind",
+          "enabled",
           "base_url",
-          "models",
+          "tiers",
+          "max_concurrency",
+          "connect_timeout_s",
+          "openai",
           "api_key_set",
           "api_key_source",
-          "configured"
+          "configured",
+          "overridden"
         ],
         "title": "LLMProviderOut",
+        "type": "object"
+      },
+      "LLMRouteCheck": {
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "provider": {
+            "enum": [
+              "anthropic",
+              "openai_compat"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "degraded",
+              "failed",
+              "not_configured"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "status",
+          "detail"
+        ],
+        "title": "LLMRouteCheck",
         "type": "object"
       },
       "LLMSettingsIn": {
@@ -5739,6 +6026,55 @@
           "providers"
         ],
         "title": "LLMSettingsOut",
+        "type": "object"
+      },
+      "LLMTestIn": {
+        "additionalProperties": false,
+        "properties": {
+          "provider": {
+            "anyOf": [
+              {
+                "enum": [
+                  "anthropic",
+                  "openai_compat"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          }
+        },
+        "title": "LLMTestIn",
+        "type": "object"
+      },
+      "LLMTestOut": {
+        "properties": {
+          "checked_at": {
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/LLMRouteCheck"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "checks",
+          "checked_at"
+        ],
+        "title": "LLMTestOut",
         "type": "object"
       },
       "LLMUsage": {
@@ -7117,6 +7453,111 @@
         "title": "NicheKeyword",
         "type": "object"
       },
+      "NotificationSettingsOut": {
+        "properties": {
+          "daily_digest": {
+            "title": "Daily Digest",
+            "type": "boolean"
+          },
+          "delivery_enabled": {
+            "title": "Delivery Enabled",
+            "type": "boolean"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "first_brief_ready": {
+            "title": "First Brief Ready",
+            "type": "boolean"
+          },
+          "news_closing_soon": {
+            "title": "News Closing Soon",
+            "type": "boolean"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "email",
+          "first_brief_ready",
+          "daily_digest",
+          "news_closing_soon",
+          "delivery_enabled"
+        ],
+        "title": "NotificationSettingsOut",
+        "type": "object"
+      },
+      "NotificationSettingsPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "daily_digest": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Digest"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "first_brief_ready": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Brief Ready"
+          },
+          "news_closing_soon": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "News Closing Soon"
+          }
+        },
+        "title": "NotificationSettingsPatch",
+        "type": "object"
+      },
       "Offering": {
         "additionalProperties": false,
         "properties": {
@@ -7353,6 +7794,51 @@
           }
         },
         "title": "OnboardingIn",
+        "type": "object"
+      },
+      "OpenAICompatOptions": {
+        "properties": {
+          "extra_body": {
+            "additionalProperties": true,
+            "title": "Extra Body",
+            "type": "object"
+          },
+          "extra_params": {
+            "additionalProperties": true,
+            "title": "Extra Params",
+            "type": "object"
+          },
+          "structured_dialect": {
+            "enum": [
+              "openai_json_schema_strict",
+              "openai_json_schema",
+              "openai_json_object",
+              "prompt_only"
+            ],
+            "title": "Structured Dialect",
+            "type": "string"
+          },
+          "supports_reasoning_effort": {
+            "title": "Supports Reasoning Effort",
+            "type": "boolean"
+          },
+          "token_param": {
+            "enum": [
+              "max_completion_tokens",
+              "max_tokens"
+            ],
+            "title": "Token Param",
+            "type": "string"
+          }
+        },
+        "required": [
+          "extra_params",
+          "extra_body",
+          "structured_dialect",
+          "token_param",
+          "supports_reasoning_effort"
+        ],
+        "title": "OpenAICompatOptions",
         "type": "object"
       },
       "OpsQuotaOut": {
@@ -7882,6 +8368,30 @@
           "conversion"
         ],
         "title": "OwnPerformanceReport",
+        "type": "object"
+      },
+      "OwnSide": {
+        "properties": {
+          "cadence_series": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CadencePoint"
+            },
+            "title": "Cadence Series",
+            "type": "array"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/ChannelRef"
+          },
+          "scorecard": {
+            "$ref": "#/components/schemas/ChannelScorecard"
+          }
+        },
+        "required": [
+          "channel",
+          "scorecard"
+        ],
+        "title": "OwnSide",
         "type": "object"
       },
       "OwnershipLabel": {
@@ -10422,6 +10932,63 @@
         "title": "ResultEnvelope[CreatorsData]",
         "type": "object"
       },
+      "ResultEnvelope_GapMatrixData_": {
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/GapMatrixData"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Freshness"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "notices": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunNotice"
+            },
+            "title": "Notices",
+            "type": "array"
+          },
+          "prev_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev Run Id"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "window_days",
+          "as_of",
+          "run_id",
+          "generated_at",
+          "freshness"
+        ],
+        "title": "ResultEnvelope[GapMatrixData]",
+        "type": "object"
+      },
       "ResultEnvelope_HygieneData_": {
         "properties": {
           "as_of": {
@@ -12079,6 +12646,7 @@
         "type": "object"
       },
       "SetupCounts": {
+        "description": "confirmed inputs at request time; the frozen set is validated in the worker and reported on the run.",
         "properties": {
           "buyer_questions_active": {
             "title": "Buyer Questions Active",
@@ -12876,33 +13444,52 @@
         "title": "ThumbnailTraits",
         "type": "object"
       },
-      "TierModels": {
+      "TierIn": {
+        "additionalProperties": false,
         "properties": {
-          "high": {
+          "effort": {
             "anyOf": [
               {
-                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,119}$",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ],
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "High"
+            "title": "Effort"
           },
-          "low": {
+          "max_retries": {
             "anyOf": [
               {
-                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,119}$",
-                "type": "string"
+                "maximum": 5.0,
+                "minimum": 0.0,
+                "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Low"
+            "title": "Max Retries"
           },
-          "medium": {
+          "max_tokens": {
+            "anyOf": [
+              {
+                "maximum": 64000.0,
+                "minimum": 256.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Tokens"
+          },
+          "model": {
             "anyOf": [
               {
                 "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,119}$",
@@ -12912,53 +13499,132 @@
                 "type": "null"
               }
             ],
-            "title": "Medium"
+            "title": "Model"
+          },
+          "timeout_s": {
+            "anyOf": [
+              {
+                "maximum": 600.0,
+                "minimum": 5.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeout S"
           }
         },
-        "title": "TierModels",
+        "title": "TierIn",
         "type": "object"
       },
-      "TierModelsIn": {
+      "TierOut": {
+        "properties": {
+          "effort": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort"
+          },
+          "max_retries": {
+            "title": "Max Retries",
+            "type": "integer"
+          },
+          "max_tokens": {
+            "title": "Max Tokens",
+            "type": "integer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "timeout_s": {
+            "title": "Timeout S",
+            "type": "number"
+          }
+        },
+        "required": [
+          "model",
+          "max_tokens",
+          "timeout_s",
+          "max_retries",
+          "effort"
+        ],
+        "title": "TierOut",
+        "type": "object"
+      },
+      "TiersIn": {
         "additionalProperties": false,
         "properties": {
           "high": {
             "anyOf": [
               {
-                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,119}$",
-                "type": "string"
+                "$ref": "#/components/schemas/TierIn"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "High"
+            ]
           },
           "low": {
             "anyOf": [
               {
-                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,119}$",
-                "type": "string"
+                "$ref": "#/components/schemas/TierIn"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Low"
+            ]
           },
           "medium": {
             "anyOf": [
               {
-                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,119}$",
-                "type": "string"
+                "$ref": "#/components/schemas/TierIn"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Medium"
+            ]
           }
         },
-        "title": "TierModelsIn",
+        "title": "TiersIn",
+        "type": "object"
+      },
+      "TiersOut": {
+        "properties": {
+          "high": {
+            "$ref": "#/components/schemas/TierOut"
+          },
+          "low": {
+            "$ref": "#/components/schemas/TierOut"
+          },
+          "medium": {
+            "$ref": "#/components/schemas/TierOut"
+          }
+        },
+        "required": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "title": "TiersOut",
         "type": "object"
       },
       "TimingTraits": {
@@ -16812,6 +17478,171 @@
         ]
       }
     },
+    "/api/v1/clients/{client_id}/analytics/gaps": {
+      "get": {
+        "operationId": "analytics_gaps",
+        "parameters": [
+          {
+            "description": "cl_\u2026 id",
+            "in": "path",
+            "name": "client_id",
+            "required": true,
+            "schema": {
+              "description": "cl_\u2026 id",
+              "title": "Client Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "window_days",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    7,
+                    30,
+                    90
+                  ],
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Window Days"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultEnvelope_GapMatrixData_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Too Many Requests"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Implemented"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Analytics Gaps",
+        "tags": [
+          "results"
+        ]
+      }
+    },
     "/api/v1/clients/{client_id}/analytics/outliers": {
       "get": {
         "operationId": "analytics_outliers",
@@ -19992,6 +20823,16 @@
           "required": true
         },
         "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmSetupOut"
+                }
+              }
+            },
+            "description": "joined the analysis already confirming this setup"
+          },
           "202": {
             "content": {
               "application/json": {
@@ -22137,6 +22978,302 @@
         "summary": "News Signals",
         "tags": [
           "results"
+        ]
+      }
+    },
+    "/api/v1/clients/{client_id}/notification-settings": {
+      "get": {
+        "operationId": "notification_settings_get",
+        "parameters": [
+          {
+            "description": "cl_\u2026 id",
+            "in": "path",
+            "name": "client_id",
+            "required": true,
+            "schema": {
+              "description": "cl_\u2026 id",
+              "title": "Client Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Too Many Requests"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Implemented"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Notification Settings Get",
+        "tags": [
+          "settings"
+        ]
+      },
+      "patch": {
+        "operationId": "notification_settings_patch",
+        "parameters": [
+          {
+            "description": "cl_\u2026 id",
+            "in": "path",
+            "name": "client_id",
+            "required": true,
+            "schema": {
+              "description": "cl_\u2026 id",
+              "title": "Client Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationSettingsPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Too Many Requests"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Implemented"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Notification Settings Patch",
+        "tags": [
+          "settings"
         ]
       }
     },
@@ -24868,20 +26005,46 @@
         "parameters": [
           {
             "in": "query",
-            "name": "code",
+            "name": "state",
             "required": true,
             "schema": {
-              "title": "Code",
+              "maxLength": 200,
+              "title": "State",
               "type": "string"
             }
           },
           {
             "in": "query",
-            "name": "state",
-            "required": true,
+            "name": "code",
+            "required": false,
             "schema": {
-              "title": "State",
-              "type": "string"
+              "anyOf": [
+                {
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
             }
           }
         ],
@@ -25041,7 +26204,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectOut"
+                }
               }
             },
             "description": "Successful Response"
@@ -27722,6 +28887,147 @@
           }
         },
         "summary": "Settings Llm Put",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/llm/test": {
+      "post": {
+        "operationId": "settings_llm_test",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LLMTestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LLMTestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Too Many Requests"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Implemented"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Settings Llm Test",
         "tags": [
           "settings"
         ]

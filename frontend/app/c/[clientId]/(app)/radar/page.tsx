@@ -5,7 +5,7 @@ import { useState } from "react";
 import { EarlySignalCard } from "@/components/cards/early-signal-card";
 import { MIN_REFERENCES, NewsCard } from "@/components/cards/news-card";
 import { VideoList } from "@/components/cards/video-list";
-import { VideoEvidenceDrawer } from "@/components/evidence/evidence-drawer";
+import { VideoEvidenceDrawer } from "@/components/evidence/lazy-drawers";
 import { NoticeList } from "@/components/states/notice-list";
 import { FreshnessLine } from "@/components/shell/freshness-line";
 import { PageHeader } from "@/components/shell/page-header";
