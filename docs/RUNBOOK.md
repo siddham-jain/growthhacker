@@ -104,7 +104,7 @@ Measured on Apollo (2026-11-20):
 
 - Cold onboarding: about 4.5 min.
 - Cold analysis: about 5–6 min with 10 competitors (topic adjudication ~3 min is now the longest stage; OCR is restricted to likely outliers, own uploads and a control sample).
-- Warm daily refresh: 10–15 s and 0 YouTube units within the same 6 h fingerprint bucket; about 2.4 min when ingest, enrich and analytics must recompute (new uploads or creators), most of it card writing.
+- Warm daily refresh: 10–15 s and 0 YouTube units within the same 6 h fingerprint bucket; about 95 s and 10 units when every stage recomputes (`force`), with analytics (~23 s) and card writing (~35 s) the longest parts.
 
 ## 7. Crons (maintenance worker)
 

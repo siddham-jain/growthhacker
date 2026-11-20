@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Added
+- Add weekly answer-citation tracking: tavily answers for the top 10 buyer questions, cited videos resolved via videos.list, a read endpoint and Your channel / Competitors panels.
+- Add CSP with frame-ancestors 'none' and security headers to the frontend.
 - Add full per-provider LLM settings (tiers, limits, retries, effort, extra params, enable, order) and a no-token connection test.
 - Add gap matrix and per-client notification settings endpoints; add the client's own column to competitor detail.
 - Wire YouTube OAuth connect/callback/disconnect to 02's service with a clear not-configured error.
@@ -28,6 +30,14 @@
 - Add shared context brief, env template and gitignore.
 
 ### Changed
+- Expected range is the reference videos' plain outlier ratios (capped 0.5x–3.0x, interquartile or min–max) times the client's median baseline, labelled "calculated by GrowthHacker".
+- Strict contract mode (`?format=contract`) lists only the five assignment card types and says so in `data.meta`.
+- Competitor API views carry raw channel facts ("matching uploads: N of last M") instead of overlap/activity/agreement scores.
+- Drift events are deleted after 28 days; id re-verification refreshes live ids and redacts gone ones at the hard limit.
+- Ingest and niche discovery fetch channels four at a time; critic batches run concurrently and are balanced.
+- Recommend's post-gate rewrite hands 07's violations to the writer; validator retries are numbered so a cached reply is never replayed.
+- Mark every computed number in the UI with the "Calculated by GrowthHacker, not a YouTube metric" disclosure.
+- Show raw upload facts instead of overlap/activity scores in competitor review; competitors list sorts by name by default.
 - Hygiene chapter advice carries a marked "0:00 Introduction" scaffold with the video's real limits; the per-run cap keeps pasteable fixes ahead of advice-only notes.
 - Cut first-load JS on main screens from ~335 KB to ~180–197 KB gz: lazy toaster, drawers, popovers, charts and settings editors; native tabs and segmented control.
 - Align the live panel's stage rail with the backend DAG stage names.
@@ -45,6 +55,37 @@
 - Move confirm-setup's competitor freeze and topic rebuild into the worker; the endpoint returns 202 with the run.
 
 ### Fixed
+- Fix owner analytics day-N treating missing days as zero; partial series fall back down the ladder and are re-pulled.
+- Fix one failed quota-ledger flush making every later YouTube call raise after it succeeded.
+- Fix the uploads ETag being saved before new videos were hydrated.
+- Fix refresh "applied" detection matching a keyword anywhere in the description.
+- Fix verify_additive using different link-fix offsets than apply; one bad merge no longer fails the refresh stage.
+- Fix the video coalescer running merged batches on the first caller's quota.
+- Fix resumed refresh attempts failing on the run-derived refresh id.
+- Fix Devanagari hashtags losing their vowel signs.
+- Fix failing snapshot chunks staying due every tick; they back off and are bisected to the bad id.
+- Fix videos with no localizations missing the cache on every request.
+- Fix pattern card ids changing when the supporting lift scope flips.
+- Fix rebuilds dropping user-confirmed rule aliases and user decisions made during the rebuild.
+- Fix the client baseline being picked arbitrarily when several share an as_of.
+- Fix forced warm daily refresh taking 2.2 min (now ~95 s): the news prefilter froze the event loop for 23 s.
+- Fix llm cards saying "one" always failing 07's numbers gate and falling back to the template; 10's validator counts "one" too.
+- Fix parallel youtube stages charging each other's quota and capping the run on the remainder twice.
+- Fix a crashing stage task leaving siblings running and the run stuck in running; a lost lease now stops the dag.
+- Fix open redirect in the login next parameter (encoded and backslash variants).
+- Fix the thin-window fallback showing a raw THIN_WINDOW code and dropping widen_to.
+- Encode api path segments in the http client.
+- Fix renderer ssrf: every browser request, redirect hop and final url goes through the guard; websockets and webrtc are blocked.
+- Pin ssrf-vetted addresses in the httpx transport for the direct fetcher, link checker, rss and renderer (dns rebinding).
+- Never send the operator llm key to a workspace base_url; parse base_urls and ssrf-check them on test and run.
+- Scope outlier labels to their workspace (migration 0009_security).
+- Redact stdlib/httpx logs and drop httpx/httpcore to warning.
+- Bind youtube oauth state to the starting user and browser session.
+- Fence untrusted llm input with escaped attributes and a trailing data reminder; ground extracted competitor domains in the search hit.
+- Check client scope before charging the run-start bucket; fingerprint idempotency on the concrete path.
+- Enforce api key scopes, revoke keys whose creator left, refuse deleted workspaces; rate-limit logins per account.
+- Cap rss, robots and pdf reads; parse pdfs off the event loop; restrict link checks to ports 80/443.
+- Bind compose postgres and redis to localhost and turn off the uvicorn access log.
 - Fix build_profile failing with budget_exceeded on uncached profiles: onboarding llm budget is $1.50 (recrawl $1.00) and calls past the remaining budget fall back to the deterministic draft.
 - Fix inline svg/css leaking into link labels, ctas and facts; code-like page lines and fact quotes are dropped (extractor v3).
 - Fix malformed-link repairs never offered when the repaired site blocks checks, and contact lines printing a bare-number label twice.
@@ -64,6 +105,14 @@
 - Fix rapidocr 3.10 enum params that failed thumbnail enrichment.
 
 ### Decisions
+- Video lookups coalesce only within one quota identity (client, run) — cross-client sharing happens through in-flight claims, so each caller pays its own calls and one cap never fails another.
+- Owner day N ends at the pacific midnight nearest the real age N, within the observed ladder's tolerance — the same definition as observed snapshots, so owner values never cover a different age.
+- News lexical scoring prunes (term, item) pairs and sliding windows by difflib's quick_ratio bound — results stay identical to the full scan, so relevance is unchanged.
+- The youtube run cap is fixed by the first opener (redis nx) and each stage charges its own per-stage tally — the shared run counter already holds earlier spend, so caps from the remainder double-counted.
+- Answer-citation retention rules register next to their model, not in app/retention/rules.py — that file was being reworked concurrently.
+- Answer citations are not written to buyer_questions.ai_cited_video_ids — recommend's lens labels that field Spotlit, so it needs a new EvidenceSource first.
+- The renderer fetches every request itself and fulfils it into chromium (dead proxy, empty resolver as backstop) — playwright routes skip redirect hops, so a route-level guard alone cannot stop a redirect into the metadata service.
+- Residual dns-rebinding risk remains for workspace llm base_urls: the anthropic/openai sdks resolve on their own after the guard's check.
 - build_profile caps each llm call at the run's remaining llm budget and charges at most what remains — concurrent map calls can overshoot a pre-call cap and the spend already happened.
 - Chapter copy lives in the chapters_needed advisory, not an InsertionOp — ops are single-line inserts and public data has no transcript, so real times and titles can't be built.
 - A same-host link repair is offered unless the repaired URL is known broken — Facebook, X and LinkedIn block probes, so requiring an ok probe meant Apollo's malformed links never got a fix.
