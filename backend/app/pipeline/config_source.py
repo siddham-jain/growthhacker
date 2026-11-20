@@ -58,8 +58,6 @@ class TableRunConfigSource:
         self, session: AsyncSession, client: Client, window_days: int | None
     ) -> RunConfigSnapshot:
         settings = read_settings(client)
-        if client.country is None:
-            raise ConfigInvalid("client market country is not set")
         profile = await self._latest_profile(session, client)
         topic_set_version, refs = await self._topic_refs(session, client)
         fields: dict[str, Any] = {
@@ -82,7 +80,9 @@ class TableRunConfigSource:
             ).model_dump(mode="json"),
             "feature_flags": dict(self._feature_flags),
         }
-        return RunConfigSnapshot.model_validate({**fields, "config_hash": config_hash(fields)})
+        return RunConfigSnapshot.model_validate(
+            {**fields, "market_explicit": settings.market_explicit, "config_hash": config_hash(fields)}
+        )
 
     async def _latest_profile(self, session: AsyncSession, client: Client) -> BusinessProfile | None:
         statement = (

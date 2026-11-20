@@ -25,7 +25,9 @@ class ClientCreate(ApiModel):
     name: str = Field(min_length=1, max_length=120)
     website_url: HttpUrl | None = None
     channel_ref: str | None = Field(default=None, min_length=2, max_length=300)
-    market: Market
+    # without a market, or with market_explicit false (a browser locale), onboarding infers it from the site
+    market: Market | None = None
+    market_explicit: bool = True
     window_days: WindowDays = 30
     # with neither website nor channel, onboarding locates the business from its name (03 §14)
     start_onboarding: bool = True

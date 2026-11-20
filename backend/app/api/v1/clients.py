@@ -104,7 +104,11 @@ async def clients_create(
         workspace = await session.get(Workspace, scope.workspace_id)
         # demo workspaces (bootstrap --auto-confirm) skip the manual setup review for new clients
         auto_confirm = bool((workspace.settings or {}).get("auto_confirm_setup")) if workspace else False
-        settings = ClientSettings(window_days=body.window_days, auto_confirm_setup=auto_confirm)
+        settings = ClientSettings(
+            window_days=body.window_days,
+            auto_confirm_setup=auto_confirm,
+            market_explicit=body.market is not None and body.market_explicit,
+        )
         duplicate = (
             await session.execute(
                 select(Client.id).where(
@@ -129,9 +133,9 @@ async def clients_create(
             website_domain=domain,
             own_channel_id=channel_id,
             own_channel_status="proposed" if channel_id else "unresolved",
-            timezone=body.market.timezone,
-            country=body.market.country,
-            language=body.market.language,
+            timezone=body.market.timezone if body.market else "UTC",
+            country=body.market.country if body.market else None,
+            language=body.market.language if body.market else None,
             lifecycle=ClientLifecycle.created.value,
         )
         write_settings(
@@ -263,6 +267,8 @@ async def clients_update(
                 body.market.language,
                 body.market.timezone,
             )
+        if body.market is not None:
+            changes["market_explicit"] = True
         if window_changed or body.market is not None:
             changes["config_version"] = settings.config_version + 1
         if body.refresh_hour_local is not None:

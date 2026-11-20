@@ -79,10 +79,11 @@ def test_accept_claims_confirms_proposed_items_only():
         "notes": {"meta": {"status": "proposed"}},
     }
     accepted = accept_claims(tree)
+    # third-party claims that need confirmation are never accepted on the user's behalf
     assert [item["meta"]["status"] for item in accepted["offerings"]] == [
         "confirmed",
         "rejected",
-        "confirmed",
+        "needs_confirmation",
     ]
     # only claim metadata (it carries an origin) is touched
     assert accepted["notes"]["meta"]["status"] == "proposed"

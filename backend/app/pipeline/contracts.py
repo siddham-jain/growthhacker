@@ -96,7 +96,8 @@ class CancellationToken(Protocol):
 
 
 class Market(DomainModel):
-    country: CountryCode
+    # none until onboarding infers it from the site, unless the user picked it
+    country: CountryCode | None = None
     language: str
     timezone: str
 
@@ -121,6 +122,8 @@ class RunConfigSnapshot(DomainModel):
     profile_version: int | None = None
     oauth_connected: bool = False
     market: Market
+    # the user picked the market; otherwise onboarding replaces it with what the site's evidence says
+    market_explicit: bool = False
     feature_flags: dict[str, bool] = {}
 
 

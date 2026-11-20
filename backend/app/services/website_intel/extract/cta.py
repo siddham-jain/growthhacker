@@ -45,7 +45,10 @@ ANCHOR_LEXICON: tuple[tuple[re.Pattern[str], CtaType], ...] = tuple(
             r"\bstart\s+(?:your\s+|a\s+)?(?:free\s+)?trial\b|\bfree\s+trial\b|\btry\s+(?:it\s+)?(?:for\s+)?free\b",
             "free_trial",
         ),
-        (r"\b(?:request|get)\s+(?:a\s+)?(?:quote|estimate|proposal)\b", "quote_request"),
+        (
+            r"\b(?:request|get)\s+(?:an?\s+|your\s+)?(?:free\s+)?(?:quote|estimate|proposal)\b",
+            "quote_request",
+        ),
         (r"\b(?:get\s+started|sign\s*up|create\s+(?:an?\s+)?account|register\s+now|join\s+now)\b", "signup"),
         (r"\b(?:buy|shop|order)\s+now\b|\badd\s+to\s+(?:cart|bag|basket)\b", "buy"),
         (r"\bchat\s+(?:with\s+us\s+)?on\s+whatsapp\b|\bwhatsapp\s+us\b", "whatsapp"),
@@ -124,8 +127,38 @@ def international(number: str) -> str:
     )
 
 
+def awaiting_region(candidate: CtaCandidate) -> bool:
+    """a national number from a site whose country is not known yet; localise_calls settles it."""
+    digits = candidate.target[4:]
+    return (
+        candidate.type == "call"
+        and candidate.target.startswith("tel:")
+        and digits.isdigit()
+        and 6 <= len(digits) <= 15
+    )
+
+
+def localise_calls(ctas: Sequence[CtaCandidate], region: str | None) -> list[CtaCandidate]:
+    """re-parses national numbers with the inferred market; ones that are still not valid numbers are dropped."""
+    result = []
+    for candidate in ctas:
+        if not awaiting_region(candidate):
+            result.append(candidate)
+            continue
+        number = full_phone(candidate.target[4:], region) if region else None
+        if number is None:
+            continue
+        label = candidate.label if meaningful_label(candidate.label) else international(number)
+        result.append(candidate.model_copy(update={"target": f"tel:{number}", "label": label}))
+    return result
+
+
 def _without_scheme(url: str) -> str:
     return url.split("://", 1)[-1].lower().removeprefix("www.")
+
+
+def is_whatsapp(url: str) -> bool:
+    return url.lower().startswith("whatsapp:") or _without_scheme(url).startswith(WHATSAPP_PREFIXES)
 
 
 class CtaExtractor:
@@ -144,7 +177,9 @@ class CtaExtractor:
         found: dict[str, CtaCandidate] = {}
         for link in links:
             candidate = self._from_link(link, page_url=page_url, regions=(region, site_region))
-            if candidate is not None and contact_is_valid(candidate):
+            if candidate is not None and (
+                contact_is_valid(candidate) or (region is None and awaiting_region(candidate))
+            ):
                 self._merge(found, candidate)
         for form in forms:
             candidate = self._from_form(form, page_url=page_url)
@@ -175,12 +210,12 @@ class CtaExtractor:
         if lowered.startswith("tel:"):
             cta_type, target = "call", "tel:" + normalize_phone(target[4:], *regions)
             number = full_phone(target[4:])
-            # a bare "+91" or icon anchor on a valid tel link reads as the number itself
-            if number and not (meaningful_label(label) or full_phone(label, *regions)):
+            # a bare "+91", a national-format number or an icon anchor reads as the international number
+            if number and not meaningful_label(label):
                 label = international(number)
         elif lowered.startswith("mailto:"):
             cta_type, target = "email", "mailto:" + target[7:].split("?", 1)[0].strip().lower()
-        elif lowered.startswith("whatsapp:") or _without_scheme(target).startswith(WHATSAPP_PREFIXES):
+        elif is_whatsapp(target):
             cta_type = "whatsapp"
         elif not lowered.startswith(("http://", "https://")):
             return None

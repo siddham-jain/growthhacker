@@ -12,6 +12,7 @@ from app.domain.runs import RunNotice, RunNoticeCode
 from app.domain.web import CoverageFacet, SourceKind
 from app.domain.youtube import OwnershipLabel
 from app.models.tenancy import Client
+from app.pipeline.client_settings import merged, read_settings, write_settings
 from app.pipeline.contracts import (
     BudgetKind,
     RunConfigSnapshot,
@@ -25,6 +26,7 @@ from app.ports.context import BusinessLookup
 from app.services.website_intel.artifacts import SiteAcquisition
 from app.services.website_intel.identity.locator import LocatedBusinessDetail
 from app.services.website_intel.persistence import PgMapCache, WebsiteIntelStore
+from app.services.website_intel.profile.market import market_timezone
 from app.services.website_intel.profile.prompts import WEBSITE_PROMPTS, prompt_version
 from app.services.website_intel.service import WebsiteIntelService, deps_from_container
 
@@ -44,6 +46,32 @@ SITE_TIERS = frozenset({SourceKind.site_direct, SourceKind.site_rendered})
 CHANNEL_STATUS = {OwnershipLabel.verified: "verified", OwnershipLabel.rejected: "rejected"}
 # 02's verdict method in the api's verified_by vocabulary
 VERIFIED_BY = {"link": "website_link", "oauth": "oauth", "user": "manual"}
+
+
+def explicit_country(snapshot: RunConfigSnapshot) -> str | None:
+    """the market the user picked; a browser locale must not decide how the site's phone numbers parse."""
+    return snapshot.market.country if snapshot.market_explicit else None
+
+
+async def record_market(ctx: RunContext[Any], profile: BusinessProfile) -> None:
+    """writes the profile's evidence-based market to the client unless the user picked one."""
+    if ctx.snapshot.market_explicit:
+        return
+    identity = profile.identity
+    async with ctx.deps.session_factory() as session, session.begin():
+        client = await session.get(Client, ctx.client_id, with_for_update=True)
+        if client is None or client.workspace_id != ctx.workspace_id:
+            return
+        settings = read_settings(client)
+        if settings.market_explicit:
+            return
+        country = identity.country
+        language = f"{identity.primary_language}-{country}" if country else client.language
+        timezone = (market_timezone(country, client.timezone) if country else None) or client.timezone
+        if (client.country, client.language, client.timezone) == (country, language, timezone):
+            return
+        client.country, client.language, client.timezone = country, language, timezone
+        write_settings(client, merged(settings, config_version=settings.config_version + 1))
 
 
 def website_service(ctx: RunContext[Any]) -> WebsiteIntelService:
@@ -159,7 +187,7 @@ class CrawlSiteStage:
     """runs the acquisition cascade so a blocked or missing site still yields business context (§14)."""
 
     name = "crawl_site"
-    version = 2
+    version = 3
     depends_on: tuple[str, ...] = ("resolve_inputs",)
     optional_deps: tuple[str, ...] = ()
     produces = SITE_ACQUISITION
@@ -186,7 +214,7 @@ class CrawlSiteStage:
                 ctx.reporter,
                 client_id=ctx.client_id,
                 run_id=ctx.run_id,
-                country_hint=ctx.snapshot.market.country,
+                country_hint=explicit_country(ctx.snapshot),
                 tavily_credit_cap=ctx.budget.remaining(BudgetKind.tavily_credits),
             )
         finally:
@@ -248,7 +276,7 @@ class BuildProfileStage:
     """map → verify → reduce → enrich → validate → merge with user edits → persist a new version."""
 
     name = "build_profile"
-    version = 2
+    version = 4
     depends_on: tuple[str, ...] = ("resolve_inputs", "crawl_site")
     optional_deps: tuple[str, ...] = ()
     produces = BUSINESS_PROFILE
@@ -287,7 +315,7 @@ class BuildProfileStage:
             tombstones=tombstones,
             existing_questions=existing,
             crawl_run_id=acquisition.crawl_run_id,
-            country_hint=ctx.snapshot.market.country,
+            country_hint=explicit_country(ctx.snapshot),
             map_cache=PgMapCache(ctx.deps.session_factory, scope(ctx)),
             llm_cost_cap_usd=ctx.budget.remaining(BudgetKind.llm_usd),
         )
@@ -307,6 +335,7 @@ class BuildProfileStage:
             await store.save_diff(result.diff)
             await store.save_questions(result.questions)
             await uow.commit()
+        await record_market(ctx, result.profile)
         profile = result.profile
         status = "degraded" if result.notices else "succeeded"
         return StageResult(

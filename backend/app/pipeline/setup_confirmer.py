@@ -17,11 +17,13 @@ from app.services.competitors.select.validation import SetValidationError
 from app.services.topics.engine import TopicEngine
 from app.services.website_intel.persistence import WebsiteIntelStore
 
-ACCEPTED_CLAIMS = {ClaimStatus.proposed.value, ClaimStatus.needs_confirmation.value}
+# third-party claims (web mentions, search snippets, archives) wait for a person even in demo mode
+ACCEPTED_CLAIMS = {ClaimStatus.proposed.value}
 
 
 def accept_claims(value: Any) -> Any:
-    """every proposed claim in the profile tree becomes confirmed; rejected and stale claims stay as they are."""
+    """every proposed claim in the profile tree becomes confirmed; claims that need confirmation, rejected
+    and stale claims stay as they are."""
     if isinstance(value, list):
         return [accept_claims(item) for item in value]
     if not isinstance(value, dict):

@@ -18,6 +18,8 @@ class ClientSettings(BaseModel):
     # bumped by every PATCH; the If-Match / ETag value for the client resource
     version: int = Field(default=1, ge=1)
     paused_from: str | None = None
+    # true once the user picked the market; a browser locale or onboarding's inference never counts
+    market_explicit: bool = False
 
 
 def read_settings(client: Client) -> ClientSettings:
