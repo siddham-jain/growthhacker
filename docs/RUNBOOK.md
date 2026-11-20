@@ -72,7 +72,7 @@ curl -N $API/clients/<client_id>/events -H "Authorization: Bearer $KEY" -H "Acce
 **Confirm.**
 
 - In a demo workspace this is automatic.
-- Otherwise, review the profile, keywords, questions and competitors through the setup endpoints, then call `POST $API/clients/<client_id>/confirm-setup`. Confirming freezes the competitor set, marks the profile confirmed and rebuilds the topic refs before it validates (3–10 competitors and at least one topic).
+- Otherwise, review the profile, keywords, questions and competitors through the setup endpoints, then call `POST $API/clients/<client_id>/confirm-setup`. It returns 202 with the queued analysis run. The worker then freezes the competitor set, marks the profile confirmed and rebuilds the topic refs before it validates (3–10 competitors and at least one topic). A failed validation fails that run with the reason in `error`, and the client returns to `awaiting_confirmation`.
 
 **Editing the proposed set.** Suppose a rival the proposal ranked just outside its slots should be tracked; on Apollo this was Narayana Health. Promote it, confirm it, then confirm the setup:
 
@@ -103,8 +103,8 @@ curl -s -X POST $API/clients "${H[@]}" -H "Idempotency-Key: $(uuidgen)" -d '{
 Measured on Apollo (2026-11-20):
 
 - Cold onboarding: about 4.5 min.
-- Cold analysis: about 5–8 min, most of it thumbnail OCR on roughly 1.8k videos.
-- Warm daily refresh: 62 s, 0 YouTube units on the same day.
+- Cold analysis: about 5–6 min with 10 competitors (topic adjudication ~3 min is now the longest stage; OCR is restricted to likely outliers, own uploads and a control sample).
+- Warm daily refresh: 10–15 s and 0 YouTube units within the same 6 h fingerprint bucket; about 2.4 min when ingest, enrich and analytics must recompute (new uploads or creators), most of it card writing.
 
 ## 7. Crons (maintenance worker)
 
