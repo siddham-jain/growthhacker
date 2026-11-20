@@ -38,7 +38,8 @@ from app.services.website_intel.profile.llm import LlmGateway
 from app.services.website_intel.profile.schemas import EnrichmentOutput, FreshnessOutput
 from app.services.website_intel.profile.synthesizer import CoreBundle
 
-CAPS = {"seed": 80, "expanded": 120, "questions": 40, "pillars": 7}
+# sized so one reply (keywords before questions) stays well under the 12k-token task cap
+CAPS = {"seed": 50, "expanded": 60, "questions": 40, "pillars": 7}
 EXTRACTION_SOURCE = {
     ExtractionKind.page_text: "page_text",
     ExtractionKind.nav: "nav",
@@ -306,7 +307,8 @@ class KeywordAndQuestionEnricher:
             )
             keywords.setdefault(keyword.id, keyword)
         questions = []
-        primary = [offering for offering in ctx.core.offerings if offering.is_primary][:5]
+        offerings = ctx.core.offerings
+        primary = [offering for offering in offerings if offering.is_primary][:5] or offerings[:5]
         for offering in primary:
             for template, stage, intent in FALLBACK_QUESTION_TEMPLATES:
                 questions.append(

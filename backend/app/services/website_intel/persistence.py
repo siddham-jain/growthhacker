@@ -191,6 +191,21 @@ class WebsiteIntelStore:
         )
         return crawl_run_id
 
+    async def save_acquisition(self, crawl_run_id: UUID, payload_gz: bytes) -> None:
+        await self.session.execute(
+            update(CrawlRunRow)
+            .where(CrawlRunRow.id == crawl_run_id, CrawlRunRow.client_id == self.scope.client_id)
+            .values(acquisition_gz=payload_gz)
+        )
+
+    async def acquisition(self, crawl_run_id: UUID) -> bytes | None:
+        statement = select(CrawlRunRow.acquisition_gz).where(
+            CrawlRunRow.id == crawl_run_id,
+            CrawlRunRow.workspace_id == self.scope.workspace_id,
+            CrawlRunRow.client_id == self.scope.client_id,
+        )
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
     async def upsert_pages(self, website_id: UUID, crawl_run_id: UUID, pages: Sequence[ExtractedPage]) -> int:
         stored = 0
         for extracted in pages:

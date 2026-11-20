@@ -23,8 +23,12 @@ from app.domain.web import ExtractionKind, SourceKind
 from app.ports.buyer_questions import BuyerQuestionCandidate
 from app.services.website_intel.profile.claims import ClaimFactory
 from app.services.website_intel.profile.differ import ProfileDiffer, offering_overlap
+from app.services.website_intel.profile.enrichers import EnrichmentContext, KeywordAndQuestionEnricher
+from app.services.website_intel.profile.evidence import FactStore
 from app.services.website_intel.profile.industry import REFRESH_POLICIES
+from app.services.website_intel.profile.llm import LlmGateway
 from app.services.website_intel.profile.merger import EditOp, ProfileEditor, ProfileMerger, Tombstone
+from app.services.website_intel.profile.synthesizer import CoreBundle
 from app.services.website_intel.profile.validators import ValidatorChain
 from app.services.website_intel.questions.service import (
     BuyerQuestionService,
@@ -263,3 +267,27 @@ async def test_question_service_merges_by_precedence_and_dedupes() -> None:
     assert pretick(questions, 1) == [user.id] or pretick(questions, 1) == [derived_question.id]
     again = await service.collect(CLIENT_ID, base, claims, existing=questions)
     assert [question.id for question in again] == [question.id for question in questions]
+
+
+async def test_enrichment_fallback_derives_questions_when_no_offering_is_primary() -> None:
+    base = profile(1, [offering("Cardiology"), offering("Oncology")])
+    core = CoreBundle(
+        identity=base.identity,
+        offerings=base.offerings,
+        value_propositions=[],
+        target_customers=[],
+        locations=base.locations,
+        conversion_actions=[],
+        brand_terms=[],
+        competitor_hints=[],
+        used_llm=False,
+    )
+    claims = ClaimFactory(version=1, now=NOW, home_urls=frozenset(), stale_after=timedelta(days=548))
+    enrichment = await KeywordAndQuestionEnricher(LlmGateway(None, client_id=CLIENT_ID, run_id=None)).enrich(
+        EnrichmentContext(
+            store=FactStore(), core=core, claims=claims, inventory=[], slug_vocabulary=[], india=False
+        )
+    )
+    texts = {candidate.text for candidate in enrichment.questions}
+    assert {"How much does Cardiology cost?", "How do I book Oncology?"} <= texts
+    assert not enrichment.used_llm

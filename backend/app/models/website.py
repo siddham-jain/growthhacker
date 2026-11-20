@@ -102,6 +102,8 @@ class CrawlRun(TenantColumns, Base):
     error: Mapped[str | None]
     started_at: Mapped[datetime]
     finished_at: Mapped[datetime | None]
+    # gzipped SiteAcquisition; too large for a run artifact, which only points here
+    acquisition_gz: Mapped[bytes | None]
 
 
 class CrawlFrontierEntry(TenantColumns, Base):

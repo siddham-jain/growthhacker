@@ -1,3 +1,4 @@
+import gzip
 from collections import Counter
 from uuid import UUID
 
@@ -39,6 +40,19 @@ class SiteAcquisition(DomainModel):
     fetches: int = 0
     stats: dict[str, int] = {}
     notes: list[str] = []
+    # true when pages and inventory live gzipped on the crawl run row instead of in this artifact
+    stored: bool = False
+
+    def compressed(self) -> bytes:
+        return gzip.compress(self.model_dump_json().encode("utf-8"))
+
+    @classmethod
+    def decompressed(cls, payload: bytes) -> "SiteAcquisition":
+        return cls.model_validate_json(gzip.decompress(payload))
+
+    def pointer(self) -> "SiteAcquisition":
+        # run artifacts hold pointers, not bulk data; build_profile reloads the rest from the crawl run
+        return self.model_copy(update={"pages": [], "inventory": [], "stored": True})
 
     @classmethod
     def from_outcome(

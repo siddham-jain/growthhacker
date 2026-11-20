@@ -16,8 +16,9 @@ from app.ports.clock import Clock
 from app.ports.context import BusinessLookup, LocatedBusiness
 from app.ports.crawler import FetchContext
 from app.ports.progress import ProgressReporter
-from app.ports.search import WebSearch, WebSearchQuery
+from app.ports.search import WebSearch, WebSearchHit, WebSearchQuery
 from app.ports.youtube import RequestContext, YouTubeGateway
+from app.services.competitors.classify.geo import TAVILY_COUNTRY_NAMES
 from app.services.website_intel.extract.page_builder import PageExtractor
 from app.services.website_intel.identity.channel_links import ChannelLinkCollector, SiteChannelSignals
 from app.services.website_intel.identity.knowledge import KbEntity, KnowledgeBase, pick_entity
@@ -44,6 +45,16 @@ class ChannelResolverPort(Protocol):
     async def resolve(
         self, raw: str, ctx: RequestContext, *, hint: BusinessHint | None = None
     ) -> ChannelResolution: ...
+
+
+def in_market(domain: str, hit: WebSearchHit, country: str | None, country_name: str | None) -> bool:
+    if not country:
+        return True
+    tld = country.lower()
+    if domain.endswith(f".{tld}") or f".{tld}." in domain:
+        return True
+    text = f"{hit.title} {hit.snippet}".lower()
+    return bool(country_name) and country_name in text
 
 
 class LocatedBusinessDetail(LocatedBusiness):
@@ -120,7 +131,7 @@ class DefaultBusinessLocator:
             if entity is not None and entity.websites:
                 site_url, site_basis = entity.websites[0], "knowledge_base"
             else:
-                site_url = await self._search_official_site(name, notes)
+                site_url = await self._search_official_site(name, notes, lookup.country_hint)
                 site_basis = "web_search" if site_url else None
         resolution: SiteResolution | None = None
         site: SiteRef | None = None
@@ -135,7 +146,11 @@ class DefaultBusinessLocator:
         name = name or (entity.label if entity else None)
         home = self._home_page(resolution, site)
         signals = self._collector.collect([home]) if home is not None else None
+        confirmed = site is not None and (
+            site_basis == "user_input" or (entity is not None and site.registrable_domain in entity.domains)
+        )
         hint = await self._hint(signals, name, site, lookup, yt_ctx)
+        hint = hint.model_copy(update={"site_identity_confirmed": confirmed})
         channel_basis = None
         method: str | None = None
         verdict: OwnershipVerdict | None = None
@@ -191,22 +206,28 @@ class DefaultBusinessLocator:
         candidates = await self._knowledge.search(name)
         return pick_entity(candidates, name=name, domain=domain)
 
-    async def _search_official_site(self, name: str, notes: list[str]) -> str | None:
+    async def _search_official_site(
+        self, name: str, notes: list[str], country: str | None = None
+    ) -> str | None:
         if self._search is None:
             return None
+        country_name = TAVILY_COUNTRY_NAMES.get(country or "")
+        query = f'"{name}" official website' + (f" {country_name}" if country_name else "")
         try:
             response = await self._search.search(
-                WebSearchQuery(query=f'"{name}" official website', max_results=5)
+                WebSearchQuery(query=query, max_results=5, country=country_name)
             )
         except WebSearchError as error:
             notes.append(f"web search unavailable: {error.kind}")
             return None
         tokens = name_tokens(name) or [name.lower().replace(" ", "")]
-        for hit in response.hits:
+        matches = []
+        for rank, hit in enumerate(response.hits):
             domain = registrable_domain(host_of(hit.url))
             if domain and domain not in PLATFORM_DOMAINS and tokens[0] in domain.replace("-", ""):
-                return f"https://{host_of(hit.url)}/"
-        return None
+                matches.append((not in_market(domain, hit, country, country_name), rank, host_of(hit.url)))
+        # a same-name business abroad must not win over the one in the client's market
+        return f"https://{min(matches)[2]}/" if matches else None
 
     def _home_page(self, resolution: SiteResolution | None, site: SiteRef | None) -> ExtractedPage | None:
         if resolution is None or site is None or resolution.home is None:

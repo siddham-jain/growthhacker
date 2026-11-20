@@ -4,7 +4,6 @@ from typing import Any
 
 from sqlalchemy import (
     BigInteger,
-    CheckConstraint,
     ForeignKey,
     Identity,
     Index,
@@ -182,9 +181,6 @@ class Client(Base):
         UniqueConstraint("workspace_id", "slug"),
         check_in("lifecycle", CLIENT_LIFECYCLES),
         check_in("own_channel_status", OWN_CHANNEL_STATUSES),
-        CheckConstraint(
-            "website_url IS NOT NULL OR own_channel_id IS NOT NULL", name="has_website_or_channel"
-        ),
         Index(
             "uq_clients_workspace_id_own_channel_id",
             "workspace_id",

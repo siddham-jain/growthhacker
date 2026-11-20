@@ -16,6 +16,7 @@ from app.models.website import BuyerQuestion, CrawledPage, CrawlRun, ProfileDiff
 from app.pipeline.contracts import Market, RunConfigSnapshot, RunContext
 from app.ports.artifacts import ArtifactKey
 from app.ports.llm import LLMError, LLMErrorKind, TaskId
+from app.services.website_intel.artifacts import SiteAcquisition
 from app.services.website_intel.inputs.ssrf import SsrfGuard
 from app.services.website_intel.service import WebsiteIntelService, deps_from_container
 from tests.conftest import make_settings
@@ -212,7 +213,13 @@ async def test_onboarding_stages_persist_crawl_profile_and_questions(
     located = artifacts.values["located_business"]
     assert located.site.canonical_origin == ORIGIN
     acquisition = artifacts.values["site_acquisition"]
-    assert acquisition.crawl_run_id is not None and len(acquisition.pages) >= 4
+    # the artifact is a pointer; the pages travel gzipped on the crawl run row
+    assert acquisition.crawl_run_id is not None and acquisition.stored and not acquisition.pages
+    async with session_factory() as session:
+        stored = await session.scalar(
+            select(CrawlRun.acquisition_gz).where(CrawlRun.id == acquisition.crawl_run_id)
+        )
+    assert len(SiteAcquisition.decompressed(stored).pages) >= 4
     profile = artifacts.values["business_profile"]
     assert profile.identity.name == "Smile Dental Clinic"
     assert {action.type for action in profile.conversion_actions} >= {"call", "whatsapp", "book_appointment"}

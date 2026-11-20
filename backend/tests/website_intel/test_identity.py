@@ -134,6 +134,22 @@ async def test_impostor_channel_with_similar_name_is_never_verified(clock: Any) 
     assert result.needs_user_confirmation
 
 
+async def test_confirmed_site_linking_channel_by_same_as_is_verified_without_back_link(clock: Any) -> None:
+    gateway = FakeGateway()
+    silent = APOLLO_CHANNEL.model_copy(update={"description": "Hospital care"})
+    gateway.channels[APOLLO_ID] = silent
+    gateway.usernames["apollohospitalsindia"] = silent
+    same_as = '<script type="application/ld+json">{"@type": "Hospital", "sameAs": ["https://www.youtube.com/user/apollohospitalsindia"]}</script>'
+    page = home_html(youtube=None).replace(b"</head>", same_as.encode() + b"</head>")
+    fetcher = FakeRawFetcher({HOME: Served(200, page)})
+    result = await locator(gateway, fetcher, FakeKnowledge([]), clock).locate(
+        BusinessLookup(website_url="www.apollohospitals.com", country_hint="IN"), RecordingReporter()
+    )
+    assert result.channel_id == APOLLO_ID
+    assert result.ownership is not None and result.ownership.label is OwnershipLabel.verified
+    assert "confirmed_site_links_channel" in {signal.name for signal in result.ownership.signals}
+
+
 async def test_name_only_resolves_site_through_knowledge_base(clock: Any) -> None:
     entity = KbEntity(qid="Q4780321", label="Apollo Hospitals", websites=["http://www.apollohospitals.com/"])
     fetcher = FakeRawFetcher(
