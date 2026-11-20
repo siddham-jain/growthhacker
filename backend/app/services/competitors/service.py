@@ -4,6 +4,7 @@ from uuid import UUID, uuid5
 
 from app.core.config import CompetitorSettings
 from app.domain.competitors import (
+    BusinessRelevance,
     CandidateRole,
     CandidateStatus,
     ChannelEvidence,
@@ -85,8 +86,9 @@ class DiscoveryDeps:
     reporter: ProgressReporter | None = None
 
 
-def resolution_priority(entity: CandidateEntity, business_tier: str) -> tuple:
-    # multi-source first, then user, website hint, web search, niche search, llm-only; ties go to the web tier
+def resolution_priority(entity: CandidateEntity, business: BusinessRelevance) -> tuple:
+    # multi-source first, then user, website hint, web search, niche search, llm-only; ties go to the web tier,
+    # then to the stronger offering and market evidence, so the name order never decides who is checked
     kinds = entity.source_kinds
     group = (
         0
@@ -96,11 +98,24 @@ def resolution_priority(entity: CandidateEntity, business_tier: str) -> tuple:
     return (
         group,
         RELATION_ORDER.get(entity.relation, 5),
-        TIER_RANK[business_tier],
+        TIER_RANK[business.tier],
+        -business.offering_overlap,
+        -business.geo_overlap,
         -len(entity.sources),
         -entity.query_hits,
         entity.normalized_name,
     )
+
+
+def resolution_batch(active: list[CandidateEntity], settings: CompetitorSettings) -> list[CandidateEntity]:
+    """the capped, priority-ordered batch plus a few aggregators, which rank low on offerings by nature."""
+    batch = active[: settings.max_entities_to_resolve]
+    aggregators = [
+        entity
+        for entity in active[settings.max_entities_to_resolve :]
+        if entity.relation is CompetitorRelation.aggregator
+    ]
+    return [*batch, *aggregators[: settings.resolution_reserve_aggregators]]
 
 
 def candidate_id(client_id: UUID, entity: CandidateEntity) -> UUID:
@@ -139,11 +154,13 @@ class CompetitorDiscoveryService:
 
         active = sorted(
             (entity for entity in entities if not entity.is_excluded),
-            key=lambda entity: resolution_priority(entity, business[entity.key].tier),
+            key=lambda entity: resolution_priority(entity, business[entity.key]),
         )
-        to_resolve = active[: self.settings.max_entities_to_resolve]
-        for entity in active[self.settings.max_entities_to_resolve :]:
-            entity.status = CandidateStatus.unresolved
+        to_resolve = resolution_batch(active, self.settings)
+        chosen = {id(entity) for entity in to_resolve}
+        for entity in active:
+            if id(entity) not in chosen:
+                entity.status = CandidateStatus.unresolved
         if len(active) > len(to_resolve):
             ctx.warn(
                 "CANDIDATES_UNCHECKED",

@@ -1,15 +1,16 @@
 from app.core.config import CompetitorSettings
 from app.domain.youtube import OwnershipLabel, OwnershipVerdict
 from app.services.competitors.identity.normalize import normalize_name, token_set_ratio
-from app.services.competitors.model import LINK_SIGNALS, CandidateEntity, ChannelLead
+from app.services.competitors.model import CandidateEntity, ChannelLead
 from app.services.competitors.registries import ownership_signal_registry
 from app.services.competitors.verify.signals import SignalContext
+from app.services.youtube.ownership import ownership_verdict
 
 DUPLICATE_TITLE_RATIO = 95
 
 
 class OwnershipVerifier:
-    """deterministic score from registered signals; only hard link evidence can reach verified."""
+    """04's signal rules for candidate channels; the label comes from 02's single ownership rule (c38)."""
 
     def __init__(self, settings: CompetitorSettings) -> None:
         self.weights = settings.ownership
@@ -37,20 +38,7 @@ class OwnershipVerifier:
         signals = [
             signal for rule in self.rules if (signal := rule.evaluate(lead, entity, context)) is not None
         ]
-        score = min(max(sum(signal.weight for signal in signals), 0.0), 1.0)
-        names = {signal.name for signal in signals}
-        has_link = bool(names & LINK_SIGNALS)
-        weights = self.weights
-        if score >= weights.verified_min and has_link:
-            label = OwnershipLabel.verified
-        elif score >= weights.likely_min:
-            label = OwnershipLabel.likely
-        elif score >= weights.uncertain_min:
-            label = OwnershipLabel.uncertain
-        else:
-            label = OwnershipLabel.rejected
-        method = "link" if has_link else ("user" if "user_asserted" in names else None)
-        return OwnershipVerdict(label=label, method=method, score=round(score, 4), signals=signals)
+        return ownership_verdict(signals, self.weights)
 
     def _penalise_late_duplicates(self, entity: CandidateEntity, context: SignalContext) -> None:
         verified = [

@@ -17,6 +17,7 @@ from app.domain.competitors import (
 )
 from app.domain.youtube import ChannelRecord, OwnershipLabel, OwnershipVerdict, VideoRecord
 from app.ports.youtube import PlaylistItem
+from app.services.youtube.ownership import LINK_SIGNALS
 
 ResolutionMethod = Literal[
     "site_link",
@@ -42,7 +43,6 @@ RelationGuess = Literal[
     "parent",
     "unknown",
 ]
-LINK_SIGNALS = frozenset({"site_links_channel", "jsonld_sameas", "embed_majority", "channel_links_site"})
 DIRECT_RELATIONS = frozenset({CompetitorRelation.direct, CompetitorRelation.direct_public})
 
 

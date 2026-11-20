@@ -104,11 +104,15 @@ class ResolutionChain:
         return exhausted
 
     def _upload_candidates(self, entities: list[CandidateEntity]) -> list[ChannelLead]:
-        floor = self.settings.ownership.uncertain_min
+        # a found channel with only a strong name match is still worth an uploads check: the uploads are
+        # where its link and brand evidence lives, so a uncertain_min floor would never let it earn any
+        weights = self.settings.ownership
+        floor = min(weights.uncertain_min, weights.name_similarity_strong)
         ordered = sorted(
             entities,
             key=lambda entity: (
                 not entity.is_user,
+                "business_tier_low" in entity.flags,
                 UPLOAD_PRIORITY.get(entity.relation, 6),
                 -entity.query_hits,
             ),

@@ -4,7 +4,12 @@ from typing import Protocol
 
 from app.core.config import OwnershipWeights
 from app.domain.youtube import OwnershipSignal
-from app.services.competitors.identity.normalize import compact_ratio, normalize_name, token_set_ratio
+from app.services.competitors.identity.normalize import (
+    compact,
+    compact_ratio,
+    normalize_name,
+    token_set_ratio,
+)
 from app.services.competitors.model import CandidateEntity, ChannelLead
 from app.services.competitors.registries import ownership_signal_registry
 
@@ -111,6 +116,36 @@ class UploadsLinkSiteRule:
             name=self.name,
             weight=ctx.weights.uploads_link_site,
             detail=f"'{domain}' in {linking}/{len(lead.uploads)} recent upload descriptions",
+        )
+
+
+@ownership_signal_registry.register("uploads_brand_reference")
+class UploadsBrandReferenceRule:
+    # a brand that tags or names itself across its own uploads (e.g. #fortishealthcare) when no domain is linked
+    name = "uploads_brand_reference"
+    min_token_chars = 6
+
+    def evaluate(
+        self, lead: ChannelLead, entity: CandidateEntity, ctx: SignalContext
+    ) -> OwnershipSignal | None:
+        token = compact(entity.brand_name)
+        if not lead.uploads or len(token) < self.min_token_chars:
+            return None
+        domain = (entity.official_domain or "").casefold()
+        texts = [compact(video.description) for video in lead.uploads]
+        if (
+            domain
+            and sum(domain in video.description.casefold() for video in lead.uploads) / len(lead.uploads)
+            >= ctx.uploads_link_share
+        ):
+            return None
+        naming = sum(token in text for text in texts)
+        if naming / len(lead.uploads) < ctx.uploads_link_share:
+            return None
+        return OwnershipSignal(
+            name=self.name,
+            weight=ctx.weights.uploads_brand_reference,
+            detail=f"'{token}' appears in {naming}/{len(lead.uploads)} recent upload descriptions",
         )
 
 

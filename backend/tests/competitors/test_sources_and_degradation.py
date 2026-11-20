@@ -85,7 +85,7 @@ async def test_quota_exhaustion_skips_niche_search():
 
 
 def test_niche_queries_put_questions_first_and_or_combine_keywords():
-    assert niche_queries(make_context()) == [
+    assert niche_queries(make_context(CompetitorSettings(niche_queries_for_discovery=6))) == [
         "knee replacement cost in delhi",
         "best hospital for heart surgery",
         "knee replacement|heart surgery",

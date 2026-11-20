@@ -35,7 +35,9 @@ class UsernameHandleResolver:
         return not entity.channel_hints and not has_likely_lead(entity, ctx)
 
     async def resolve(self, entity: CandidateEntity, ctx: DiscoveryContext) -> list[LeadRef]:
-        for guess in handle_guesses(entity, ctx.settings.max_handle_guesses):
+        # weak business matches get one guess so they cannot drain the unit budget the strong ones need
+        limit = 1 if "business_tier_low" in entity.flags else ctx.settings.max_handle_guesses
+        for guess in handle_guesses(entity, limit):
             record = await self.youtube.by_handle(guess)
             if record is not None:
                 return [

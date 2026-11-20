@@ -25,7 +25,7 @@ LIVE_SETTINGS = CompetitorSettings(
     ),
     max_resolution_searches=0,
     niche_queries_for_discovery=2,
-    max_entities_to_resolve=8,
+    max_entities_to_resolve=12,
     uploads_sample_size=10,
 )
 

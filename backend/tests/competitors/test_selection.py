@@ -32,7 +32,8 @@ from app.services.competitors.select.validation import (
 from tests.competitors.apollo import apollo_profile
 from tests.competitors.fakes import NOW, channel, video
 
-SETTINGS = CompetitorSettings()
+# pinned so the cap assertions below do not move with the production default
+SETTINGS = CompetitorSettings(proposal_size=5)
 
 
 def entity(

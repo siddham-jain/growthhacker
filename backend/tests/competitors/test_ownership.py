@@ -1,10 +1,11 @@
 from datetime import UTC, datetime
 
 from app.core.config import CompetitorSettings
-from app.domain.competitors import CandidateSource, GeoRef
+from app.domain.competitors import BusinessRelevance, CandidateSource, CompetitorRelation, GeoRef
 from app.domain.youtube import OwnershipLabel
 from app.ports.llm import TaskId
 from app.services.competitors.model import CandidateEntity, ChannelLead, LinkEvidence
+from app.services.competitors.service import resolution_priority
 from app.services.competitors.verify.adjudicator import LlmOwnershipAdjudicator
 from app.services.competitors.verify.grouping import MultiChannelGrouper
 from app.services.competitors.verify.verifier import OwnershipVerifier
@@ -229,3 +230,19 @@ def test_channel_description_corroborates_a_guessed_domain():
     verify(target, lead(MANIPAL, guessed=True))
     assert "channel_links_site" in {signal.name for signal in target.leads[MANIPAL].verdict.signals}
     assert "domain_unverified" not in target.flags and "domain_corroborated_by_channel" in target.flags
+
+
+def test_resolution_order_follows_business_evidence_not_the_name() -> None:
+    def relevance(offering: float) -> BusinessRelevance:
+        return BusinessRelevance(
+            offering_overlap=offering, geo_overlap=0.6, geo_basis="IN", source_agreement=0.67, tier="high"
+        )
+
+    names = {"Aster DM": 0.2, "CARE Hospitals": 0.3, "Narayana Health": 0.9}
+    entities = []
+    for name in names:
+        item = entity(name, kinds=("llm", "web_search"))
+        item.relation = CompetitorRelation.direct
+        entities.append(item)
+    ordered = sorted(entities, key=lambda item: resolution_priority(item, relevance(names[item.brand_name])))
+    assert ordered[0].brand_name == "Narayana Health"
