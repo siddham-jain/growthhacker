@@ -34,3 +34,11 @@ def test_openapi_has_stable_unique_operation_ids_and_problem_responses() -> None
     assert clients_create["operationId"] == "clients_create"
     assert "application/problem+json" in clients_create["responses"]["422"]["content"]
     assert "Problem" in spec["components"]["schemas"]
+
+
+def test_confirm_setup_documents_the_accepted_run_and_the_joined_one() -> None:
+    spec = create_app(fast_settings()).openapi()
+    responses = spec["paths"]["/api/v1/clients/{client_id}/confirm-setup"]["post"]["responses"]
+    for status in ("200", "202"):
+        schema = responses[status]["content"]["application/json"]["schema"]
+        assert schema == {"$ref": "#/components/schemas/ConfirmSetupOut"}

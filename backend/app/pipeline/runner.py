@@ -585,13 +585,17 @@ class DagRunner:
         if target is StageStatus.skipped:
             state.skip_reason = SKIP_NOT_APPLICABLE
         state.error = error
-        state.move(target)
+        StageStateMachine.ensure(state.status, target)
+        # the scheduler reads in-memory states, so dependents may only see the result once the artifact is committed
         try:
-            await self._checkpoints.record(plan.run_id, self._record(state, plan, counts), artifact=artifact)
+            await self._checkpoints.record(
+                plan.run_id, self._record(state, plan, counts, status=target), artifact=artifact
+            )
         except ArtifactTooLarge as too_large:
-            state.status = StageStatus.failed
+            target = StageStatus.failed
             state.error = error_from_exception(too_large, state.name, code="artifact_too_large")
-            await self._checkpoints.record(plan.run_id, self._record(state, plan, counts))
+            await self._checkpoints.record(plan.run_id, self._record(state, plan, counts, status=target))
+        state.status = target
         progress.tracker.finish(state.name)
         await progress.emit(
             STAGE_TERMINAL_EVENT[state.status],
@@ -601,14 +605,20 @@ class DagRunner:
             level="error" if state.status is StageStatus.failed else "info",
         )
 
-    def _record(self, state: _StageState, plan: RunPlan, counts: dict[str, int] | None = None) -> StageRecord:
+    def _record(
+        self,
+        state: _StageState,
+        plan: RunPlan,
+        counts: dict[str, int] | None = None,
+        status: StageStatus | None = None,
+    ) -> StageRecord:
         duration = None
         if state.started_at is not None and state.finished_at is not None:
             duration = int((state.finished_at - state.started_at).total_seconds() * 1000)
         return StageRecord(
             stage=state.name,
             stage_version=state.stage.version,
-            status=state.status.value,
+            status=(status or state.status).value,
             attempt=state.attempt,
             input_fingerprint=state.fingerprint,
             started_at=state.started_at,

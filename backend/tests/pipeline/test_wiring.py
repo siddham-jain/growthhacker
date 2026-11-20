@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime, timedelta
 
 from arq.worker import get_kwargs
 from pydantic import BaseModel
@@ -90,14 +91,18 @@ def test_profile_keywords_become_proposed_rows_without_rejected_ones():
     assert all(row["introduced_in_profile_id"] == profile.profile_id for row in rows)
 
 
-def test_niche_query_prefers_the_heaviest_keyword_and_skips_questions():
-    keyword = topic_ref("knee replacement").model_copy(update={"weight": 0.6})
-    heavier = topic_ref("cardiac surgery").model_copy(update={"weight": 0.9})
+def test_niche_query_rotates_offerings_daily_and_skips_questions_and_acronyms():
+    knee = topic_ref("Knee replacement", TopicKind.offering)
+    heart = topic_ref("Cardiac sciences", TopicKind.offering)
+    ent = topic_ref("ENT", TopicKind.offering)
+    keyword = topic_ref("best hospital near me")
     question = topic_ref("how much does a knee replacement cost?", TopicKind.buyer_question)
-    question = question.model_copy(update={"weight": 1.0})
-    snapshot = make_snapshot(topic_refs=[keyword, heavier, question])
-    assert niche_query(snapshot) == "cardiac surgery"
-    assert niche_query(make_snapshot(topic_refs=[question])) is None
+    snapshot = make_snapshot(topic_refs=[knee, heart, ent, keyword, question])
+    day = datetime(2026, 11, 20, tzinfo=UTC)
+    picked = {niche_query(snapshot, day + timedelta(days=offset)) for offset in range(4)}
+    assert picked == {"Knee replacement", "Cardiac sciences"}
+    assert niche_query(make_snapshot(topic_refs=[keyword, question]), day) == "best hospital near me"
+    assert niche_query(make_snapshot(topic_refs=[question]), day) is None
 
 
 class Bulky(BaseModel):
@@ -137,3 +142,35 @@ async def test_oversized_artifacts_are_stored_as_blobs_and_read_back(container, 
     assert [blob.sha256 for blob in blobs] == [row.payload["$blob"]]
     assert await store.get(run_id, BULKY) == value
     assert (await store.find_latest(BULKY)).value == value
+
+
+async def test_niche_search_hits_are_baselined_as_creators():
+    from types import SimpleNamespace
+
+    from app.domain.common import ChannelRole
+    from app.pipeline.stages.niche import (
+        CREATOR_BASELINES,
+        NicheChannel,
+        NicheDiscovery,
+        NicheDiscoveryStage,
+        creator_channel_ids,
+    )
+    from app.services.youtube.ingest import ChannelIngestResult
+
+    asked: list[str] = []
+
+    async def ensure_baseline(channel_ids, request):
+        asked.extend(channel_ids)
+        return [ChannelIngestResult(channel_id=cid) for cid in channel_ids]
+
+    layer = SimpleNamespace(ingest=SimpleNamespace(ensure_baseline=ensure_baseline))
+    hits = {f"UC{index:022d}": 20 - index for index in range(CREATOR_BASELINES + 3)}
+    tracked_id = next(iter(hits))
+    artifact = NicheDiscovery(
+        channels=[NicheChannel(channel_id=tracked_id, role=ChannelRole.niche, status="ok")], search_hits=hits
+    )
+    notices: list = []
+    result = await NicheDiscoveryStage._baseline_creators(None, layer, None, artifact, {tracked_id}, notices)
+    assert tracked_id not in asked and len(asked) == CREATOR_BASELINES
+    assert asked == sorted(asked, key=lambda cid: -hits[cid])
+    assert creator_channel_ids(result) == asked and not notices

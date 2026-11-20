@@ -101,5 +101,13 @@ def results_published(windows: list[int]) -> str:
     return clip(f"New results published ({joined})")
 
 
+def setup_confirming() -> str:
+    return "Freezing your competitors and rebuilding your topics"
+
+
+def setup_failed(reason: str) -> str:
+    return clip(f"Setup could not be confirmed: {reason}")
+
+
 def awaiting_confirmation() -> str:
     return "Your setup is ready to review"

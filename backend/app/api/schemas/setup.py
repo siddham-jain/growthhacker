@@ -167,6 +167,8 @@ class ConfirmSetupIn(ApiModel):
 
 
 class SetupCounts(BaseModel):
+    """confirmed inputs at request time; the frozen set is validated in the worker and reported on the run."""
+
     competitors_confirmed: int
     keywords_active: int
     buyer_questions_active: int

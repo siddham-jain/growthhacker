@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -102,13 +103,16 @@ async def profile_and_questions(
     return profile, [question for question in questions if question.status is ReviewStatus.confirmed]
 
 
-def analysis_request_of(snapshot: RunConfigSnapshot, as_of: datetime) -> AnalysisRequest:
+def analysis_request_of(
+    snapshot: RunConfigSnapshot, as_of: datetime, creator_channel_ids: Sequence[str] = ()
+) -> AnalysisRequest:
     return AnalysisRequest(
         workspace_id=snapshot.workspace_id,
         client_id=snapshot.client_id,
         as_of=as_of,
         own_channel_id=snapshot.own_channel_id,
         competitor_channel_ids=snapshot.competitor_channel_ids,
+        creator_channel_ids=list(creator_channel_ids),
         topic_refs=snapshot.topic_refs,
         timezone=snapshot.market.timezone,
         country=snapshot.market.country,

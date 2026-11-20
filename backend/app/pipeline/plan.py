@@ -14,6 +14,9 @@ class RunParams(BaseModel):
     pipeline: str | None = None
     force: bool = False
     from_stage: str | None = None
+    # confirm-setup analyses freeze the competitor set and rebuild topic refs in the worker first
+    confirm_setup: bool = False
+    setup_prepared: bool = False
 
 
 class RunError(BaseModel):

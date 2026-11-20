@@ -27,6 +27,7 @@ from app.models.runs import ClientSchedule, PipelineRun, StageRun
 from app.models.tenancy import Client
 from app.pipeline import progress_messages as messages
 from app.pipeline.config_source import RunConfigSource
+from app.pipeline.contracts import RunConfigSnapshot
 from app.pipeline.definitions import default_pipeline
 from app.pipeline.fingerprint import sha256_hex
 from app.pipeline.lifecycle import ClientLifecycleMachine, RunStateMachine
@@ -105,6 +106,7 @@ class RunRequest:
     resume_of: UUID | None = None
     idempotency_key: str | None = None
     requested_by: str | None = None
+    confirm_setup: bool = False
     # backtests only: the frozen point in time the run reasons about
     as_of: datetime | None = None
 
@@ -149,6 +151,17 @@ def dedupe_decision(
         return "join"
     if requested_kind is RunKind.daily_refresh and active_kind is RunKind.analysis:
         return "join"
+    return "conflict"
+
+
+def confirm_decision(*, active_kind: RunKind, active_status: RunStatus, active_confirms: bool) -> Decision:
+    """a confirm-setup request never joins a run that would skip the setup freeze."""
+    if active_status is RunStatus.cancelling:
+        return "cancelling"
+    if active_confirms:
+        return "join"
+    if active_status is RunStatus.queued and active_kind in {RunKind.analysis, RunKind.daily_refresh}:
+        return "supersede"
     return "conflict"
 
 
@@ -244,13 +257,20 @@ class RunService:
             active = await self._active(session, scope)
             superseded: UUID | None = None
             if active is not None:
-                decision = dedupe_decision(
-                    active_kind=RunKind(active.kind),
-                    active_status=RunStatus(active.status),
-                    active_config_hash=active.config_hash,
-                    requested_kind=request.kind,
-                    requested_config_hash=snapshot.config_hash,
-                )
+                if request.confirm_setup:
+                    decision = confirm_decision(
+                        active_kind=RunKind(active.kind),
+                        active_status=RunStatus(active.status),
+                        active_confirms=RunParams.model_validate(active.params or {}).confirm_setup,
+                    )
+                else:
+                    decision = dedupe_decision(
+                        active_kind=RunKind(active.kind),
+                        active_status=RunStatus(active.status),
+                        active_config_hash=active.config_hash,
+                        requested_kind=request.kind,
+                        requested_config_hash=snapshot.config_hash,
+                    )
                 if decision == "join":
                     return RunRequestResult(run=active, created=False)
                 if decision == "follow_up":
@@ -270,6 +290,7 @@ class RunService:
                 pipeline=request.pipeline,
                 force=request.force,
                 from_stage=request.from_stage if resume_of is not None else None,
+                confirm_setup=request.confirm_setup,
             )
             budget = self._settings.pipeline.budget(request.kind.value)
             role = definition.queue_for(request.trigger)
@@ -332,6 +353,29 @@ class RunService:
         run.arq_job_id = identifier
         return enqueued
 
+    async def record_setup(
+        self, run: PipelineRun, owner: str, snapshot: RunConfigSnapshot
+    ) -> PipelineRun | None:
+        """stores the inputs a confirm-setup run froze in the worker; the dag then runs on them."""
+        params = RunParams.model_validate(run.params or {}).model_copy(update={"setup_prepared": True})
+        async with self._session_factory() as session, session.begin():
+            statement = (
+                update(PipelineRun)
+                .where(
+                    PipelineRun.id == run.id,
+                    PipelineRun.lease_owner == owner,
+                    PipelineRun.status.in_((RunStatus.running.value, RunStatus.cancelling.value)),
+                )
+                .values(
+                    config_snapshot=snapshot.model_dump(mode="json"),
+                    config_hash=snapshot.config_hash,
+                    window_days=snapshot.window_days,
+                    params=params.model_dump(mode="json"),
+                )
+                .returning(PipelineRun)
+            )
+            return (await session.execute(statement)).scalar_one_or_none()
+
     async def cancel(self, scope: TenantScope, run_id: UUID, reason: str | None = None) -> PipelineRun:
         async with self._session_factory() as session, session.begin():
             run = await self._scoped_run(session, scope, run_id, lock=True)
@@ -384,6 +428,7 @@ class RunService:
                 window_days=source.window_days,
                 from_stage=from_stage,
                 resume_of=source.id,
+                confirm_setup=params.confirm_setup and not params.setup_prepared,
             ),
         )
 

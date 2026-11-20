@@ -397,3 +397,24 @@ async def test_wall_budget_stops_the_run(migrated_database: str) -> None:
     finally:
         await drop_workspace(container, scope.workspace_id)
         await container.aclose()
+
+
+async def test_dependents_start_only_after_the_artifact_is_committed(
+    container: Container, tenant: TenantScope, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.pipeline.checkpoints import CheckpointStore
+
+    original = CheckpointStore.record
+
+    async def slow_record(self, run_id, record, *, artifact=None, copy_from=None):
+        # a large artifact takes a while to write; the scheduler keeps polling meanwhile
+        if artifact is not None and artifact[0].name == "fake_a":
+            await asyncio.sleep(0.5)
+        await original(self, run_id, record, artifact=artifact, copy_from=copy_from)
+
+    monkeypatch.setattr(CheckpointStore, "record", slow_record)
+    probe = Probe()
+    run_id, status = await run_pipeline(container, _services(container, probe), tenant)
+    assert status is RunStatus.succeeded
+    stages = await _stages(container, run_id)
+    assert {name: row.status for name, row in stages.items()} == dict.fromkeys("abcd", "succeeded")

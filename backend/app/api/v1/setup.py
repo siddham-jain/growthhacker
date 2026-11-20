@@ -7,7 +7,7 @@ from app.api.deps import Access, ClientScope, State, idempotency, run_start_limi
 from app.api.errors import PROBLEM_RESPONSES, PreconditionRequired
 from app.api.idempotency import IdempotentRequest
 from app.api.pagination import Page, PageRequest
-from app.api.presenters import present_run
+from app.api.presenters import present_run, run_location
 from app.api.schemas.common import CountOut
 from app.api.schemas.runs import RunOut
 from app.api.schemas.setup import (
@@ -239,6 +239,9 @@ async def competitors_delete(competitor_id: str, state: State, scope: ClientScop
     operation_id="clients_confirm_setup",
     status_code=202,
     response_model=ConfirmSetupOut,
+    responses={
+        200: {"model": ConfirmSetupOut, "description": "joined the analysis already confirming this setup"}
+    },
     dependencies=[Depends(run_start_limit)],
 )
 async def clients_confirm_setup(
@@ -261,4 +264,7 @@ async def clients_confirm_setup(
             buyer_questions_active=validation.buyer_questions_active,
         ),
     )
-    return await guard.complete(json_response(out, 200 if result.deduplicated else 202))
+    headers = {"Location": run_location(result.run.id)}
+    if result.deduplicated:
+        headers["X-Run-Deduplicated"] = "true"
+    return await guard.complete(json_response(out, 200 if result.deduplicated else 202, headers=headers))

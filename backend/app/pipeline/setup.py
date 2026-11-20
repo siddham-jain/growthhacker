@@ -1,20 +1,25 @@
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import SessionFactory
 from app.core.registry import UnknownRegistrationError
 from app.core.tenancy import TenantScope
+from app.domain.competitors import CandidateRole
 from app.domain.runs import ClientLifecycle, RunKind, RunTrigger
 from app.domain.topics import TopicKind
+from app.models.competitors import CompetitorCandidate
 from app.models.tenancy import Client
+from app.models.website import BuyerQuestion, Keyword
 from app.pipeline.client_settings import read_settings
 from app.pipeline.config_source import RunConfigSource
 from app.pipeline.contracts import RunConfigSnapshot
 from app.pipeline.runs import ClientNotFound, RunRequest, RunRequestResult, RunService
 from app.pipeline.stages.orchestration import setup_problems
+from app.services.competitors.edits import CONFIRMED_STATUSES
+from app.services.competitors.repository import ROLE_TO_DB
 
 CONFIRMABLE = frozenset(
     {ClientLifecycle.awaiting_confirmation, ClientLifecycle.active, ClientLifecycle.analyzing}
@@ -62,7 +67,7 @@ class SetupValidation:
 
 
 class SetupService:
-    """confirm-setup: validate the confirmed inputs, then start the first analysis."""
+    """confirm-setup: queue the first analysis, which freezes and validates the confirmed inputs first."""
 
     def __init__(
         self,
@@ -106,12 +111,7 @@ class SetupService:
         return client
 
     async def validate(self, scope: TenantScope, window_days: int | None = None) -> SetupValidation:
-        async with self._session_factory() as session:
-            client = await self._client(session, scope)
-            if ClientLifecycle(client.lifecycle) not in CONFIRMABLE:
-                raise SetupNotReady(f"client is {client.lifecycle}; onboarding has not finished")
-            snapshot = await self._config_source.snapshot(session, client, window_days)
-        return SetupValidation.of(snapshot)
+        return SetupValidation.of(await self._snapshot(scope, window_days))
 
     async def confirm(
         self,
@@ -120,14 +120,9 @@ class SetupService:
         window_days: int | None = None,
         requested_by: str | None = None,
         idempotency_key: str | None = None,
-        prepared: bool = False,
     ) -> tuple[RunRequestResult, SetupValidation]:
-        if self._confirmer is not None and not prepared:
-            await self._ready(scope)
-            await self._confirmer.prepare(scope)
-        validation = await self.validate(scope, window_days)
-        if validation.problems:
-            raise SetupInvalid(validation.problems)
+        # only cheap checks here; the freeze and topic rebuild run in the worker before the analysis dag
+        counts = await self._confirmed_counts(scope)
         result = await self._runs.request_run(
             scope,
             RunRequest(
@@ -136,9 +131,20 @@ class SetupService:
                 window_days=window_days,
                 requested_by=requested_by,
                 idempotency_key=idempotency_key,
+                confirm_setup=True,
             ),
         )
-        return result, validation
+        return result, counts
+
+    async def prepare_run(self, scope: TenantScope, window_days: int | None) -> RunConfigSnapshot:
+        """worker side of confirm-setup: freeze, rebuild and validate the inputs the analysis will use."""
+        if self._confirmer is not None:
+            await self._confirmer.prepare(scope)
+        snapshot = await self._snapshot(scope, window_days)
+        problems = setup_problems(snapshot)
+        if problems:
+            raise SetupInvalid(problems)
+        return snapshot
 
     async def auto_confirm(
         self, scope: TenantScope, *, requested_by: str
@@ -151,10 +157,44 @@ class SetupService:
         if self._confirmer is None:
             raise SetupNotWired("no setup_confirmer adapter is registered; confirm the setup manually")
         await self._confirmer.accept_suggestions(scope)
-        return await self.confirm(scope, requested_by=requested_by, prepared=True)
+        validation = await self.validate(scope)
+        if validation.problems:
+            raise SetupInvalid(validation.problems)
+        result = await self._runs.request_run(
+            scope, RunRequest(kind=RunKind.analysis, trigger=RunTrigger.user, requested_by=requested_by)
+        )
+        return result, validation
 
-    async def _ready(self, scope: TenantScope) -> None:
+    async def _snapshot(self, scope: TenantScope, window_days: int | None) -> RunConfigSnapshot:
         async with self._session_factory() as session:
-            client = await self._client(session, scope)
+            client = await self._confirmable(session, scope)
+            return await self._config_source.snapshot(session, client, window_days)
+
+    async def _confirmed_counts(self, scope: TenantScope) -> SetupValidation:
+        async with self._session_factory() as session:
+            await self._confirmable(session, scope)
+            competitors = await _count(
+                session,
+                CompetitorCandidate,
+                scope,
+                CompetitorCandidate.role == ROLE_TO_DB[CandidateRole.competitor_set],
+                CompetitorCandidate.status.in_([status.value for status in CONFIRMED_STATUSES]),
+            )
+            keywords = await _count(session, Keyword, scope, Keyword.status == "confirmed")
+            questions = await _count(session, BuyerQuestion, scope, BuyerQuestion.status == "confirmed")
+        return SetupValidation(
+            competitors_confirmed=competitors, keywords_active=keywords, buyer_questions_active=questions
+        )
+
+    async def _confirmable(self, session: AsyncSession, scope: TenantScope) -> Client:
+        client = await self._client(session, scope)
         if ClientLifecycle(client.lifecycle) not in CONFIRMABLE:
             raise SetupNotReady(f"client is {client.lifecycle}; onboarding has not finished")
+        return client
+
+
+async def _count(session: AsyncSession, model: Any, scope: TenantScope, *conditions: Any) -> int:
+    statement = select(func.count()).where(
+        model.workspace_id == scope.workspace_id, model.client_id == scope.client_id, *conditions
+    )
+    return int((await session.execute(statement)).scalar_one())

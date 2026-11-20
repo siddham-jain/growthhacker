@@ -7,7 +7,7 @@ from app.domain.recommendations import RecommendationDraft
 from app.pipeline.inputs.common import ProfileMissing, active_run, analysis_request_of, profile_and_questions
 from app.pipeline.stages.analytics import ANALYTICS_RESULT
 from app.pipeline.stages.news import NEWS_ARTIFACT
-from app.pipeline.stages.niche import NICHE_DISCOVERY
+from app.pipeline.stages.niche import NICHE_DISCOVERY, creator_channel_ids
 from app.pipeline.stages.refresh import REFRESH_ARTIFACT
 from app.pipeline.stages.youtube import INGEST
 from app.services.analytics.inputs import AnalyticsInputSource
@@ -55,7 +55,9 @@ class RunRecommendInputs:
         refresh = await run.artifacts.get_optional(REFRESH_ARTIFACT)
         niche = await run.artifacts.get_optional(NICHE_DISCOVERY)
         ingest = await run.artifacts.get_optional(INGEST)
-        inputs = await self._analytics_inputs.load(analysis_request_of(snapshot, as_of))
+        inputs = await self._analytics_inputs.load(
+            analysis_request_of(snapshot, as_of, creator_channel_ids(niche))
+        )
         async with self._container.uow(read_only=True) as uow:
             competitors = CompetitorRepository(uow.session, scope)
             competitor_set = await competitors.active_set()
