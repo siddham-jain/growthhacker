@@ -8,7 +8,16 @@ from app.core.logging import get_logger
 from app.core.registry import UnknownRegistrationError
 from app.retention.sweeper import RetentionSweeper
 from app.workers.jobs import WorkerState
-from app.workers.tasks import NEWS_POLL, OPS_ALERTS, OPS_ROLLUP, SNAPSHOT_TICK, maintenance_task_registry
+from app.workers.tasks import (
+    CACHE_HITS_FLUSH,
+    COMPETITOR_REDISCOVERY,
+    NEWS_POLL,
+    OPS_ALERTS,
+    OPS_ROLLUP,
+    SNAPSHOT_MAINTENANCE,
+    SNAPSHOT_TICK,
+    maintenance_task_registry,
+)
 
 logger = get_logger(__name__)
 
@@ -86,6 +95,9 @@ snapshot_tick = locked_tick(SNAPSHOT_TICK, 600)(owner_task(SNAPSHOT_TICK))
 news_poll = locked_tick(NEWS_POLL, 900)(owner_task(NEWS_POLL))
 ops_rollup = locked_tick(OPS_ROLLUP, 86400)(owner_task(OPS_ROLLUP))
 ops_alerts = locked_tick(OPS_ALERTS, 900)(owner_task(OPS_ALERTS))
+snapshot_maintenance = locked_tick(SNAPSHOT_MAINTENANCE, 86400)(owner_task(SNAPSHOT_MAINTENANCE))
+cache_hits_flush = locked_tick(CACHE_HITS_FLUSH, 86400)(owner_task(CACHE_HITS_FLUSH))
+competitor_rediscovery = locked_tick(COMPETITOR_REDISCOVERY, 86400)(owner_task(COMPETITOR_REDISCOVERY))
 
 
 def _every(minutes: int, offset: int = 0) -> set[int]:
@@ -103,4 +115,7 @@ def cron_jobs() -> list[CronJob]:
         cron(retention_sweep, name="retention_sweep", minute={17}),
         cron(ops_alerts, name="ops_alerts", minute=_every(15, 3)),
         cron(ops_rollup, name="ops_rollup", hour={0}, minute={40}),
+        cron(cache_hits_flush, name="cache_hits_flush", hour={0}, minute={20}),
+        cron(competitor_rediscovery, name="competitor_rediscovery", hour={2}, minute={30}),
+        cron(snapshot_maintenance, name="snapshot_maintenance", hour={3}, minute={10}),
     ]

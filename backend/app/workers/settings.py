@@ -14,6 +14,7 @@ def _run_timeout_s(settings: Settings) -> int:
 
 
 class _BaseWorker:
+    # arq reads only a settings class's own __dict__, so @worker_settings copies these onto each worker
     settings = get_settings()
     redis_settings = RedisSettings.from_dsn(settings.redis.url.get_secret_value())
     on_startup = jobs.on_startup
@@ -28,6 +29,29 @@ class _BaseWorker:
     cron_jobs: ClassVar[list[CronJob]] = []
 
 
+SHARED_OPTIONS = (
+    "redis_settings",
+    "on_startup",
+    "on_shutdown",
+    "on_job_start",
+    "after_job_end",
+    "allow_abort_jobs",
+    "max_tries",
+    "keep_result",
+    "job_completion_wait",
+    "health_check_interval",
+    "cron_jobs",
+)
+
+
+def worker_settings[T: type](cls: T) -> T:
+    for name in SHARED_OPTIONS:
+        if name not in cls.__dict__:
+            setattr(cls, name, getattr(_BaseWorker, name))
+    return cls
+
+
+@worker_settings
 class InteractiveWorkerSettings(_BaseWorker):
     queue_name = _BaseWorker.settings.workers.interactive_queue
     functions: ClassVar[list] = [jobs.run_pipeline]
@@ -35,6 +59,7 @@ class InteractiveWorkerSettings(_BaseWorker):
     job_timeout = _run_timeout_s(_BaseWorker.settings)
 
 
+@worker_settings
 class BatchWorkerSettings(_BaseWorker):
     queue_name = _BaseWorker.settings.workers.batch_queue
     functions: ClassVar[list] = [jobs.run_pipeline]
@@ -42,6 +67,7 @@ class BatchWorkerSettings(_BaseWorker):
     job_timeout = _run_timeout_s(_BaseWorker.settings)
 
 
+@worker_settings
 class MaintenanceWorkerSettings(_BaseWorker):
     # hosts every cron; run two replicas, arq's unique cron slots run each tick once
     queue_name = _BaseWorker.settings.workers.maintenance_queue
