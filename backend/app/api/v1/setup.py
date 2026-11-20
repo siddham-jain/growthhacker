@@ -1,4 +1,4 @@
-from typing import Annotated, Literal
+from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, Header, Query, Response
 from fastapi.responses import JSONResponse
@@ -17,6 +17,7 @@ from app.api.schemas.setup import (
     BuyerQuestionItem,
     CompetitorAddIn,
     CompetitorRejectIn,
+    CompetitorRolePatch,
     CompetitorView,
     ConfirmSetupIn,
     ConfirmSetupOut,
@@ -24,9 +25,11 @@ from app.api.schemas.setup import (
     KeywordItem,
     SetupCounts,
     TopicRefPatch,
+    TopicRefStatus,
 )
 from app.api.services import COMPETITORS, PROFILE, TOPIC_REFS, TopicRefKind
 from app.api.v1.common import PAGING_PARAMS, json_response, only_params, run_accepted
+from app.domain.competitors import CandidateStatus
 from app.domain.runs import RunKind, RunTrigger
 from app.pipeline.runs import RunRequest
 
@@ -94,7 +97,7 @@ def _topic_routes(path: str, kind: TopicRefKind, item: type, create: type, tag: 
     async def list_items(
         state: State,
         scope: ClientScope,
-        status: Literal["suggested", "active", "rejected"] | None = None,
+        status: TopicRefStatus | None = None,
         cursor: str | None = None,
         limit: Annotated[int, Query(ge=1, le=100)] = 25,
     ):
@@ -144,7 +147,7 @@ _topic_routes("buyer-questions", "buyer_question", BuyerQuestionItem, BuyerQuest
 async def competitors_list(
     state: State,
     scope: ClientScope,
-    status: Literal["suggested", "confirmed", "rejected"] | None = None,
+    status: CandidateStatus | None = None,
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 25,
 ) -> Page[CompetitorView]:
@@ -209,6 +212,18 @@ async def competitors_reject(
     competitor_id: str, body: CompetitorRejectIn, state: State, scope: ClientScope
 ) -> CompetitorView:
     return await state.service(COMPETITORS).reject(scope, competitor_id, body)
+
+
+@router.patch(
+    "/clients/{client_id}/competitors/{competitor_id}",
+    operation_id="competitors_set_role",
+    response_model=CompetitorView,
+)
+async def competitors_set_role(
+    competitor_id: str, body: CompetitorRolePatch, state: State, scope: ClientScope
+) -> CompetitorView:
+    # moves a competitor between the competitor, niche, benchmark and creator-seed sets
+    return await state.service(COMPETITORS).set_role(scope, competitor_id, body)
 
 
 @router.delete(

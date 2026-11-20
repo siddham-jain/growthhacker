@@ -19,6 +19,7 @@ from app.api.signing import Signer
 from app.api.sse import PubSubHub
 from app.api.state import ApiState
 from app.api.v1 import admin, auth, clients, events, health, results, runs, setup
+from app.api.v1 import settings as settings_routes
 from app.bootstrap import load_registrations
 from app.core.config import Settings, get_settings
 from app.core.container import Container, build_container
@@ -146,7 +147,15 @@ def create_app(settings: Settings | None = None, container: Container | None = N
 
 def _v1() -> APIRouter:
     v1 = APIRouter(prefix="/api/v1")
-    for router in (clients.router, setup.router, runs.router, results.router, admin.router):
+    routers = (
+        clients.router,
+        setup.router,
+        runs.router,
+        results.router,
+        admin.router,
+        settings_routes.router,
+    )
+    for router in routers:
         v1.include_router(router, dependencies=[Depends(access)])
     for router in (auth.router, events.router, admin.public_router):
         v1.include_router(router)

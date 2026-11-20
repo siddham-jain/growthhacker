@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import insert
 
 from app.api import ids
+from app.api.schemas.results import TrendingData
 from app.api.sse import PubSubHub, run_event_stream
 from app.core.tenancy import TenantScope
 from app.domain.analytics import TrendingReport
@@ -158,15 +159,16 @@ class FakeAnalytics:
     def __init__(self) -> None:
         self.calls: list[tuple] = []
 
-    async def trending(self, scope: TenantScope, run_id: uuid.UUID, window_days: int) -> TrendingReport:
+    async def trending(self, scope: TenantScope, run_id: uuid.UUID, window_days: int) -> TrendingData:
         self.calls.append((scope.client_id, run_id, window_days))
-        return TrendingReport(
+        report = TrendingReport(
             client_id=str(scope.client_id),
             window_days=window_days,
             as_of=datetime.fromisoformat("2026-11-20T00:00:00+00:00"),
             items=[],
             rising_topics=[],
         )
+        return TrendingData(report=report)
 
 
 async def test_results_are_wrapped_in_the_published_envelope(harness: Harness) -> None:
@@ -195,5 +197,5 @@ async def test_results_are_wrapped_in_the_published_envelope(harness: Harness) -
     body = response.json()
     assert body["run_id"] == ids.encode(ids.RUN, run_id) and body["window_days"] == 30
     assert body["freshness"]["stale"] is True and body["freshness"]["stale_reasons"] == ["config_changed"]
-    assert body["data"]["window_days"] == 30
+    assert body["data"]["report"]["window_days"] == 30
     assert analytics.calls == [(scope.client_id, run_id, 30)]

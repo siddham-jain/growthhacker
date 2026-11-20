@@ -2,6 +2,7 @@ import uuid
 
 import pytest
 
+from app.core.registry import Registry
 from tests.api.conftest import PASSWORD, Harness, HarnessFactory
 
 pytestmark = pytest.mark.db
@@ -163,7 +164,9 @@ async def test_runs_dedupe_and_unknown_query_params(harness: Harness) -> None:
     assert unavailable.status_code == 501 and unavailable.json()["code"] == "not_implemented"
 
 
-async def test_unwired_services_answer_501(harness: Harness) -> None:
+async def test_unwired_services_answer_501(harness: Harness, monkeypatch: pytest.MonkeyPatch) -> None:
+    # a deployment without the service implementations registered
+    monkeypatch.setattr("app.api.state.api_service_registry", Registry("api_service_registry"))
     account = await harness.account("unwired")
     client = await harness.create_client(account)
     for path in ("profile", "competitors", "keywords", "analytics/trending", "recommendations"):

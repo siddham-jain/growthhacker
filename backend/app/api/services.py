@@ -14,16 +14,22 @@ from app.api.pagination import Page, PageRequest
 from app.api.schemas.admin import LabelIn, LabelOut, OpsQuotaOut, OwnerReport, PrecisionOut, ReviewIn
 from app.api.schemas.results import (
     CompetitorDetail,
-    CreatorView,
+    CompetitorSheet,
+    CreatorsData,
+    EarlySignalView,
     FeedbackIn,
+    HygieneData,
     NewsOpportunityView,
+    OutlierRow,
     OwnPerformanceData,
     RecommendationOut,
     RefreshAppliedIn,
     RefreshSuggestionView,
     TopicSummary,
+    TrendingData,
     VideoRow,
 )
+from app.api.schemas.settings import LLMSettingsIn, LLMSettingsOut
 from app.api.schemas.setup import (
     BusinessProfileView,
     BuyerQuestionCreate,
@@ -31,6 +37,7 @@ from app.api.schemas.setup import (
     ChannelResolveOut,
     CompetitorAddIn,
     CompetitorRejectIn,
+    CompetitorRolePatch,
     CompetitorView,
     KeywordCreate,
     KeywordItem,
@@ -38,7 +45,7 @@ from app.api.schemas.setup import (
 )
 from app.core.registry import Registry
 from app.core.tenancy import TenantScope
-from app.domain.analytics import ChannelScorecard, TraitLift, TrendingReport, VideoMetrics
+from app.domain.analytics import TraitLift
 from app.domain.news import NewsSignal
 from app.domain.recommendations import InsufficiencyNotice, RecommendationFeedback, WhiteSpaceNote
 
@@ -56,6 +63,7 @@ CREATORS = "creators"
 YOUTUBE_OAUTH = "youtube_oauth"
 EVALUATION = "evaluation"
 OPS = "ops"
+SETTINGS = "settings"
 
 TopicRefKind = Literal["keyword", "buyer_question"]
 AnalyticsScope = Literal["own", "competitors", "niche"]
@@ -107,18 +115,22 @@ class CompetitorService(Protocol):
         self, scope: TenantScope, competitor_id: str, body: CompetitorRejectIn
     ) -> CompetitorView: ...
 
+    async def set_role(
+        self, scope: TenantScope, competitor_id: str, body: CompetitorRolePatch
+    ) -> CompetitorView: ...
+
     async def delete(self, scope: TenantScope, competitor_id: str) -> None: ...
 
 
 class AnalyticsService(Protocol):
     # every call reads the published run's results; the api wraps them without reshaping numbers
     async def own_performance(
-        self, scope: TenantScope, run_id: UUID, window_days: int, lens: str | None
+        self, scope: TenantScope, run_id: UUID, window_days: int
     ) -> OwnPerformanceData: ...
 
     async def competitors(
         self, scope: TenantScope, run_id: UUID, window_days: int, sort: str | None
-    ) -> list[ChannelScorecard]: ...
+    ) -> list[CompetitorSheet]: ...
 
     async def competitor(
         self, scope: TenantScope, run_id: UUID, window_days: int, channel_id: str
@@ -135,7 +147,7 @@ class AnalyticsService(Protocol):
         page: PageRequest,
     ) -> Page[VideoRow]: ...
 
-    async def trending(self, scope: TenantScope, run_id: UUID, window_days: int) -> TrendingReport: ...
+    async def trending(self, scope: TenantScope, run_id: UUID, window_days: int) -> TrendingData: ...
 
     async def outliers(
         self,
@@ -145,7 +157,7 @@ class AnalyticsService(Protocol):
         analytics_scope: AnalyticsScope,
         min_ratio: float | None,
         page: PageRequest,
-    ) -> Page[VideoMetrics]: ...
+    ) -> Page[OutlierRow]: ...
 
     async def patterns(
         self, scope: TenantScope, run_id: UUID, window_days: int, analytics_scope: AnalyticsScope
@@ -211,6 +223,10 @@ class NewsService(Protocol):
 
     async def dismiss(self, scope: TenantScope, opportunity_id: str) -> NewsOpportunityView: ...
 
+    async def early_signals(
+        self, scope: TenantScope, run_id: UUID, window_days: int
+    ) -> list[EarlySignalView]: ...
+
 
 class RefreshService(Protocol):
     async def list_suggestions(
@@ -223,11 +239,14 @@ class RefreshService(Protocol):
 
     async def dismiss(self, scope: TenantScope, suggestion_id: str) -> RefreshSuggestionView: ...
 
+    # rule-based description fixes; the same apply/dismiss commands as suggestions
+    async def hygiene(self, scope: TenantScope, run_id: UUID, page: PageRequest) -> HygieneData: ...
+
 
 class CreatorService(Protocol):
     async def list_creators(
-        self, scope: TenantScope, run_id: UUID, window_days: int, page: PageRequest
-    ) -> Page[CreatorView]: ...
+        self, scope: TenantScope, run_id: UUID, window_days: int, sort: str | None, page: PageRequest
+    ) -> CreatorsData: ...
 
 
 class YouTubeOAuthService(Protocol):
@@ -263,3 +282,10 @@ class OpsService(Protocol):
     async def report(
         self, scope: TenantScope, start: datetime | None, end: datetime | None
     ) -> OwnerReport: ...
+
+
+class SettingsService(Protocol):
+    # workspace llm provider config; api keys are write-only
+    async def llm(self, scope: TenantScope) -> LLMSettingsOut: ...
+
+    async def put_llm(self, scope: TenantScope, body: LLMSettingsIn) -> LLMSettingsOut: ...

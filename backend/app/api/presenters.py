@@ -28,6 +28,7 @@ from app.api.state import ApiState
 from app.domain.runs import RunStatus
 from app.models.runs import PipelineRun, StageRun
 from app.models.tenancy import Client, OAuthToken
+from app.models.youtube_cache import YtChannel
 from app.pipeline.config_source import ConfigInvalid
 from app.pipeline.registry import PipelineUnavailable
 from app.pipeline.runs import (
@@ -161,12 +162,24 @@ async def present_clients(state: ApiState, clients: Sequence[Client]) -> list[Cl
             .scalars()
             .all()
         )
+        channel_ids = [client.own_channel_id for client in clients if client.own_channel_id]
+        channels = (
+            {
+                channel.channel_id: channel
+                for channel in (
+                    await session.execute(select(YtChannel).where(YtChannel.channel_id.in_(channel_ids)))
+                ).scalars()
+            }
+            if channel_ids
+            else {}
+        )
     return [
         ClientOut.from_row(
             client,
             oauth_connected=client.id in connected,
             active_run_id=ids.encode_optional(ids.RUN, active.get(client.id)),
             last_success_at=last_success.get(client.id),
+            own_channel=channels.get(client.own_channel_id) if client.own_channel_id else None,
         )
         for client in clients
     ]

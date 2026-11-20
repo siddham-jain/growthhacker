@@ -7,12 +7,21 @@ from app.api.schemas.common import ApiModel
 from app.domain.analytics import (
     ChannelScorecard,
     CollabMention,
+    GapCell,
+    OutlierRecord,
+    OwnConversionMetrics,
     OwnPerformanceReport,
     TraitLift,
+    TrendingReport,
     VideoMetrics,
     VideoTraits,
 )
+from app.domain.confidence import Confidence
+from app.domain.news import NewsSourceRef
 from app.domain.recommendations import (
+    CollaborationEvidence,
+    CreatorConsistency,
+    CreatorPerformance,
     InsufficiencyNotice,
     Recommendation,
     RecommendationFeedback,
@@ -20,34 +29,72 @@ from app.domain.recommendations import (
     StrictRecommendation,
     WhiteSpaceNote,
 )
-from app.domain.youtube import OwnAnalytics
+from app.domain.refresh import Advisory, InsertionOp, RefreshEligibility
+
+
+class VideoSummary(BaseModel):
+    # display fields from the public cache; thumbnails are hotlinked from youtube, never proxied
+    video_id: str
+    channel_id: str
+    title: str | None
+    channel_title: str | None
+    published_at: AwareDatetime | None
+    url: str
+    thumbnail_url: str
 
 
 class OwnPerformanceData(BaseModel):
     # the three sources stay separate sibling sections by policy; never merged
     youtube_public: OwnPerformanceReport | None
-    youtube_analytics: OwnAnalytics | None = None
+    youtube_analytics: OwnConversionMetrics | None = None
     website: dict[str, Any] | None = None
+    videos: dict[str, VideoSummary] = {}
+
+
+class VideoRow(BaseModel):
+    video: VideoSummary
+    metrics: VideoMetrics
+    traits: VideoTraits | None = None
+
+
+class OutlierRow(BaseModel):
+    video: VideoSummary
+    outlier: OutlierRecord
+
+
+class CompetitorSheet(BaseModel):
+    # an evidence sheet: raw per-channel stats side by side, no composite score or rank (policy, 99 C4)
+    channel: ChannelRef
+    scorecard: ChannelScorecard
+    top_outliers: list[OutlierRow] = Field(default=[], max_length=3)
+
+
+class CadencePoint(BaseModel):
+    week_start: str
+    uploads: int
 
 
 class TopicCoverage(BaseModel):
     topic_ref_id: str
-    videos: int
-    outliers: int
+    label: str
+    competitor: GapCell
+    client: GapCell | None = None
 
 
 class CompetitorDetail(BaseModel):
+    channel: ChannelRef
     scorecard: ChannelScorecard
-    cadence_series: list[dict[str, Any]] = []
-    top_outliers: list[VideoMetrics] = Field(default=[], max_length=10)
+    cadence_series: list[CadencePoint] = []
+    top_outliers: list[OutlierRow] = Field(default=[], max_length=10)
     trait_lift: list[TraitLift] = []
     topic_coverage: list[TopicCoverage] = []
     collaborations: list[CollabMention] = []
 
 
-class VideoRow(BaseModel):
-    metrics: VideoMetrics
-    traits: VideoTraits | None = None
+class TrendingData(BaseModel):
+    report: TrendingReport
+    videos: dict[str, VideoSummary] = {}
+    topics: dict[str, str] = {}
 
 
 class TopicSummary(BaseModel):
@@ -103,6 +150,7 @@ class NewsRef(BaseModel):
 
 
 class DemandCheckView(BaseModel):
+    status: str
     youtube_results_7d: int | None
     outliers: int | None
 
@@ -111,56 +159,95 @@ class NewsOpportunityView(BaseModel):
     id: str
     news: NewsRef
     recommendation_id: str | None = None
+    summary: str | None = None
     relevance: float
     offering_refs: list[str] = []
     demand_check: DemandCheckView
+    urgency: Literal["now", "this_week", "evergreen_window"]
+    expires_at: AwareDatetime
+    reference_count: int
+    review_required: bool
     status: Literal["new", "dismissed", "used"]
 
 
-class RefreshInsertion(BaseModel):
-    anchor: Literal["append", "after_line"]
-    line_index: int | None = None
-    text: str
-    keyword: str | None = None
-    reason: str
-    evidence_refs: list[str] = []
+class EarlySignalView(BaseModel):
+    # first-mover news with fewer than 3 reference videos; its own surface, never a card (owner o3)
+    id: str
+    opportunity_id: str
+    key_entity: str
+    angle: str
+    urgency: str
+    expires_at: AwareDatetime
+    sources: list[NewsSourceRef]
+    reference_videos: list[ReferenceVideo] = []
+    confidence: Confidence
+    statements: list[str] = []
+    window_days: int
 
 
 class RefreshVideo(BaseModel):
     video_id: str
-    title: str
-    published_at: AwareDatetime
+    title: str | None
+    published_at: AwareDatetime | None
     url: str
 
 
 class RefreshSuggestionView(BaseModel):
     id: str
     video: RefreshVideo
+    basis: Literal["keyword", "news", "rule_based"]
     warranted_because: list[str]
+    operations: list[InsertionOp]
+    advisories: list[Advisory] = []
+    inserted_bytes: int
+    resulting_bytes: int
+    expected_effect: str
+    review_required: bool
     original_description_hash: str
-    insertions: list[RefreshInsertion]
+    # unified diff against the cached description; empty when the description changed since generation
     preview_diff: str = Field(max_length=20_000)
+    description_changed: bool
     status: Literal["open", "applied", "dismissed"]
     applied_at: AwareDatetime | None = None
+    expires_at: AwareDatetime
 
 
 class RefreshAppliedIn(ApiModel):
     applied_at: AwareDatetime | None = None
+    # the description as published; when sent, every suggested line must be visible in it
     applied_text: str | None = Field(default=None, max_length=5000)
 
 
-class CreatorCollaboration(BaseModel):
-    video_id: str
-    competitor_channel_id: str
-    label: Literal["mention", "disclosed_paid_promotion"]
+class HygieneData(BaseModel):
+    eligibility: RefreshEligibility | None = None
+    headline: str | None = None
+    items: list[RefreshSuggestionView]
+    next_cursor: str | None = None
+    limit: int
 
 
 class CreatorView(BaseModel):
+    # grouped by relevance, ordered by the one criterion the user picked; raw stats only, no score
     channel: ChannelRef
-    rank: int
-    relevance: str
-    recent_performance_vs_niche: str | None = None
-    consistency: str | None = None
-    collaborations: list[CreatorCollaboration] = []
+    group: Literal["strong", "related"]
+    position: int
+    sort: str
+    sort_value: float | str | None
+    subscriber_band: str
+    uploads_90d: int
+    match_share: float
+    topics_covered: int
+    performance: CreatorPerformance
+    consistency: CreatorConsistency
+    collaborations: list[CollaborationEvidence] = []
     reference_videos: list[ReferenceVideo] = []
-    recommendation_id: str | None = None
+    recommendation_id: str
+    summary: str
+
+
+class CreatorsData(BaseModel):
+    sort: str
+    available_sorts: list[str]
+    items: list[CreatorView]
+    next_cursor: str | None = None
+    limit: int

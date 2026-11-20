@@ -1,16 +1,20 @@
-"""demo bootstrap: one workspace, an owner and a first api key (printed once).
+"""demo bootstrap and the openapi export the frontend generates its client from.
 
 uv run python -m app.api.cli bootstrap --workspace "Demo" --email owner@example.com --password '…' --auto-confirm
+uv run python -m app.api.cli openapi --out ../frontend/lib/api/openapi.json
 """
 
 import argparse
 import asyncio
+import json
 import re
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 from sqlalchemy import select
 
+from app.api.app import create_app
 from app.core.config import Settings, get_settings
 from app.core.container import build_container
 from app.core.security import PasswordService, mint_api_key
@@ -95,9 +99,18 @@ async def bootstrap(
     )
 
 
+def export_openapi(out: Path) -> None:
+    # the schema needs no database or redis; routes and models are enough
+    spec = create_app(Settings()).openapi()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(spec, indent=2, sort_keys=True) + "\n")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m app.api.cli")
     commands = parser.add_subparsers(dest="command", required=True)
+    openapi = commands.add_parser("openapi", help="write the openapi document for the frontend client")
+    openapi.add_argument("--out", type=Path, default=Path("../frontend/lib/api/openapi.json"))
     boot = commands.add_parser("bootstrap", help="create a workspace, an owner and an api key")
     boot.add_argument("--workspace", required=True)
     boot.add_argument("--email", required=True)
@@ -105,6 +118,10 @@ def main(argv: list[str] | None = None) -> int:
     boot.add_argument("--auto-confirm", action="store_true", help="demo mode: accept onboarding suggestions")
     boot.add_argument("--key-name", default="bootstrap")
     args = parser.parse_args(argv)
+    if args.command == "openapi":
+        export_openapi(args.out)
+        print(f"wrote {args.out}")
+        return 0
     try:
         result = asyncio.run(
             bootstrap(

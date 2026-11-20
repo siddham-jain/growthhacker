@@ -5,9 +5,20 @@ from pydantic import AwareDatetime, BaseModel, Field
 from app.api.schemas.clients import ChannelRef
 from app.api.schemas.common import ApiModel, WindowDays
 from app.api.schemas.runs import RunOut
-from app.domain.profile import BusinessProfile
+from app.domain.competitors import (
+    BusinessRelevance,
+    CandidateRole,
+    CandidateStatus,
+    ChannelEvidence,
+    CompetitorRelation,
+    YouTubeRelevance,
+)
+from app.domain.profile import BusinessProfile, BuyerQuestionSourceKind, FunnelStage
+from app.domain.web import SourceKind
+from app.domain.youtube import OwnershipVerdict
 
-TopicRefStatus = Literal["suggested", "active", "rejected"]
+# 99 C39/C40: the api uses the owners' review statuses, not suggested/active
+TopicRefStatus = Literal["proposed", "confirmed", "rejected", "retired"]
 
 
 class ChannelResolveIn(ApiModel):
@@ -25,9 +36,12 @@ class ChannelResolveOut(BaseModel):
 
 
 class ProfileSource(BaseModel):
+    # one row per evidence url behind the profile's claims, labelled with its acquisition tier (03 §14)
     url: str
-    title: str | None = None
+    source_kind: SourceKind
     fetched_at: AwareDatetime | None = None
+    snapshot_at: AwareDatetime | None = None
+    claims: int = Field(ge=0)
 
 
 class BusinessProfileView(BaseModel):
@@ -41,46 +55,54 @@ class BusinessProfileView(BaseModel):
 
 
 class KeywordItem(BaseModel):
+    # mirrors 03's NicheKeyword; rejected keywords come from the tombstones that keep them out
     id: str
     text: str = Field(min_length=1, max_length=80)
     status: TopicRefStatus
-    source: Literal["profile", "user", "spotlit"]
-    priority: int = Field(ge=1, le=5)
-    created_at: AwareDatetime
+    source: str
+    language: str | None = None
+    kind: str | None = None
+    weight: float | None = Field(default=None, ge=0, le=1)
+    updated_at: AwareDatetime | None = None
 
 
 class BuyerQuestionItem(BaseModel):
     id: str
     text: str = Field(min_length=5, max_length=200)
     status: TopicRefStatus
-    source: Literal["profile", "user", "spotlit_ai_tracking"]
-    intent_stage: Literal["awareness", "consideration", "decision"] | None = None
+    source: BuyerQuestionSourceKind
+    funnel_stage: FunnelStage
+    intent: str
     cited_video_ids: list[str] = []
-    priority: int = Field(ge=1, le=5)
+    priority: int = Field(ge=1, le=3)
     created_at: AwareDatetime
 
 
+# items the user adds are confirmed and locked at once (03 §5.14)
 class KeywordCreate(ApiModel):
     text: str = Field(min_length=1, max_length=80)
-    priority: int | None = Field(default=None, ge=1, le=5)
-    status: Literal["suggested", "active"] = "active"
+    language: str = Field(default="en", min_length=2, max_length=12)
+    weight: float = Field(default=1.0, ge=0, le=1)
 
 
 class BuyerQuestionCreate(ApiModel):
     text: str = Field(min_length=5, max_length=200)
-    priority: int | None = Field(default=None, ge=1, le=5)
-    status: Literal["suggested", "active"] = "active"
+    language: str = Field(default="en", min_length=2, max_length=12)
+    funnel_stage: FunnelStage | None = None
+    priority: int = Field(default=2, ge=1, le=3)
 
 
 class TopicRefPatch(ApiModel):
+    # priority applies to buyer questions, weight to keywords (03 keeps them on different objects)
     text: str | None = Field(default=None, min_length=1, max_length=200)
     status: TopicRefStatus | None = None
-    priority: int | None = Field(default=None, ge=1, le=5)
+    priority: int | None = Field(default=None, ge=1, le=3)
+    weight: float | None = Field(default=None, ge=0, le=1)
 
 
 class BulkStatusIn(ApiModel):
     ids: list[str] = Field(min_length=1, max_length=200)
-    status: Literal["active", "rejected"]
+    status: Literal["confirmed", "rejected"]
 
 
 class CompetitorEvidence(BaseModel):
@@ -89,26 +111,55 @@ class CompetitorEvidence(BaseModel):
     text: str
 
 
+class CompetitorChannelView(BaseModel):
+    # raw public stats and the ownership verdict for one linked channel; no score or rank (99 C4)
+    channel: ChannelRef
+    is_primary: bool
+    tracked: bool
+    ownership: OwnershipVerdict
+    evidence: ChannelEvidence
+    relevance: YouTubeRelevance
+    preview_video_ids: list[str] = []
+    flags: list[str] = []
+
+
 class CompetitorView(BaseModel):
-    # mirrors 04's candidate; no score or rank (policy, 99 C4)
     id: str
-    status: Literal["suggested", "confirmed", "rejected"]
-    channel: ChannelRef | None
+    status: CandidateStatus
+    role: CandidateRole
+    relation: CompetitorRelation
     name: str
-    source: str
+    official_domain: str | None = None
+    confidence: Literal["high", "medium", "low"]
+    channel: ChannelRef | None
+    channels: list[CompetitorChannelView] = []
+    sources: list[str] = []
     evidence: list[CompetitorEvidence] = []
+    evidence_summary: str = ""
+    business: BusinessRelevance
+    flags: list[str] = []
     reject_reason: str | None = None
     added_by: Literal["system", "user"]
+    decided_by: Literal["user", "auto", "system"] | None = None
 
 
 class CompetitorAddIn(ApiModel):
     channel_ref: str = Field(min_length=2, max_length=300)
-    name: str | None = Field(default=None, max_length=120)
+    role: Literal["competitor_set", "niche_set", "benchmark_set", "creator_seed"] = "competitor_set"
 
 
 class CompetitorRejectIn(ApiModel):
     reason: Literal["not_competitor", "wrong_channel", "too_big", "too_small", "other"] | None = None
     note: str | None = Field(default=None, max_length=500)
+
+
+class CompetitorRolePatch(ApiModel):
+    role: Literal["competitor_set", "niche_set", "benchmark_set", "creator_seed"]
+
+
+class ChannelAttachIn(ApiModel):
+    # null means "none of these": continue website-only
+    channel_id: str | None = Field(default=None, pattern=r"^UC[0-9A-Za-z_-]{22}$")
 
 
 class ConfirmSetupIn(ApiModel):

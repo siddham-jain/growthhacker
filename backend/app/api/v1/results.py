@@ -12,16 +12,21 @@ from app.api.presenters import present_run
 from app.api.schemas.common import ResultEnvelope, WindowDays
 from app.api.schemas.results import (
     CompetitorDetail,
-    CreatorView,
+    CompetitorSheet,
+    CreatorsData,
+    EarlySignalView,
     FeedbackIn,
     FeedbackOut,
+    HygieneData,
     NewsOpportunityView,
+    OutlierRow,
     OwnPerformanceData,
     RecommendationOut,
     RecommendationsData,
     RefreshAppliedIn,
     RefreshSuggestionView,
     TopicSummary,
+    TrendingData,
     VideoRow,
 )
 from app.api.schemas.runs import RunOut
@@ -36,7 +41,7 @@ from app.api.services import (
 )
 from app.api.v1.common import PAGING_PARAMS, json_response, only_params
 from app.core.tenancy import TenantScope
-from app.domain.analytics import ChannelScorecard, TraitLift, TrendingReport, VideoMetrics
+from app.domain.analytics import TraitLift
 from app.domain.news import NewsSignal
 from app.domain.runs import RunKind, RunTrigger
 from app.models.tenancy import Client
@@ -48,6 +53,9 @@ router = APIRouter(tags=["results"], responses=PROBLEM_RESPONSES)
 Window = Annotated[WindowDays | None, Query()]
 Cursor = Annotated[str | None, Query()]
 Limit = Annotated[int, Query(ge=1, le=100)]
+CreatorSortParam = Literal[
+    "matching_uploads", "median_outlier_ratio", "median_views_at_age", "last_upload_at", "uploads_90d"
+]
 
 
 class CardsPending(BaseModel):
@@ -72,28 +80,25 @@ def _wrap[T](state: State, data: T, active: ActiveResult) -> ResultEnvelope[T]:
     "/clients/{client_id}/analytics/own-performance",
     operation_id="analytics_own_performance",
     response_model=ResultEnvelope[OwnPerformanceData],
-    dependencies=[Depends(only_params("window_days", "lens"))],
+    dependencies=[Depends(only_params("window_days"))],
 )
 async def analytics_own_performance(
-    state: State,
-    scope: ClientScope,
-    window_days: Window = None,
-    lens: Literal["views", "conversion"] | None = None,
+    state: State, scope: ClientScope, window_days: Window = None
 ) -> ResultEnvelope[OwnPerformanceData]:
     service = state.service(ANALYTICS)
     active = await _published(state, scope, window_days)
-    return _wrap(state, await service.own_performance(scope, active.run_id, active.window_days, lens), active)
+    return _wrap(state, await service.own_performance(scope, active.run_id, active.window_days), active)
 
 
 @router.get(
     "/clients/{client_id}/analytics/competitors",
     operation_id="analytics_competitors",
-    response_model=ResultEnvelope[list[ChannelScorecard]],
+    response_model=ResultEnvelope[list[CompetitorSheet]],
     dependencies=[Depends(only_params("window_days", "sort"))],
 )
 async def analytics_competitors(
     state: State, scope: ClientScope, window_days: Window = None, sort: str | None = None
-) -> ResultEnvelope[list[ChannelScorecard]]:
+) -> ResultEnvelope[list[CompetitorSheet]]:
     service = state.service(ANALYTICS)
     active = await _published(state, scope, window_days)
     return _wrap(state, await service.competitors(scope, active.run_id, active.window_days, sort), active)
@@ -148,12 +153,12 @@ async def analytics_competitor_videos(
 @router.get(
     "/clients/{client_id}/analytics/trending",
     operation_id="analytics_trending",
-    response_model=ResultEnvelope[TrendingReport],
+    response_model=ResultEnvelope[TrendingData],
     dependencies=[Depends(only_params("window_days"))],
 )
 async def analytics_trending(
     state: State, scope: ClientScope, window_days: Window = None
-) -> ResultEnvelope[TrendingReport]:
+) -> ResultEnvelope[TrendingData]:
     service = state.service(ANALYTICS)
     active = await _published(state, scope, window_days)
     return _wrap(state, await service.trending(scope, active.run_id, active.window_days), active)
@@ -162,7 +167,7 @@ async def analytics_trending(
 @router.get(
     "/clients/{client_id}/analytics/outliers",
     operation_id="analytics_outliers",
-    response_model=ResultEnvelope[Page[VideoMetrics]],
+    response_model=ResultEnvelope[Page[OutlierRow]],
     dependencies=[Depends(only_params("scope", "window_days", "min_ratio", *PAGING_PARAMS))],
 )
 async def analytics_outliers(
@@ -173,7 +178,7 @@ async def analytics_outliers(
     min_ratio: Annotated[float | None, Query(ge=0)] = None,
     cursor: Cursor = None,
     limit: Limit = 25,
-) -> ResultEnvelope[Page[VideoMetrics]]:
+) -> ResultEnvelope[Page[OutlierRow]]:
     service = state.service(ANALYTICS)
     active = await _published(state, scope, window_days)
     page = await service.outliers(
@@ -417,15 +422,49 @@ async def refresh_dismiss(suggestion_id: str, state: State, scope: WorkspaceScop
 @router.get(
     "/clients/{client_id}/creators",
     operation_id="creators_list",
-    response_model=ResultEnvelope[Page[CreatorView]],
-    dependencies=[Depends(only_params("window_days", *PAGING_PARAMS))],
+    response_model=ResultEnvelope[CreatorsData],
+    dependencies=[Depends(only_params("window_days", "sort", *PAGING_PARAMS))],
 )
 async def creators_list(
-    state: State, scope: ClientScope, window_days: Window = None, cursor: Cursor = None, limit: Limit = 25
-) -> ResultEnvelope[Page[CreatorView]]:
+    state: State,
+    scope: ClientScope,
+    window_days: Window = None,
+    sort: CreatorSortParam | None = None,
+    cursor: Cursor = None,
+    limit: Limit = 25,
+) -> ResultEnvelope[CreatorsData]:
     service = state.service(CREATORS)
     active = await _published(state, scope, window_days)
-    page = await service.list_creators(
-        scope, active.run_id, active.window_days, PageRequest(cursor=cursor, limit=limit)
+    data = await service.list_creators(
+        scope, active.run_id, active.window_days, sort, PageRequest(cursor=cursor, limit=limit)
     )
-    return _wrap(state, page, active)
+    return _wrap(state, data, active)
+
+
+@router.get(
+    "/clients/{client_id}/early-signals",
+    operation_id="early_signals_list",
+    response_model=ResultEnvelope[list[EarlySignalView]],
+    dependencies=[Depends(only_params("window_days"))],
+)
+async def early_signals_list(
+    state: State, scope: ClientScope, window_days: Window = None
+) -> ResultEnvelope[list[EarlySignalView]]:
+    service = state.service(NEWS)
+    active = await _published(state, scope, window_days)
+    return _wrap(state, await service.early_signals(scope, active.run_id, active.window_days), active)
+
+
+@router.get(
+    "/clients/{client_id}/hygiene",
+    operation_id="hygiene_list",
+    response_model=ResultEnvelope[HygieneData],
+    dependencies=[Depends(only_params(*PAGING_PARAMS))],
+)
+async def hygiene_list(
+    state: State, scope: ClientScope, cursor: Cursor = None, limit: Limit = 25
+) -> ResultEnvelope[HygieneData]:
+    service = state.service(REFRESH)
+    active = await _published(state, scope, None)
+    data = await service.hygiene(scope, active.run_id, PageRequest(cursor=cursor, limit=limit))
+    return _wrap(state, data, active)

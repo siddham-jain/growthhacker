@@ -13,7 +13,6 @@ from app.api import ids
 from app.api.deps import Access, ClientScope, State, WorkspaceScope, idempotency, run_start_limit
 from app.api.errors import (
     PROBLEM_RESPONSES,
-    ChannelUnresolvable,
     ClientExists,
     ConfigInvalidError,
     PreconditionFailed,
@@ -31,7 +30,7 @@ from app.api.schemas.clients import (
     OnboardingIn,
 )
 from app.api.schemas.runs import RunOut
-from app.api.schemas.setup import ChannelResolveIn, ChannelResolveOut
+from app.api.schemas.setup import ChannelAttachIn, ChannelResolveIn, ChannelResolveOut
 from app.api.services import CHANNELS
 from app.api.v1.common import CHANNEL_ID, PAGING_PARAMS, json_response, only_params, run_accepted
 from app.core.tenancy import TenantScope
@@ -99,9 +98,8 @@ async def clients_create(
         return guard.replay
     website_url = None if body.website_url is None else str(body.website_url)
     domain = _domain(website_url)
-    channel_id = await _resolve_channel(state, scope, body.channel_ref)
-    if website_url is None and channel_id is None:
-        raise ChannelUnresolvable("no YouTube channel matched; add a website or the UC channel id")
+    # handles and urls are resolved, with ownership checks, by the onboarding run's resolve_inputs stage
+    channel_id = body.channel_ref if body.channel_ref and CHANNEL_ID.match(body.channel_ref) else None
     async with state.container.session_factory() as session, session.begin():
         workspace = await session.get(Workspace, scope.workspace_id)
         # demo workspaces (bootstrap --auto-confirm) skip the manual setup review for new clients
@@ -112,7 +110,11 @@ async def clients_create(
                 select(Client.id).where(
                     Client.workspace_id == scope.workspace_id,
                     Client.deleted_at.is_(None),
-                    (Client.website_domain == domain) if domain else (Client.own_channel_id == channel_id),
+                    (Client.website_domain == domain)
+                    if domain
+                    else (Client.own_channel_id == channel_id)
+                    if channel_id
+                    else (func.lower(Client.name) == body.name.lower()),
                 )
             )
         ).scalar_one_or_none()
@@ -346,6 +348,38 @@ async def clients_channel_resolve(
     body: ChannelResolveIn, state: State, scope: ClientScope
 ) -> ChannelResolveOut:
     return await state.service(CHANNELS).resolve(scope, body.channel_ref)
+
+
+@router.post(
+    "/clients/{client_id}/channel/attach",
+    operation_id="clients_channel_attach",
+    response_model=ClientOut,
+)
+async def clients_channel_attach(body: ChannelAttachIn, state: State, scope: ClientScope) -> JSONResponse:
+    # the user's explicit pick from the ownership candidates; null continues website-only
+    now = state.container.clock.now()
+    async with state.container.session_factory() as session, session.begin():
+        client = (
+            await session.execute(
+                select(Client).where(Client.id == scope.client_id).with_for_update(key_share=True)
+            )
+        ).scalar_one()
+        settings = read_settings(client)
+        if body.channel_id is None:
+            client.own_channel_id, client.own_channel_status = None, "unresolved"
+        else:
+            client.own_channel_id, client.own_channel_status = body.channel_id, "verified"
+            client.own_channel_verification = [
+                {"verified_by": "manual", "channel_id": body.channel_id, "at": now.isoformat()},
+                *(client.own_channel_verification or []),
+            ]
+        write_settings(
+            client,
+            merged(settings, version=settings.version + 1, config_version=settings.config_version + 1),
+        )
+        client.updated_at = func.now()
+    out = await present_client(state, await _load(state, scope))
+    return json_response(out, headers={"ETag": f'"{out.version}"'})
 
 
 @router.post(
