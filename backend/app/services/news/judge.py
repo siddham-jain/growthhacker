@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
@@ -22,11 +23,12 @@ from app.ports.llm import (
     TrustedBlock,
     UntrustedBlock,
 )
+from app.services.llm.prompts import PromptSpec, load_prompt_text, prompt_registry
 from app.services.news.context import NewsClientContext
 from app.services.news.tiers import TIER_RANK
 
 PROMPT_ID = "news_judgement"
-PROMPT_PATH = "app/services/news/prompts/news_judgement_v1.md"
+PROMPT_DIR = Path(__file__).parent / "prompts"
 MAX_STORY_MEMBERS = 5
 MAX_OUTPUT_TOKENS = 1_500
 
@@ -68,6 +70,19 @@ class NewsJudgementLLM(_Schema):
     safety_flags: list[SafetyFlag] = []
     conflicting_reports: bool = False
     conversion_action_ref: str | None = None
+
+
+NEWS_JUDGEMENT_V1 = prompt_registry.register(
+    PromptSpec(
+        prompt_id=PROMPT_ID,
+        task=TaskId.news_judgement,
+        version=1,
+        system_text=load_prompt_text("news_judgement_v1.md", PROMPT_DIR),
+        payload_classes=frozenset({PayloadClass.news, PayloadClass.client_profile}),
+        output_schema=NewsJudgementLLM,
+        changelog="initial news relevance judge",
+    )
+)
 
 
 @dataclass(frozen=True)

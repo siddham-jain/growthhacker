@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
@@ -20,6 +21,7 @@ from app.ports.llm import (
     TrustedBlock,
     UntrustedBlock,
 )
+from app.services.llm.prompts import PromptSpec, load_prompt_text, prompt_registry
 from app.services.refresh.evidence import VideoContentEvidence
 from app.services.refresh.ops.templates import TemplateLine
 from app.services.refresh.ops.validator import InsertionValidator
@@ -33,6 +35,21 @@ class PhrasedLine(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     text: str = Field(max_length=MAX_OPERATION_CHARS)
+
+
+PHRASING_V1 = prompt_registry.register(
+    PromptSpec(
+        prompt_id=PROMPT_ID,
+        task=TaskId.refresh_phrasing,
+        version=1,
+        system_text=load_prompt_text("refresh_phrasing_v1.md", Path(__file__).parent / "prompts"),
+        payload_classes=frozenset(
+            {PayloadClass.public_youtube, PayloadClass.client_profile, PayloadClass.news}
+        ),
+        output_schema=PhrasedLine,
+        changelog="initial insertion phrasing prompt",
+    )
+)
 
 
 @dataclass(frozen=True, slots=True)

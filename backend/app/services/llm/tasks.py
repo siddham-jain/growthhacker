@@ -22,18 +22,20 @@ class TaskSpec:
 llm_task_registry: Registry[TaskSpec] = Registry("llm_task_registry")
 
 DEFAULT_TASKS: tuple[TaskSpec, ...] = (
-    TaskSpec(TaskId.website_page_selection, "low", 1024, 20, 400, degrade_path="deterministic url scoring"),
-    TaskSpec(TaskId.website_page_map, "low", 2048, 25, 800, degrade_path="heading and meta extraction"),
+    TaskSpec(TaskId.website_page_selection, "low", 2048, 20, 400, degrade_path="deterministic url scoring"),
+    TaskSpec(TaskId.website_page_map, "low", 4096, 40, 1500, degrade_path="heading and meta extraction"),
     TaskSpec(
         TaskId.website_profile_reduce,
         "high",
         16_384,
-        90,
+        150,
         4000,
         degrade_path="minimal profile from meta tags, awaiting confirmation",
     ),
-    TaskSpec(TaskId.website_keyword_enrichment, "low", 1024, 20, 400, degrade_path="profile keywords only"),
-    TaskSpec(TaskId.website_freshness_profile, "low", 1024, 20, 400, degrade_path="vertical default profile"),
+    TaskSpec(
+        TaskId.website_keyword_enrichment, "low", 12_000, 120, 3000, degrade_path="profile keywords only"
+    ),
+    TaskSpec(TaskId.website_freshness_profile, "low", 4096, 40, 800, degrade_path="vertical default profile"),
     TaskSpec(
         TaskId.competitor_candidate_generation,
         "medium",

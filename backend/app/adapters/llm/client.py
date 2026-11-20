@@ -104,7 +104,7 @@ class DefaultLLMClient:
             return value.model_dump(mode="json")
 
         return await self._generate(
-            task, spec, input, context, tier, budget, schema.__name__, validate, from_cache, to_cache, True
+            task, spec, input, context, tier, budget, schema.__name__, validate, from_cache, to_cache, schema
         )
 
     async def generate_text(
@@ -123,7 +123,7 @@ class DefaultLLMClient:
             return text.strip()
 
         return await self._generate(
-            task, spec, input, context, tier, budget, TEXT_SCHEMA_NAME, validate, str, str, False
+            task, spec, input, context, tier, budget, TEXT_SCHEMA_NAME, validate, str, str, None
         )
 
     def _spec(self, system: PromptRef, task: TaskId, context: CallContext) -> PromptSpec:
@@ -148,7 +148,8 @@ class DefaultLLMClient:
         validate: Any,
         from_cache: Any,
         to_cache: Any,
-        structured: bool,
+        # prompts without a registered schema take the caller's (topic ids are built per call)
+        output_schema: type[BaseModel] | None,
     ) -> LLMResult[Any]:
         if not self._settings.enabled:
             raise LLMUnavailable([LLMError(LLMErrorKind.disabled, "llm.enabled is false")])
@@ -195,7 +196,7 @@ class DefaultLLMClient:
             routes=routes,
             rendered=rendered,
             static_system_text=spec.system_text,
-            schema=compile_schema(spec.output_schema) if structured and spec.output_schema else None,
+            schema=compile_schema(spec.output_schema or output_schema) if output_schema else None,
             validate=validate,
             context=context,
             max_attempts=min(
