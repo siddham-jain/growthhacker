@@ -22,7 +22,16 @@ VALUE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(?i)\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b"), "[email]"),
     (re.compile(r"(?<![\w])\+?\d[\d\s().-]{8,}\d(?![\w])"), "[phone]"),
     (re.compile(r"(?i)(://[^/\s:@]+:)[^@\s/]+@"), r"\1[redacted]@"),
+    (
+        re.compile(
+            r"(?i)([?&](?:key|api[_-]?key|access_token|refresh_token|token|client_secret|code|signature|sig)=)"
+            r"[^&#\s'\"]+"
+        ),
+        r"\1[redacted]",
+    ),
 )
+# these log full request urls at info, query strings included
+NOISY_LOGGERS = ("httpx", "httpcore")
 
 
 def redact_text(value: str) -> str:
@@ -52,6 +61,28 @@ def redaction_processor(_logger: Any, _method: str, event_dict: dict[str, Any]) 
     }
 
 
+class RedactingFilter(logging.Filter):
+    """stdlib records (httpx, uvicorn, libraries) get the same value redaction as structlog events."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg = redact_text(record.getMessage())
+        record.args = None
+        if record.exc_info and not record.exc_text:
+            record.exc_text = redact_text(logging.Formatter().formatException(record.exc_info))
+        return True
+
+
+def install_stdlib_redaction() -> None:
+    for name in NOISY_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
+    # uvicorn and others attach handlers to non-propagating loggers, so every handler gets the filter
+    loggers = [logging.getLogger(), *logging.root.manager.loggerDict.values()]
+    for logger in loggers:
+        for handler in getattr(logger, "handlers", []):
+            if not any(isinstance(existing, RedactingFilter) for existing in handler.filters):
+                handler.addFilter(RedactingFilter())
+
+
 def configure_logging(settings: AppSettings) -> None:
     level = logging.getLevelNamesMapping().get(settings.log_level.upper(), logging.INFO)
     renderer: Any = (
@@ -73,6 +104,7 @@ def configure_logging(settings: AppSettings) -> None:
         cache_logger_on_first_use=False,
     )
     logging.basicConfig(level=level, stream=sys.stdout, format="%(message)s")
+    install_stdlib_redaction()
 
 
 def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
