@@ -24,7 +24,7 @@ from app.services.refresh.triggers.base import KEYWORD_TRIGGER_KINDS
 APPLIED = (RefreshStatus.applied_claimed.value, RefreshStatus.applied_detected.value)
 
 
-def _to_domain(row: DescriptionRefreshRow) -> StoredRefresh:
+def stored_refresh(row: DescriptionRefreshRow) -> StoredRefresh:
     refresh = DescriptionRefresh(
         id=str(row.id),
         client_id=row.client_id,
@@ -93,7 +93,7 @@ class DescriptionRefreshRepository(TenantRepository[DescriptionRefreshRow]):
             )
         ).order_by(DescriptionRefreshRow.generated_at)
         rows = (await self.session.execute(statement)).scalars().all()
-        return [_to_domain(row) for row in rows]
+        return [stored_refresh(row) for row in rows]
 
     async def apply_change(self, change: StatusChange) -> bool:
         values: dict[str, object] = {"status": change.to_status.value}

@@ -24,7 +24,7 @@ from app.models.youtube_cache import YtVideo
 from app.pipeline.stages.refresh import REFRESH_ARTIFACT
 from app.services.refresh.lifecycle import detect_applied
 from app.services.refresh.ops.apply import AnchorNotFound, apply_ops
-from app.services.refresh.store import DescriptionRefreshRepository, _to_domain
+from app.services.refresh.store import DescriptionRefreshRepository, stored_refresh
 
 VIEW_STATUS = {
     RefreshStatus.proposed: "open",
@@ -78,7 +78,7 @@ class RefreshReadService(ServiceBase):
                 videos = {video.video_id: video for video in result.scalars()}
         views = []
         for row in rows:
-            refresh = _to_domain(row).refresh
+            refresh = stored_refresh(row).refresh
             video = videos.get(row.video_id)
             diff = preview(
                 video.description if video else None, video.description_hash if video else None, refresh
@@ -177,7 +177,7 @@ class RefreshReadService(ServiceBase):
 
         async def change(repository: DescriptionRefreshRepository, row: RefreshRow) -> bool:
             if body.applied_text is not None and not detect_applied(
-                _to_domain(row).refresh, body.applied_text, overlap
+                stored_refresh(row).refresh, body.applied_text, overlap
             ):
                 raise ValidationFailed(
                     "the description you pasted does not contain the suggested lines",
