@@ -206,6 +206,7 @@ def _rules() -> list[RetentionRule]:
         rule("own_analytics_daily", DC.yt_authorized_analytics, A.delete, condition=INACTIVE_TOKEN_SQL),
         rule("own_traffic_source", DC.yt_authorized_analytics, A.delete, condition=INACTIVE_TOKEN_SQL),
         rule("own_search_term", DC.yt_authorized_analytics, A.delete, condition=INACTIVE_TOKEN_SQL),
+        rule("own_video_metrics", DC.yt_authorized_analytics, A.delete, condition=INACTIVE_TOKEN_SQL),
         keep("websites"),
         keep("crawl_runs"),
         keep("url_inventory"),

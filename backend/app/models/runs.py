@@ -138,6 +138,7 @@ class PipelineRun(TenantColumns, Base):
     config_snapshot: Mapped[dict[str, Any]] = jsonb_object()
     config_hash: Mapped[str]
     params_hash: Mapped[str | None]
+    params: Mapped[dict[str, Any]] = jsonb_object()
     queue: Mapped[str]
     priority: Mapped[int] = mapped_column(SmallInteger, server_default=text("0"))
     arq_job_id: Mapped[str | None]
