@@ -23,11 +23,12 @@ from app.domain.runs import (
     RunTrigger,
     StageStatus,
 )
+from app.models.ledgers import ProviderUsageLedger
 from app.models.runs import ClientSchedule, PipelineRun, StageRun
 from app.models.tenancy import Client
 from app.pipeline import progress_messages as messages
 from app.pipeline.config_source import RunConfigSource
-from app.pipeline.contracts import RunConfigSnapshot
+from app.pipeline.contracts import RunConfigSnapshot, UsageLedger
 from app.pipeline.definitions import default_pipeline
 from app.pipeline.fingerprint import sha256_hex
 from app.pipeline.lifecycle import ClientLifecycleMachine, RunStateMachine
@@ -533,7 +534,7 @@ class RunService:
                 "lease_expires_at": None,
                 "current_stages": [],
                 "notices": [notice.model_dump(mode="json") for notice in outcome.notices],
-                "usage": outcome.usage.model_dump(mode="json"),
+                "usage": (await _with_llm_ledger(session, run.id, outcome.usage)).model_dump(mode="json"),
                 "timings": {
                     **(run.timings or {}),
                     **outcome.timings.model_dump(mode="json", exclude_none=True),
@@ -952,6 +953,34 @@ class RunService:
     @staticmethod
     async def _db_now(session: AsyncSession):
         return (await session.execute(text("SELECT now()"))).scalar_one()
+
+
+async def _with_llm_ledger(session: AsyncSession, run_id: UUID, usage: UsageLedger) -> UsageLedger:
+    # every llm call books the provider ledger, while only some stages charge the run budget
+    ledger = ProviderUsageLedger
+    calls, input_tokens, output_tokens, cache_read, cache_write, cost = (
+        await session.execute(
+            select(
+                func.count(),
+                func.coalesce(func.sum(ledger.input_tokens), 0),
+                func.coalesce(func.sum(ledger.output_tokens), 0),
+                func.coalesce(func.sum(ledger.cache_read_tokens), 0),
+                func.coalesce(func.sum(ledger.cache_write_tokens), 0),
+                func.coalesce(func.sum(ledger.cost_usd), 0),
+            ).where(ledger.run_id == run_id, ledger.provider_kind == "llm")
+        )
+    ).one()
+    if not calls:
+        return usage
+    return usage.model_copy(
+        update={
+            "llm_input_tokens": int(input_tokens),
+            "llm_output_tokens": int(output_tokens),
+            "llm_cache_read_tokens": int(cache_read),
+            "llm_cache_write_tokens": int(cache_write),
+            "llm_usd": round(float(cost), 6),
+        }
+    )
 
 
 def _ms(later, earlier) -> int | None:

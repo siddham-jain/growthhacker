@@ -372,9 +372,10 @@ class RunProgress:
             "stage_percent": stage_percent,
             "payload": _bounded_payload(payload),
         }
+        # a percent tick goes first so a terminal event is always the run's last event
+        await self._maybe_emit_percent()
         self._buffer.append(_Pending(values=values, urgent=urgent))
         self._trim_buffer()
-        await self._maybe_emit_percent()
         if urgent or len(self._buffer) >= self._settings.event_flush_batch:
             await self.flush()
         elif self._timer is None or self._timer.done():

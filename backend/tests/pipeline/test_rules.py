@@ -1,20 +1,21 @@
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 import pytest
 
-from app.domain.runs import ClientLifecycle, RunKind, RunStatus, StageStatus
+from app.domain.runs import ClientLifecycle, RunEventType, RunKind, RunStatus, StageStatus
 from app.pipeline.client_settings import ClientSettings
 from app.pipeline.context import RunBudgetLedger
 from app.pipeline.contracts import BudgetExceeded, BudgetKind, RunBudget, StageBudget, UsageLedger
 from app.pipeline.fingerprint import as_of_bucket, stage_fingerprint
 from app.pipeline.lifecycle import ClientLifecycleMachine, RunStateMachine, StageStateMachine, TransitionError
-from app.pipeline.progress import ProgressTracker
+from app.pipeline.progress import ProgressTracker, RunProgress
 from app.pipeline.registry import PipelineConfigError
 from app.pipeline.runs import dedupe_decision
 from app.pipeline.schedules import jitter_minutes, next_daily_due
 from app.workers.scheduler import DueClient, round_robin
+from tests.conftest import make_settings
 from tests.pipeline.fakes import Probe, catalog, fake_stage, pipeline
 
 PT = ZoneInfo("America/Los_Angeles")
@@ -183,6 +184,36 @@ def test_budget_ledger_enforces_stage_and_run_limits() -> None:
         other.ensure(BudgetKind.youtube_units, 21)
     assert other.remaining(BudgetKind.llm_calls) is None
     assert run.usage().youtube_units == 80
+
+
+class _RecordingLog:
+    def __init__(self) -> None:
+        self.types: list[str] = []
+
+    async def append(self, run_id, values, *, progress):
+        self.types.extend(value["type"] for value in values)
+        return []
+
+
+async def test_a_terminal_event_is_never_followed_by_a_percent_tick() -> None:
+    now = [0.0]
+    tracker = ProgressTracker({"a": (1.0, 10.0)}, monotonic=lambda: now[0])
+    log = _RecordingLog()
+    progress = RunProgress(
+        run_id=uuid4(),
+        client_id=uuid4(),
+        log=log,
+        publisher=None,
+        prefix="t",
+        settings=make_settings().pipeline,
+        tracker=tracker,
+        monotonic=lambda: now[0],
+    )
+    tracker.start("a")
+    now[0] = 1000.0
+    await progress.emit(RunEventType.run_cancelled, "Cancelled", status=RunStatus.cancelled)
+
+    assert log.types == [RunEventType.run_progress.value, RunEventType.run_cancelled.value]
 
 
 def test_progress_is_monotonic_and_asymptotic() -> None:

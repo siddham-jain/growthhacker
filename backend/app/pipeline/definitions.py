@@ -102,7 +102,6 @@ BACKTEST = register_pipeline(
             "topics",
             "analytics",
             "recommend",
-            "write_cards",
             "record_backtest",
         ),
         substitutes=MappingProxyType({"ingest": "frozen_corpus", "finalize": "record_backtest"}),

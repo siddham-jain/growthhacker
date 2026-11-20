@@ -46,6 +46,14 @@ def test_every_pipeline_is_runnable_after_bootstrap():
     assert set(ONBOARDING_STAGES) | set(ANALYSIS_STAGES) <= set(catalog.stages)
 
 
+def test_backtest_replays_without_the_card_writer():
+    load_registrations()
+    catalog = validate_pipelines(require_complete=True)
+    # wording is irrelevant to the backtest and its cards are never persisted
+    assert "write_cards" not in catalog.require("backtest").stages
+    assert catalog.require("backtest").resolve("finalize") == "record_backtest"
+
+
 def test_recommend_reads_news_and_refresh_drafts_first():
     load_registrations()
     catalog = validate_pipelines()

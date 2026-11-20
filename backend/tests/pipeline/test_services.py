@@ -4,11 +4,12 @@ from datetime import timedelta
 
 import pytest
 from arq.worker import Worker
-from sqlalchemy import select, update
+from sqlalchemy import insert, select, update
 
 from app.core.container import Container
 from app.core.tenancy import TenantScope
 from app.domain.runs import RunKind, RunStatus, RunTrigger
+from app.models.ledgers import ProviderUsageLedger
 from app.models.runs import ActiveResultSet, ClientSchedule, PipelineRun, RunEvent, StageRun
 from app.pipeline.contracts import StageResult
 from app.pipeline.runs import RunCancellingConflict, RunInProgress, RunRequest
@@ -152,6 +153,43 @@ async def test_finalize_publishes_atomically_and_books_schedules(
     assert {row.run_id for row in sets} == {run_id}
     assert schedule.kind == "daily_refresh" and schedule.next_due_at is not None
     assert types[-2:] == ["results.published", "run.partial"]
+
+
+async def _book_llm_call(ctx, probe: Probe) -> StageResult[FakeOut]:
+    async with ctx.deps.session_factory() as session, session.begin():
+        await session.execute(
+            insert(ProviderUsageLedger).values(
+                request_id=uuid.uuid4(),
+                occurred_at=ctx.as_of,
+                provider_kind="llm",
+                provider="anthropic",
+                operation="generate_structured",
+                outcome="ok",
+                input_tokens=1200,
+                output_tokens=300,
+                cache_read_tokens=0,
+                cache_write_tokens=0,
+                cost_usd=0.0123,
+                run_id=ctx.run_id,
+            )
+        )
+    return StageResult(status="succeeded", artifact=FakeOut(value=1))
+
+
+async def test_run_usage_takes_llm_spend_from_the_provider_ledger(
+    container: Container, tenant: TenantScope
+) -> None:
+    probe = Probe()
+    pipeline_services = services(
+        container, catalog([fake_stage("a", probe, behaviour=_book_llm_call)], [pipeline(("a",))])
+    )
+    run_id, status = await run_pipeline(container, pipeline_services, tenant)
+
+    assert status is RunStatus.succeeded
+    async with container.session_factory() as session:
+        run = await session.get(PipelineRun, run_id)
+    assert run.usage["llm_usd"] == pytest.approx(0.0123)
+    assert (run.usage["llm_input_tokens"], run.usage["llm_output_tokens"]) == (1200, 300)
 
 
 async def test_analysis_without_confirmed_setup_fails_config_invalid(
