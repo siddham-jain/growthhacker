@@ -22,4 +22,9 @@ describe("runReducer", () => {
     expect(state.lastSeq).toBe(1);
     expect(state.insights).toHaveLength(0);
   });
+
+  it("takes the run status from the event type when the status field is empty", () => {
+    const state = runReducer(initialRunState("run_1"), { type: "event", event: event(1, { type: "run.awaiting_confirmation" }) });
+    expect(state.status).toBe("awaiting_confirmation");
+  });
 });

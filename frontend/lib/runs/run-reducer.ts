@@ -153,6 +153,15 @@ function applyPayload(state: LiveRunState, event: RunEvent, payload: EventPayloa
   }
 }
 
+// some run events carry their status only in the type, e.g. run.awaiting_confirmation
+const STATUS_EVENTS: Record<string, RunStatus> = {
+  "run.awaiting_confirmation": "awaiting_confirmation",
+  "run.succeeded": "succeeded",
+  "run.partial": "partial",
+  "run.failed": "failed",
+  "run.cancelled": "cancelled",
+};
+
 function applyEvent(state: LiveRunState, event: RunEvent): LiveRunState {
   if (event.seq <= state.lastSeq) return state;
   let next: LiveRunState = {
@@ -162,8 +171,9 @@ function applyEvent(state: LiveRunState, event: RunEvent): LiveRunState {
     latestMessage: event.message || state.latestMessage,
   };
 
-  if (event.type.startsWith("run.") && event.status) {
-    next = { ...next, status: event.status as RunStatus };
+  const runStatus = event.type.startsWith("run.") ? (event.status ?? STATUS_EVENTS[event.type]) : undefined;
+  if (runStatus) {
+    next = { ...next, status: runStatus as RunStatus };
     if (event.type === "run.started") next = { ...next, startedAt: next.startedAt ?? event.ts };
   } else if (event.type.startsWith("stage.")) {
     next = event.type === "stage.step" ? addStep(next, event) : applyStage(next, event);
