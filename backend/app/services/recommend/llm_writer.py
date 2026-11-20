@@ -35,6 +35,9 @@ class CardWritingServiceWriter:
             context,
             run_id=first.run_id,
             client_id=first.draft.client_id,
+            rejected={
+                request.draft.draft_id: request.violations for request in requests if request.violations
+            },
         )
         # 10's own template copies are left out so the recommend template renders and counts the fallback
         return {

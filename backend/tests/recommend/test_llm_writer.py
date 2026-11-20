@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 
+from app.domain.card_copy import Violation
 from app.services.llm.writer.schemas import WrittenCard, WrittenCards
 from app.services.recommend.inputs import ClientFacts
 from app.services.recommend.llm_writer import CardWritingServiceWriter
@@ -15,8 +16,10 @@ class FakeService:
     client: ClientFacts
     seen: list = field(default_factory=list)
 
-    async def write(self, drafts, context, *, run_id, client_id, deadline_s=None, on_card=None):
-        self.seen = [context, run_id, client_id]
+    async def write(
+        self, drafts, context, *, run_id, client_id, deadline_s=None, on_card=None, rejected=None
+    ):
+        self.seen = [context, run_id, client_id, rejected]
         renderer = TemplateCardRenderer()
         cards = [
             WrittenCard(
@@ -40,13 +43,27 @@ async def test_adapter_passes_client_context_and_returns_llm_copy(service, input
     written = await CardWritingServiceWriter(fake).write(requests)
 
     assert set(written) == {request.draft.draft_id for request in requests}
-    context, run_id, client_id = fake.seen
-    assert (context.name, context.recent_titles, run_id, client_id) == (
+    context, run_id, client_id, rejected = fake.seen
+    assert (context.name, context.recent_titles, run_id, client_id, rejected) == (
         "Apollo Hospitals",
         ["Own title"],
         RUN_ID,
         CLIENT_ID,
+        {},
     )
+
+
+async def test_adapter_hands_gate_violations_to_the_rewrite(service, inputs) -> None:
+    plan = service.plan(inputs, 30)
+    draft = plan.selection.selected[0]
+    violation = Violation(
+        rule="numbers_from_evidence", field="card", token="one", detail="number_not_in_evidence"
+    )
+    fake = FakeService("llm", plan.ctx.client)
+
+    await CardWritingServiceWriter(fake).write([CardRequest(draft, plan.ctx.client, violations=(violation,))])
+
+    assert fake.seen[3] == {draft.draft_id: (violation,)}
 
 
 async def test_adapter_leaves_template_copies_to_the_recommend_fallback(service, inputs) -> None:

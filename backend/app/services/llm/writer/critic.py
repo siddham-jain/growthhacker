@@ -1,4 +1,6 @@
+import asyncio
 import hashlib
+import math
 import re
 
 from app.core.config import CardWriterSettings
@@ -102,11 +104,12 @@ class CardCritic:
     async def review(
         self, items: list[tuple[BuiltPack, WriterOutcome]], request: WriteRequest
     ) -> list[CardCritique | None]:
-        results: list[CardCritique | None] = []
-        for start in range(0, len(items), self._batch_size):
-            batch = items[start : start + self._batch_size]
-            results.extend(await self._review_batch(batch, request))
-        return results
+        # batches run concurrently and are balanced, so the slowest one reviews as few cards as possible
+        count = math.ceil(len(items) / self._batch_size)
+        size = math.ceil(len(items) / count) if count else 0
+        batches = [items[start : start + size] for start in range(0, len(items), size)] if size else []
+        reviewed = await asyncio.gather(*(self._review_batch(batch, request) for batch in batches))
+        return [critique for batch in reviewed for critique in batch]
 
     async def _review_batch(
         self, batch: list[tuple[BuiltPack, WriterOutcome]], request: WriteRequest

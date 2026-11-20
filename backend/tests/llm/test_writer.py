@@ -6,6 +6,7 @@ import pytest
 
 from app.adapters.llm.testing import FakeCall, FakeLLMClient
 from app.core.config import CardWriterSettings
+from app.domain.card_copy import Violation
 from app.ports.llm import LLMBudgetExceeded, LLMError, LLMErrorKind, PayloadClass, TaskId
 from app.services.llm.writer.critic import CardCritic
 from app.services.llm.writer.evidence_pack import EvidencePackBuilder
@@ -184,9 +185,27 @@ async def test_service_batches_critique_and_flags_obvious_ideas() -> None:
     assert [
         len([b for b in c.input.trusted if b.label.startswith("card_")])
         for c in llm.calls_for(TaskId.card_critique)
-    ] == [5, 1]
+    ] == [3, 3]
     assert all(card.critic_flags == ["not_obvious_low"] for card in result.cards)
     assert result.llm_cards == 6
+
+
+async def test_downstream_rejection_is_fed_back_on_the_first_attempt() -> None:
+    draft = make_draft()
+    llm = FakeLLMClient({TaskId.card_write: GOOD_COPY, TaskId.card_critique: {"reviews": [review()]}})
+    rejection = Violation(
+        rule="numbers_from_evidence", field="card", token="one", detail="number_not_in_evidence"
+    )
+    await service(llm).write(
+        [draft],
+        make_client_context(),
+        run_id=RUN_ID,
+        client_id=CLIENT_ID,
+        rejected={draft.draft_id: [rejection]},
+    )
+    [first] = llm.calls_for(TaskId.card_write)
+    feedback = [block.text for block in first.input.trusted if block.label == "previous_attempt_feedback"]
+    assert feedback and "number_not_in_evidence (offending text: one)" in feedback[0]
 
 
 async def test_over_rejecting_critic_turns_advisory() -> None:

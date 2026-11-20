@@ -62,6 +62,11 @@ def test_small_counts_are_exact() -> None:
     assert not accepted("5 of the channels", 4, "channels")
 
 
+def test_one_is_a_count_like_in_the_recommend_gate() -> None:
+    assert accepted("one of the channels", 1, "channels")
+    assert not accepted("one of the channels", 4, "channels")
+
+
 def test_multiple_words_use_their_tolerance() -> None:
     assert accepted("twice the baseline", 2.1, "ratio_x")
     assert not accepted("twice the baseline", 2.4, "ratio_x")

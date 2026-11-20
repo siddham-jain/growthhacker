@@ -1,6 +1,6 @@
 import hashlib
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -52,10 +52,18 @@ def degrade_reason_for(error: LLMUnavailable) -> str:
     return "llm_unavailable"
 
 
-def violation_feedback(violations: list[Violation]) -> str:
-    lines = [f"- [{violation.field}] {violation.detail}" for violation in violations]
+def violation_line(violation: Violation) -> str:
+    line = f"- [{violation.field}] {violation.detail}"
+    if violation.token and violation.token not in violation.detail:
+        line += f" (offending text: {violation.token})"
+    return line
+
+
+def violation_feedback(violations: Sequence[Violation], retry: int = 1) -> str:
+    # the retry number keeps each attempt's prompt distinct, so a cached reply is never replayed as a retry
+    lines = [violation_line(violation) for violation in violations]
     return (
-        "Your previous draft broke these rules. Fix every item and keep the rest grounded in the pack. "
+        f"Retry {retry}. Your previous draft broke these rules. Fix every item and keep the rest grounded in the pack. "
         "Only names and numbers that appear in the pack are allowed.\n" + "\n".join(lines)
     )
 
@@ -144,9 +152,12 @@ class CardWriter:
             violations = self._validators.run(copy, built)
         return copy, violations
 
-    async def write(self, built: BuiltPack, request: WriteRequest) -> WriterOutcome:
-        feedback: str | None = None
-        last_violations: list[Violation] = []
+    async def write(
+        self, built: BuiltPack, request: WriteRequest, rejected: Sequence[Violation] = ()
+    ) -> WriterOutcome:
+        # rejected: why a downstream gate refused this card's previous copy; the first attempt fixes it
+        feedback: str | None = violation_feedback(rejected) if rejected else None
+        last_violations: list[Violation] = list(rejected)
         calls = 0
         reason = "validation_exhausted"
         attempts = 0
@@ -193,7 +204,7 @@ class CardWriter:
                 )
                 return WriterOutcome(card, copy, calls)
             last_violations = hard
-            feedback = violation_feedback(hard)
+            feedback = violation_feedback(hard, retry=attempt + 1)
         copy = self._template.write(
             built, degrade_reason=reason, violations=last_violations, attempts=attempts
         )

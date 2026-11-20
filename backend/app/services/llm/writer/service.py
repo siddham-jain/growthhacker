@@ -1,11 +1,11 @@
 import asyncio
 import time
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from uuid import UUID
 
 from app.core.config import CardWriterSettings
 from app.core.logging import get_logger
-from app.domain.card_copy import CardCritique
+from app.domain.card_copy import CardCritique, Violation
 from app.domain.recommendations import RecommendationDraft
 from app.ports.llm import LLMClient
 from app.services.llm.writer.critic import CardCritic, critic_flags
@@ -47,11 +47,13 @@ class CardWritingService:
         client_id: UUID | None,
         deadline_s: float | None = None,
         on_card: CardCallback | None = None,
+        rejected: Mapping[str, Sequence[Violation]] | None = None,
     ) -> WrittenCards:
         deadline = self._monotonic() + (deadline_s if deadline_s is not None else self._settings.deadline_s)
         request = WriteRequest(run_id=run_id, client_id=client_id, deadline=deadline)
         packs = [self._builder.build(draft, client) for draft in drafts]
-        outcomes = await self._first_pass(packs, request)
+        rejections = [tuple((rejected or {}).get(draft.draft_id, ())) for draft in drafts]
+        outcomes = await self._first_pass(packs, rejections, request)
         critiques = await self._critique(packs, outcomes, request)
         outcomes = await self._revise(packs, outcomes, critiques, request)
         cards = [
@@ -99,8 +101,13 @@ class CardWritingService:
             await asyncio.gather(*pending, return_exceptions=True)
         return [task.result() if task in done else None for task in tasks]
 
-    async def _first_pass(self, packs: list[BuiltPack], request: WriteRequest) -> list[WriterOutcome]:
-        jobs = [lambda built=built: self._writer.write(built, request) for built in packs]
+    async def _first_pass(
+        self, packs: list[BuiltPack], rejections: list[tuple[Violation, ...]], request: WriteRequest
+    ) -> list[WriterOutcome]:
+        jobs = [
+            lambda built=built, rejected=rejected: self._writer.write(built, request, rejected)
+            for built, rejected in zip(packs, rejections, strict=True)
+        ]
         results = await self._bounded(jobs, request)
         outcomes = []
         for built, result in zip(packs, results, strict=True):
