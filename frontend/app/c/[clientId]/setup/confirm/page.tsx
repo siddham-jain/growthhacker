@@ -13,10 +13,16 @@ import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/surface";
 import { api } from "@/lib/api";
 import { buyerQuestionsQuery, clientQuery, clientKey, competitorsQuery, keywordsQuery, profileQuery } from "@/lib/api/queries";
-import type { CompetitorView } from "@/lib/api/types";
+import type { ChannelVerifiedBy, CompetitorView } from "@/lib/api/types";
 import { RELATION_LABELS } from "@/lib/labels";
 import { useClientId } from "@/lib/use-client-id";
 
+const VERIFIED_BY_NOTE: Record<ChannelVerifiedBy, string> = {
+  website_link: "your website links to it",
+  channel_link: "it links to your website",
+  oauth: "you signed in with it",
+  manual: "you picked it",
+};
 const MIN_COMPETITORS = 3;
 const MAX_COMPETITORS = 10;
 
@@ -58,8 +64,10 @@ export default function ConfirmPage() {
   const keywords = useQuery(keywordsQuery(clientId));
   const questions = useQuery(buyerQuestionsQuery(clientId));
   const competitors = useQuery(competitorsQuery(clientId));
-  const needsChannel = client.data ? !client.data.own_channel?.verified : false;
-  const channelRef = client.data?.website_url ?? client.data?.name ?? "";
+  const ownChannel = client.data?.own_channel ?? null;
+  const needsChannel = client.data ? !ownChannel?.verified : false;
+  // onboarding's proposed channel carries the site evidence; a website url alone resolves to nothing
+  const channelRef = ownChannel?.channel_id ?? client.data?.website_url ?? client.data?.name ?? "";
   const resolve = useQuery({
     queryKey: [...clientKey(clientId), "channel-resolve", channelRef],
     queryFn: () => api.clients.resolveChannel(clientId, channelRef),
@@ -131,7 +139,15 @@ export default function ConfirmPage() {
       {loading ? <LoadingBlock rows={4} /> : null}
       {profile.error ? <ErrorState error={profile.error} onRetry={() => profile.refetch()} /> : null}
 
-      {needsChannel && resolve.data ? (
+      {ownChannel?.verified ? (
+        <InfoNote>
+          Using your YouTube channel {ownChannel.title ?? ownChannel.channel_id}
+          {ownChannel.handle ? ` (${ownChannel.handle})` : ""}
+          {ownChannel.verified_by ? `: ${VERIFIED_BY_NOTE[ownChannel.verified_by]}.` : "."}
+        </InfoNote>
+      ) : null}
+
+      {needsChannel && resolve.data?.candidates.length ? (
         <Section index={0} title="Which channel is yours?" subtitle="We found a few channels. We only attach one that links to your website or that you pick here.">
           <OwnershipPicker candidates={resolve.data.candidates} selected={channelChoice} onSelect={setChannelChoice} />
         </Section>

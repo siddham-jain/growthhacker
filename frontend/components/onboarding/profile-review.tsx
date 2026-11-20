@@ -2,6 +2,7 @@ import { InfoNote } from "@/components/states/states";
 import { Chip } from "@/components/ui/primitives";
 import { SourceKindChip } from "@/components/ui/chips";
 import type { BusinessProfileView, ProfileFact } from "@/lib/api/types";
+import { isMeaningfulContact } from "@/lib/contact";
 import { SOURCE_KIND_LABELS } from "@/lib/labels";
 import { SourcesUsed } from "./sources-used";
 
@@ -36,6 +37,12 @@ function FactRow({ fact }: { fact: ProfileFact }) {
   );
 }
 
+// profiles built before the contact rules can still hold form buttons and bare dialling codes
+function visibleFacts(view: BusinessProfileView, key: (typeof GROUPS)[number]["key"]): ProfileFact[] {
+  const facts = view.effective[key];
+  return key === "conversion_actions" ? facts.filter((fact) => isMeaningfulContact(fact.label)) : facts;
+}
+
 export function ProfileReview({ view }: { view: BusinessProfileView }) {
   const profile = view.effective;
   return (
@@ -46,18 +53,21 @@ export function ProfileReview({ view }: { view: BusinessProfileView }) {
         <InfoNote tone="warning">Your site limits automated reading, so we filled gaps from other public sources. Facts marked “Please confirm” came from outside your site.</InfoNote>
       ) : null}
       <div className="grid gap-4 md:grid-cols-2">
-        {GROUPS.map((group) => (
-          <section key={group.key} aria-label={group.label} className="rounded-card bg-card p-4 shadow-card">
-            <h3 className="text-body-medium text-foreground">
-              {group.label} <span className="text-muted-foreground">· {profile[group.key].length}</span>
-            </h3>
-            <ul className="divide-y divide-border">
-              {profile[group.key].map((fact) => (
-                <FactRow key={fact.id} fact={fact} />
-              ))}
-            </ul>
-          </section>
-        ))}
+        {GROUPS.map((group) => {
+          const facts = visibleFacts(view, group.key);
+          return (
+            <section key={group.key} aria-label={group.label} className="rounded-card bg-card p-4 shadow-card">
+              <h3 className="text-body-medium text-foreground">
+                {group.label} <span className="text-muted-foreground">· {facts.length}</span>
+              </h3>
+              <ul className="divide-y divide-border">
+                {facts.map((fact) => (
+                  <FactRow key={fact.id} fact={fact} />
+                ))}
+              </ul>
+            </section>
+          );
+        })}
       </div>
       {profile.freshness.regulated_domain ? (
         <InfoNote>Healthcare is regulated, so news ideas and description changes will ask for review before publishing.</InfoNote>

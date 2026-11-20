@@ -58,6 +58,9 @@
 - Move confirm-setup's competitor freeze and topic rebuild into the worker; the endpoint returns 202 with the run.
 
 ### Fixed
+- Verify a channel the site links by legacy /user/ url instead of penalising it as another channel.
+- Drop form buttons, bare dial codes and short codes from contact facts; hide leftovers in the confirm UI.
+- Confirm page offers onboarding's proposed channel with its evidence and groups sources by kind.
 - Fix run usage missing llm spend from stages that bill only the provider ledger.
 - Fix duplicate video ideas when an offering and a keyword share a label.
 - Fix backtest runs failing in write_cards; backtests replay without the writer.
@@ -114,6 +117,7 @@
 - Fix rapidocr 3.10 enum params that failed thumbnail enrichment.
 
 ### Decisions
+- Channel resolve reuses onboarding's stored ownership verdict for the proposed channel — only onboarding saw the site's links.
 - The evaluation ops report covers the period after the final deploy — whole-day figures include forced recomputes, which are not warm refreshes by definition.
 - Video lookups coalesce only within one quota identity (client, run) — cross-client sharing happens through in-flight claims, so each caller pays its own calls and one cap never fails another.
 - Owner day N ends at the pacific midnight nearest the real age N, within the observed ladder's tolerance — the same definition as observed snapshots, so owner values never cover a different age.
