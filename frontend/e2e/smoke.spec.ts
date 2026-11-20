@@ -9,7 +9,40 @@ test("onboarding to live analysis, confirm, first brief, competitor folder and e
   await expect(page.getByText("02 · Live analysis")).toBeVisible();
   await expect(page).toHaveURL(/\/setup\/confirm/, { timeout: 60_000 });
 
-  await expect(page.getByRole("heading", { name: "Who do you compete with?" })).toBeVisible();
+  const heading = (name: string) => page.getByRole("heading", { name, level: 1 });
+  await expect(heading("Is this what you do?")).toBeVisible();
+  await expect(page).toHaveURL(/step=summary/);
+  await page.keyboard.press("Enter");
+
+  await expect(heading("Which YouTube channel is yours?")).toBeVisible();
+  await page.getByRole("radio").first().click();
+  await page.getByRole("button", { name: "This is mine" }).click();
+
+  await expect(heading("What do you sell?")).toBeVisible();
+  await page.getByRole("button", { name: "Remove “Cancer care”" }).click();
+  await expect(page.getByText("Removed")).toBeVisible();
+  await page.getByRole("button", { name: "Undo removing “Cancer care”" }).click();
+  await expect(page.getByRole("button", { name: "Edit “Cancer care”" })).toBeVisible();
+  await page.getByRole("button", { name: "Edit “Cardiac sciences”" }).click();
+  await page.getByLabel("Correct “Cardiac sciences”").fill("Heart care");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("button", { name: "Edit “Heart care”" })).toBeVisible();
+  await page.getByLabel("Add a product or service").fill("Dialysis");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("button", { name: "Edit “Dialysis”" })).toBeVisible();
+  await page.getByRole("button", { name: "Looks right" }).click();
+
+  await expect(heading("Where do you work?")).toBeVisible();
+  await expect(page).toHaveURL(/step=locations/);
+  await page.keyboard.press("Shift+Enter");
+  await expect(heading("What do you sell?")).toBeVisible();
+  await page.keyboard.press("Enter");
+  for (const name of ["Where do you work?", "How do customers reach you?", "Why do customers choose you?", "What do your buyers ask?", "Which words describe what you do?", "Who are your direct competitors?", "Anyone else worth watching?"]) {
+    await expect(heading(name)).toBeVisible();
+    await page.keyboard.press("Enter");
+  }
+
+  await expect(heading("Ready for your first analysis?")).toBeVisible();
   const start = page.getByRole("button", { name: "Start analysis" });
   await expect(start).toBeEnabled();
   await start.click();

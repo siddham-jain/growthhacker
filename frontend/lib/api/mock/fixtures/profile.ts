@@ -52,7 +52,7 @@ const profile: BusinessProfile = {
     fact("vp_reviews", "Patients cite short waiting times for consults", "web_mentions", "https://www.practo.com/apollo-hospitals/reviews", "appointment within the week, doctors explained everything"),
   ],
   locations: [
-    fact("loc_chennai", "Chennai (Greams Road)", "reader_proxy", `${SITE}/locations/chennai`, "Apollo Hospitals, Greams Road, Chennai"),
+    fact("loc_chennai", "Chennai (Greams Road)", "reader_proxy", `${SITE}/locations/chennai`, "Apollo Hospitals, Greams Road, Chennai", "Chennai, Tamil Nadu"),
     fact("loc_hyderabad", "Hyderabad (Jubilee Hills)", "reader_proxy", `${SITE}/locations/hyderabad`, "Apollo Health City, Jubilee Hills"),
     fact("loc_delhi", "New Delhi (Indraprastha)", "search_index", `${SITE}/locations/delhi`, "Indraprastha Apollo Hospitals, Sarita Vihar"),
     fact("loc_bengaluru", "Bengaluru", "reader_proxy", `${SITE}/locations/bangalore`, "Apollo Hospitals, Bannerghatta Road"),

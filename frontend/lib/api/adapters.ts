@@ -17,6 +17,8 @@ import type {
   Page,
   PipelineRun,
   ProfileFact,
+  ProfileGroup,
+  ProfilePatch,
   RecommendationOut,
   ResultEnvelope,
   RunEvent,
@@ -312,7 +314,7 @@ function toProfile(profile: Wire["BusinessProfile"]): BusinessProfile {
     },
     offerings: (profile.offerings ?? []).map((item): ProfileFact => ({ id: item.id, label: item.name, detail: item.description ?? undefined, meta: toMeta(item.meta) })),
     value_propositions: (profile.value_propositions ?? []).map((item): ProfileFact => ({ id: item.id, label: item.statement, meta: toMeta(item.meta) })),
-    locations: (profile.locations?.items ?? []).map((item): ProfileFact => ({ id: item.id, label: item.name, detail: item.city ?? undefined, meta: toMeta(item.meta) })),
+    locations: (profile.locations?.items ?? []).map((item): ProfileFact => ({ id: item.id, label: item.name, detail: [item.city, item.region].filter(Boolean).join(", ") || undefined, kind: item.kind, meta: toMeta(item.meta) })),
     conversion_actions: (profile.conversion_actions ?? []).map((item): ProfileFact => ({ id: item.id, label: item.label, meta: toMeta(item.meta) })),
     freshness: {
       sensitivity: profile.freshness.sensitivity as BusinessProfile["freshness"]["sensitivity"],
@@ -327,21 +329,39 @@ export function toProfileView(view: Wire["BusinessProfileView"]): BusinessProfil
   return { ...view, profile: toProfile(view.profile), effective: toProfile(view.effective), sources: view.sources ?? [] };
 }
 
-// edits go back as a merge patch of the domain profile: only the label field of each edited claim changes
-const LABEL_FIELD = { offerings: "name", value_propositions: "statement", conversion_actions: "label", locations: "name" } as const;
+// edits go back as 03's merge patch keyed by item id: an object adds or edits, null removes
+const LABEL_FIELD: Record<ProfileGroup, string> = { offerings: "name", value_propositions: "statement", conversion_actions: "label", locations: "name" };
 
-export function toProfilePatch(raw: Wire["BusinessProfile"], patch: Partial<Record<keyof typeof LABEL_FIELD, ProfileFact[]>>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [group, facts] of Object.entries(patch) as [keyof typeof LABEL_FIELD, ProfileFact[]][]) {
-    const originals: { id: string; meta: Wire["ClaimMeta"] }[] = group === "locations" ? (raw.locations?.items ?? []) : ((raw[group] ?? []) as { id: string; meta: Wire["ClaimMeta"] }[]);
-    const items = facts.map((fact) => {
-      const original = originals.find((item) => item.id === fact.id);
-      const meta = { ...(original?.meta ?? { confidence: 1, first_seen_version: raw.version, origin: "user" }), status: fact.meta.status, origin: fact.meta.origin, updated_at: new Date().toISOString() };
-      return { ...(original ?? { id: fact.id }), [LABEL_FIELD[group]]: fact.label, meta };
-    });
-    out[group] = group === "locations" ? { ...raw.locations, items } : items;
+type RawItem = Record<string, unknown>;
+
+export function rawProfileItems(profile: Wire["BusinessProfile"]): [string, RawItem][] {
+  const lists: [ProfileGroup, RawItem[]][] = [
+    ["offerings", profile.offerings ?? []],
+    ["value_propositions", profile.value_propositions ?? []],
+    ["conversion_actions", profile.conversion_actions ?? []],
+    ["locations", profile.locations?.items ?? []],
+  ];
+  return lists.flatMap(([group, items]) => items.map((item): [string, RawItem] => [`${group}:${String(item.id)}`, item]));
+}
+
+function withoutManaged(item: RawItem): RawItem {
+  return Object.fromEntries(Object.entries(item).filter(([key]) => key !== "id" && key !== "meta"));
+}
+
+// restore sends back every field the removed item had, so an undo loses nothing but its evidence
+export function toProfilePatch(patch: ProfilePatch, original: (key: string) => RawItem | undefined): Record<string, unknown> {
+  const out: Record<string, Record<string, unknown>> = {};
+  for (const edit of patch.facts ?? []) {
+    const field = LABEL_FIELD[edit.group];
+    const items = (out[edit.group] ??= {});
+    if (edit.op === "remove") items[edit.id] = null;
+    else if (edit.op === "confirm") items[edit.id] = { status: "confirmed" };
+    else if (edit.op === "restore") {
+      const raw = original(`${edit.group}:${edit.fact.id}`);
+      items[edit.fact.id] = raw ? withoutManaged(raw) : { [field]: edit.fact.label };
+    } else items[edit.id] = { [field]: edit.label };
   }
-  return out;
+  return patch.identity ? { ...out, identity: patch.identity } : out;
 }
 
 export function toGapMatrix(data: Wire["GapMatrixData"]): GapMatrixView {

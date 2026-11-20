@@ -11,7 +11,8 @@ import { Chip, toast } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
 import { isApiError } from "@/lib/api/errors";
 import { profileQuery } from "@/lib/api/queries";
-import type { BusinessProfileView, ProfileFact } from "@/lib/api/types";
+import type { BusinessProfileView, FactEdit, ProfileFact } from "@/lib/api/types";
+import { newItemId } from "@/lib/onboarding/edits";
 import { SOURCE_KIND_LABELS } from "@/lib/labels";
 import { SettingsSection } from "./section";
 
@@ -21,16 +22,6 @@ const GROUPS = [
   { key: "conversion_actions", label: "Ways customers reach you", noun: "way to reach you" },
   { key: "value_propositions", label: "Why customers choose you", noun: "reason" },
 ] as const;
-
-type GroupKey = (typeof GROUPS)[number]["key"];
-
-function userFact(label: string): ProfileFact {
-  return {
-    id: `fact_user_${crypto.randomUUID().slice(0, 8)}`,
-    label,
-    meta: { origin: "user", status: "confirmed", confidence: 1, evidence: [{ url: "", quote: label, source_kind: "user", fetched_at: new Date().toISOString() }] },
-  };
-}
 
 function FactRow({ fact, onSave, onRemove, onConfirm, busy }: { fact: ProfileFact; onSave: (label: string) => void; onRemove: () => void; onConfirm: () => void; busy: boolean }) {
   const [editing, setEditing] = useState(false);
@@ -124,7 +115,7 @@ function AddFact({ noun, onAdd, busy }: { noun: string; onAdd: (label: string) =
 export function ProfileEditor({ clientId, view, onChanged }: { clientId: string; view: BusinessProfileView; onChanged: () => void }) {
   const queryClient = useQueryClient();
   const save = useMutation({
-    mutationFn: async ({ key, facts }: { key: GroupKey; facts: ProfileFact[] }) => api.profile.update(clientId, { [key]: facts }, view.version),
+    mutationFn: async (edit: FactEdit) => api.profile.update(clientId, { facts: [edit] }, view.version),
     onSuccess: (next) => {
       queryClient.setQueryData(profileQuery(clientId).queryKey, next);
       onChanged();
@@ -138,8 +129,6 @@ export function ProfileEditor({ clientId, view, onChanged }: { clientId: string;
     },
   });
   const profile = view.effective;
-
-  const update = (key: GroupKey, facts: ProfileFact[]) => save.mutate({ key, facts });
 
   return (
     <div className="flex flex-col gap-4">
@@ -158,13 +147,13 @@ export function ProfileEditor({ clientId, view, onChanged }: { clientId: string;
                     key={fact.id}
                     fact={fact}
                     busy={save.isPending}
-                    onSave={(label) => update(group.key, facts.map((item) => (item.id === fact.id ? { ...item, label, meta: { ...item.meta, status: "edited", origin: "user" } } : item)))}
-                    onRemove={() => update(group.key, facts.filter((item) => item.id !== fact.id))}
-                    onConfirm={() => update(group.key, facts.map((item) => (item.id === fact.id ? { ...item, meta: { ...item.meta, status: "confirmed" } } : item)))}
+                    onSave={(label) => save.mutate({ group: group.key, op: "edit", id: fact.id, label })}
+                    onRemove={() => save.mutate({ group: group.key, op: "remove", id: fact.id })}
+                    onConfirm={() => save.mutate({ group: group.key, op: "confirm", id: fact.id })}
                   />
                 ))}
               </ul>
-              <AddFact noun={group.noun} busy={save.isPending} onAdd={(label) => update(group.key, [...facts, userFact(label)])} />
+              <AddFact noun={group.noun} busy={save.isPending} onAdd={(label) => save.mutate({ group: group.key, op: "add", id: newItemId(), label })} />
             </SettingsSection>
           );
         })}

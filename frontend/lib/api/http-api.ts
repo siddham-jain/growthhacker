@@ -6,6 +6,7 @@ import {
   toGapMatrix,
   toOutlierPage,
   toOwnPerformance,
+  rawProfileItems,
   toProfilePatch,
   toProfileView,
   toRecommendation,
@@ -17,14 +18,26 @@ import {
 import type { GrowthHackerApi, TopicApi } from "./contract";
 import { apiPath, request, send } from "./http";
 import type { components } from "./schema";
-import type { BuyerQuestionCreate, BuyerQuestionItem, KeywordCreate, KeywordItem, ResultEnvelope } from "./types";
+import type { BuyerQuestionCreate, BuyerQuestionItem, KeywordCreate, KeywordItem, Page, ResultEnvelope } from "./types";
 
 type Wire = components["schemas"];
+
+// review screens show every item, so lists follow the cursor instead of stopping at the first page
+async function allPages<T>(path: string, query: Record<string, string | undefined>): Promise<Page<T>> {
+  const items: T[] = [];
+  let cursor: string | undefined;
+  for (;;) {
+    const page = await request<Page<T>>("GET", path, { query: { ...query, limit: 100, cursor } });
+    items.push(...page.items);
+    if (!page.next_cursor || !page.items.length) return { ...page, items, next_cursor: null };
+    cursor = page.next_cursor;
+  }
+}
 
 function topicApi<T, C>(resource: "keywords" | "buyer-questions"): TopicApi<T, C> {
   const base = (clientId: string) => apiPath`/clients/${clientId}/${resource}`;
   return {
-    list: (clientId, status) => request("GET", base(clientId), { query: { status } }),
+    list: (clientId, status) => allPages(base(clientId), { status }),
     create: (clientId, input) => request("POST", base(clientId), { body: input }),
     update: (clientId, id, patch) => request("PATCH", base(clientId) + apiPath`/${id}`, { body: patch }),
     remove: (clientId, id) => request("DELETE", base(clientId) + apiPath`/${id}`),
@@ -32,8 +45,13 @@ function topicApi<T, C>(resource: "keywords" | "buyer-questions"): TopicApi<T, C
   };
 }
 
-// the profile patch is written against the domain profile last read, so keep that copy per client
-const rawProfiles = new Map<string, Wire["BusinessProfile"]>();
+// every domain item seen per client, so an undo can send a removed item back with all its fields
+const rawItems = new Map<string, Record<string, unknown>>();
+
+function rememberProfile(clientId: string, view: Wire["BusinessProfileView"]) {
+  for (const profile of [view.profile, view.effective]) for (const [key, item] of rawProfileItems(profile)) rawItems.set(`${clientId}:${key}`, item);
+  return toProfileView(view);
+}
 
 const run = async (pending: Promise<Wire["RunOut"]>) => toRun(await pending);
 
@@ -70,22 +88,19 @@ export const httpApi: GrowthHackerApi = {
   profile: {
     get: async (clientId) => {
       const view = await request<Wire["BusinessProfileView"]>("GET", apiPath`/clients/${clientId}/profile`);
-      rawProfiles.set(clientId, view.effective);
-      return toProfileView(view);
+      return rememberProfile(clientId, view);
     },
     update: async (clientId, patch, version) => {
-      const raw = rawProfiles.get(clientId);
-      const body = raw ? toProfilePatch(raw, patch as Parameters<typeof toProfilePatch>[1]) : patch;
+      const body = toProfilePatch(patch, (key) => rawItems.get(`${clientId}:${key}`));
       const view = await request<Wire["BusinessProfileView"]>("PATCH", apiPath`/clients/${clientId}/profile`, { body, ifMatch: version, contentType: "application/merge-patch+json" });
-      rawProfiles.set(clientId, view.effective);
-      return toProfileView(view);
+      return rememberProfile(clientId, view);
     },
     recrawl: (clientId) => run(request("POST", apiPath`/clients/${clientId}/profile/recrawl`)),
   },
   keywords: topicApi<KeywordItem, KeywordCreate>("keywords"),
   buyerQuestions: topicApi<BuyerQuestionItem, BuyerQuestionCreate>("buyer-questions"),
   competitors: {
-    list: (clientId, status) => request("GET", apiPath`/clients/${clientId}/competitors`, { query: { status } }),
+    list: (clientId, status) => allPages(apiPath`/clients/${clientId}/competitors`, { status }),
     add: (clientId, input, idempotencyKey) => request("POST", apiPath`/clients/${clientId}/competitors`, { body: input, idempotencyKey }),
     suggest: (clientId) => run(request("POST", apiPath`/clients/${clientId}/competitors/suggest`)),
     confirm: (clientId, competitorId) => request("POST", apiPath`/clients/${clientId}/competitors/${competitorId}/confirm`),

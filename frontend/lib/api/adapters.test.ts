@@ -60,9 +60,29 @@ describe("adapters", () => {
     expect(matrix.own.tr1).toBe(0);
   });
 
-  it("writes profile edits back onto the domain objects without dropping their other fields", () => {
-    const raw = { version: 4, offerings: [{ id: "o1", name: "Cardiology", kind: "department", meta: { origin: "extracted", status: "proposed", confidence: 0.8, first_seen_version: 1, updated_at: "x" } }] } as unknown as Wire["BusinessProfile"];
-    const patch = toProfilePatch(raw, { offerings: [{ id: "o1", label: "Cardiac sciences", meta: { origin: "user", status: "edited", confidence: 1, evidence: [] } }] });
-    expect(patch.offerings).toMatchObject([{ id: "o1", name: "Cardiac sciences", kind: "department", meta: { status: "edited", origin: "user", first_seen_version: 1 } }]);
+  it("writes profile edits as 03's merge patch keyed by item id", () => {
+    const original = { id: "loc_1", name: "Navi Mumbai", kind: "hospital", city: "Navi Mumbai", meta: { status: "proposed" } };
+    const lookup = (key: string) => (key === "locations:loc_1" ? original : undefined);
+    const fact = { id: "loc_1", label: "Navi Mumbai", meta: { origin: "extracted" as const, status: "proposed" as const, confidence: 0.8, evidence: [] } };
+    const patch = toProfilePatch(
+      {
+        facts: [
+          { group: "offerings", op: "edit", id: "o1", label: "Cardiac sciences" },
+          { group: "offerings", op: "remove", id: "o2" },
+          { group: "conversion_actions", op: "add", id: "user_1", label: "+91 98765 43210" },
+          { group: "value_propositions", op: "confirm", id: "vp1" },
+          { group: "locations", op: "restore", fact },
+        ],
+        identity: { one_liner: "Hospitals across India" },
+      },
+      lookup,
+    );
+    expect(patch).toEqual({
+      offerings: { o1: { name: "Cardiac sciences" }, o2: null },
+      conversion_actions: { user_1: { label: "+91 98765 43210" } },
+      value_propositions: { vp1: { status: "confirmed" } },
+      locations: { loc_1: { name: "Navi Mumbai", kind: "hospital", city: "Navi Mumbai" } },
+      identity: { one_liner: "Hospitals across India" },
+    });
   });
 });

@@ -33,6 +33,7 @@ import {
   trending,
   whiteSpace,
 } from "./fixtures/insights";
+import { applyProfileView } from "@/lib/onboarding/edits";
 import { profileView } from "./fixtures/profile";
 import { buyerQuestions, keywords } from "./fixtures/topics";
 import { getMockRun, listMockRuns, mockEventsAfter, startMockRun } from "./runs";
@@ -159,8 +160,10 @@ function topicApi<T extends KeywordItem | BuyerQuestionItem, C extends KeywordCr
       state.set(id, next);
       return respond(next);
     },
+    // like the api, a removed topic stays as rejected so it can be restored
     remove: (_clientId, id) => {
-      state.delete(id);
+      const current = state.get(id);
+      if (current) state.set(id, { ...current, status: "rejected" });
       return respond(undefined);
     },
     bulkStatus: (_clientId, input) => {
@@ -270,7 +273,7 @@ export const mockApi: GrowthHackerApi = {
     get: () => respond(profileState),
     update: (_clientId, patch, version) => {
       if (version !== profileState.version) return Promise.reject(new ApiError(412, "precondition_failed", "Someone else changed this. We loaded the latest version."));
-      profileState = { ...profileState, overrides: { ...profileState.overrides, ...patch }, effective: { ...profileState.effective, ...(patch as Partial<typeof profileState.effective>) }, version: profileState.version + 1 };
+      profileState = { ...applyProfileView(profileState, patch), version: profileState.version + 1 };
       return respond(profileState);
     },
     recrawl: (clientId) => respond(startMockRun(clientId, "recrawl", 30)),

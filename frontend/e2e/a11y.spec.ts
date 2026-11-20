@@ -16,6 +16,8 @@ const ROUTES = [
   "/c/cl_apollo/creators",
   "/c/cl_apollo/settings?tab=engine",
   "/c/cl_apollo/settings?tab=schedule",
+  "/c/cl_apollo/setup/confirm?step=reasons",
+  "/c/cl_apollo/setup/confirm?step=direct",
 ];
 
 for (const theme of ["light", "dark"] as const) {

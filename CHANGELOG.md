@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Added
+- Rebuild the confirm step as a three-step, one-question-per-screen flow with inline edit, remove with undo and add on every segment.
+- Allow adding, editing and removing locations and editing the market country through the profile patch.
 - Infer the client market from evidence (user, cctld, phone codes, addresses, currency, lang, wikidata) and write it back unless the user picked it.
 - Canonicalise and merge duplicate offerings, locations, value props and contacts with the union of their quotes.
 - Add README, design review (docs/DESIGN.md) and evaluation status (docs/evaluation/EVALUATION.md).
@@ -60,6 +62,10 @@
 - Move confirm-setup's competitor freeze and topic rebuild into the worker; the endpoint returns 202 with the run.
 
 ### Fixed
+- Serialize concurrent profile and keyword edits so a burst of corrections no longer collides on the profile version.
+- Adding a competitor the client already holds moves it instead of re-running discovery, which re-ranked other suggestions.
+- Keep location locks and rejections across re-crawls.
+- Send settings profile edits as the keyed merge patch the api expects.
 - Parse site phone numbers in the inferred market, not the browser locale (1800 numbers came out as US).
 - Move calls to action out of offerings and drop app-store, navigation and category labels.
 - Drop third-party locations in another country, url-slug cities, bare states and reach statements from locations.
@@ -124,6 +130,8 @@
 - Fix rapidocr 3.10 enum params that failed thumbnail enrichment.
 
 ### Decisions
+- Confirm-step "Looks right" confirms the items shown — it locks them so a re-crawl keeps the user's verified set.
+- Regulated-field notice is generic — the regulated flag and domain kind can be wrong for non-healthcare clients.
 - The browser locale is sent as a market hint (market_explicit=false), not a choice — name-only site search still needs a country, but phone parsing and the stored market must come from the site.
 - Locations merge by canonical name within a city and fold city-only sentences into that city's facility — two clinics in one city stay apart because their residual names differ.
 - Crawls without an explicit market keep national phone numbers unparsed until build_profile infers the region — the region is unknown at crawl time.

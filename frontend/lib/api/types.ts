@@ -173,6 +173,8 @@ export interface ProfileFact {
   id: string;
   label: string;
   detail?: string;
+  // locations only: office, branch, service_area…
+  kind?: string;
   meta: ClaimMeta;
 }
 
@@ -212,7 +214,21 @@ export interface BusinessProfileView {
   sources: ProfileSource[];
 }
 
-export type ProfilePatch = Partial<Record<"offerings" | "value_propositions" | "locations" | "conversion_actions" | "niche_keywords", unknown>>;
+export type ProfileGroup = "offerings" | "locations" | "conversion_actions" | "value_propositions";
+
+// one correction to a profile list; the client picks the id of an added item so it can be undone, and restore puts a removed fact back
+export type FactEdit =
+  | { group: ProfileGroup; op: "add"; id: string; label: string }
+  | { group: ProfileGroup; op: "edit"; id: string; label: string }
+  | { group: ProfileGroup; op: "remove"; id: string }
+  | { group: ProfileGroup; op: "confirm"; id: string }
+  | { group: ProfileGroup; op: "restore"; fact: ProfileFact };
+
+export interface ProfilePatch {
+  facts?: FactEdit[];
+  // country is a two-letter region code; it also becomes the client's market
+  identity?: { one_liner?: string; country?: string };
+}
 
 // topics
 
