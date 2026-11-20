@@ -21,6 +21,7 @@ from app.models.runs import ActiveResultSet, PipelineRun, RunArtifact
 from app.models.tenancy import Client
 from app.models.website import BusinessProfile
 from app.models.youtube_cache import YtChannel, YtVideo
+from app.pipeline.artifacts import load_payload
 from app.pipeline.contracts import RunConfigSnapshot
 from app.pipeline.stages.recommend import RECOMMEND_ARTIFACT
 
@@ -152,7 +153,7 @@ class PublishedCardSource:
         run = await session.get(PipelineRun, active.run_id)
         if artifact is None or run is None:
             return None
-        output = RECOMMEND_ARTIFACT.model.model_validate(artifact.payload)
+        output = RECOMMEND_ARTIFACT.model.model_validate(await load_payload(session, artifact))
         window = output.window(active.window_days)
         if window is None:
             return None

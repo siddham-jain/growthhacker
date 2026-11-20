@@ -201,6 +201,7 @@ def _rules() -> list[RetentionRule]:
         cascade("stage_runs", DC.tenant_owned, "pipeline_runs"),
         delete("run_events", DC.tenant_derived_from_api, "created_at"),
         expire("run_artifacts", DC.tenant_derived_from_api),
+        expire("run_artifact_blobs", DC.tenant_derived_from_api),
         keep("client_schedules"),
         keep("active_result_sets"),
         rule("own_analytics_daily", DC.yt_authorized_analytics, A.delete, condition=INACTIVE_TOKEN_SQL),
@@ -208,7 +209,14 @@ def _rules() -> list[RetentionRule]:
         rule("own_search_term", DC.yt_authorized_analytics, A.delete, condition=INACTIVE_TOKEN_SQL),
         rule("own_video_metrics", DC.yt_authorized_analytics, A.delete, condition=INACTIVE_TOKEN_SQL),
         keep("websites"),
-        keep("crawl_runs"),
+        # the stored acquisition carries page and channel text; the crawl run row itself is kept
+        redact(
+            "crawl_runs",
+            DC.tenant_derived_from_api,
+            "started_at",
+            {"acquisition_gz": "NULL"},
+            "acquisition_gz IS NOT NULL",
+        ),
         keep("url_inventory"),
         delete(
             "crawl_frontier",
@@ -337,7 +345,14 @@ def _rules() -> list[RetentionRule]:
         expire("llm_result_cache", DC.tenant_derived_from_api),
         delete("recommendation_copy", DC.tenant_derived_from_api, "created_at"),
         expire("llm_debug_payloads", DC.tenant_derived_from_api),
-        keep("eval_config"),
+        # a scored config can name client channels and videos; it keeps only its hash and spend after day 28
+        redact(
+            "eval_config",
+            DC.tenant_derived_from_api,
+            "finished_at",
+            {"config": "'{}'::jsonb"},
+            "finished_at IS NOT NULL AND config <> '{}'::jsonb",
+        ),
         redact(
             "eval_freeze",
             DC.tenant_derived_from_api,

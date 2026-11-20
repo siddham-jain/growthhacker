@@ -85,7 +85,8 @@ class CheckpointStore:
             await self._fence(session, run_id)
             if artifact is not None:
                 key, value, fingerprint = artifact
-                await session.execute(self._artifacts.upsert_statement(run_id, key, value, fingerprint))
+                for statement in self._artifacts.upsert_statements(run_id, key, value, fingerprint):
+                    await session.execute(statement)
             if copy_from is not None:
                 source_run_id, name = copy_from
                 await self._artifacts.copy_into(session, source_run_id, run_id, name)

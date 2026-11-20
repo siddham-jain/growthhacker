@@ -220,6 +220,23 @@ class RunArtifact(TenantColumns, Base):
     expires_at: Mapped[datetime] = mapped_column(index=True)
 
 
+class RunArtifactBlob(TenantColumns, Base):
+    """gzipped payloads of artifacts over the inline cap; run_artifacts rows point here by content hash."""
+
+    __tablename__ = "run_artifact_blobs"
+    __zone__ = Zone.tenant
+    __table_args__ = (
+        client_fk(),
+        PrimaryKeyConstraint("client_id", "sha256"),
+    )
+
+    sha256: Mapped[str]
+    payload_gz: Mapped[bytes]
+    size_bytes: Mapped[int] = mapped_column(BigInteger)
+    created_at: Mapped[datetime] = created_at_column()
+    expires_at: Mapped[datetime] = mapped_column(index=True)
+
+
 class RunEvent(TenantColumns, Base):
     __tablename__ = "run_events"
     __zone__ = Zone.tenant

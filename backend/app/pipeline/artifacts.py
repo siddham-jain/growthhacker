@@ -1,3 +1,5 @@
+import gzip
+import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -5,14 +7,14 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import Clock
 from app.core.db import SessionFactory
 from app.core.tenancy import TenantScope
-from app.models.runs import MAX_ARTIFACT_PAYLOAD_BYTES, RunArtifact
+from app.models.runs import MAX_ARTIFACT_PAYLOAD_BYTES, RunArtifact, RunArtifactBlob
 from app.pipeline.fingerprint import is_degraded
 from app.ports.artifacts import ArtifactKey
 
@@ -46,25 +48,50 @@ class ArtifactExpiry:
         return now + timedelta(days=days)
 
 
-def serialise(key: ArtifactKey[Any], value: BaseModel) -> dict[str, Any]:
+# above the inline cap a payload is gzipped into run_artifact_blobs; past this it is refused outright
+MAX_BLOB_BYTES = 64 * 1024 * 1024
+BLOB_POINTER = "$blob"
+
+
+@dataclass(frozen=True)
+class Encoded:
+    payload: dict[str, Any]
+    blob: tuple[str, bytes, int] | None = None
+
+
+def serialise(key: ArtifactKey[Any], value: BaseModel) -> Encoded:
     if not isinstance(value, key.model):
         raise TypeError(f"artifact '{key.name}' must be {key.model.__name__}, got {type(value).__name__}")
     payload = value.model_dump(mode="json")
-    size = len(json.dumps(payload, separators=(",", ":")).encode())
-    if size >= MAX_ARTIFACT_PAYLOAD_BYTES:
+    raw = json.dumps(payload, separators=(",", ":")).encode()
+    if len(raw) < MAX_ARTIFACT_PAYLOAD_BYTES:
+        return Encoded(payload)
+    if len(raw) >= MAX_BLOB_BYTES:
         raise ArtifactTooLarge(
-            f"artifact '{key.name}' is {size} bytes; artifacts hold pointers, not bulk data"
+            f"artifact '{key.name}' is {len(raw)} bytes; artifacts hold pointers, not bulk data"
         )
-    return payload
+    digest = hashlib.sha256(raw).hexdigest()
+    return Encoded({BLOB_POINTER: digest, "bytes": len(raw)}, (digest, gzip.compress(raw), len(raw)))
 
 
-def _decode[T: BaseModel](key: ArtifactKey[T], row: RunArtifact) -> T:
+async def load_payload(session: AsyncSession, row: RunArtifact) -> dict[str, Any]:
+    """the artifact's json, following the pointer when the payload was stored as a blob."""
+    digest = row.payload.get(BLOB_POINTER) if isinstance(row.payload, dict) else None
+    if digest is None:
+        return row.payload
+    blob = await session.get(RunArtifactBlob, (row.client_id, digest))
+    if blob is None:
+        raise ArtifactMissing(f"artifact '{row.key}' points at a blob that no longer exists")
+    return json.loads(gzip.decompress(blob.payload_gz))
+
+
+async def _decode[T: BaseModel](session: AsyncSession, key: ArtifactKey[T], row: RunArtifact) -> T:
     if row.schema_version != key.schema_version:
         raise ArtifactSchemaMismatch(
             f"artifact '{key.name}' v{row.schema_version} stored, v{key.schema_version} expected"
         )
     try:
-        return key.model.model_validate(row.payload)
+        return key.model.model_validate(await load_payload(session, row))
     except ValidationError as error:
         raise ArtifactSchemaMismatch(f"artifact '{key.name}' no longer validates") from error
 
@@ -87,8 +114,29 @@ class PgArtifactStore:
         assert self._scope.client_id is not None
         return self._scope.client_id
 
-    def upsert_statement(self, run_id: UUID, key: ArtifactKey[Any], value: BaseModel, fingerprint: str):
+    def upsert_statements(
+        self, run_id: UUID, key: ArtifactKey[Any], value: BaseModel, fingerprint: str
+    ) -> list:
         now = self._clock.now()
+        encoded = serialise(key, value)
+        expires_at = self._expiry.expires_at(key, now)
+        statements = []
+        if encoded.blob is not None:
+            digest, payload_gz, size = encoded.blob
+            blob = insert(RunArtifactBlob).values(
+                workspace_id=self._scope.workspace_id,
+                client_id=self.client_id,
+                sha256=digest,
+                payload_gz=payload_gz,
+                size_bytes=size,
+                expires_at=expires_at,
+            )
+            statements.append(
+                blob.on_conflict_do_update(
+                    index_elements=[RunArtifactBlob.client_id, RunArtifactBlob.sha256],
+                    set_={"expires_at": func.greatest(RunArtifactBlob.expires_at, blob.excluded.expires_at)},
+                )
+            )
         values = {
             "workspace_id": self._scope.workspace_id,
             "client_id": self.client_id,
@@ -96,35 +144,39 @@ class PgArtifactStore:
             "key": key.name,
             "schema_version": key.schema_version,
             "fingerprint": fingerprint,
-            "payload": serialise(key, value),
+            "payload": encoded.payload,
             "contains_api_data": key.contains_api_data,
             "api_data_observed_at": now if key.contains_api_data else None,
-            "expires_at": self._expiry.expires_at(key, now),
+            "expires_at": expires_at,
         }
         statement = insert(RunArtifact).values(**values)
-        return statement.on_conflict_do_update(
-            index_elements=[RunArtifact.run_id, RunArtifact.key],
-            set_={
-                name: statement.excluded[name]
-                for name in ("schema_version", "fingerprint", "payload", "contains_api_data")
-            }
-            | {
-                "api_data_observed_at": statement.excluded.api_data_observed_at,
-                "expires_at": values["expires_at"],
-            },
+        statements.append(
+            statement.on_conflict_do_update(
+                index_elements=[RunArtifact.run_id, RunArtifact.key],
+                set_={
+                    name: statement.excluded[name]
+                    for name in ("schema_version", "fingerprint", "payload", "contains_api_data")
+                }
+                | {
+                    "api_data_observed_at": statement.excluded.api_data_observed_at,
+                    "expires_at": values["expires_at"],
+                },
+            )
         )
+        return statements
 
     async def put[T: BaseModel](self, run_id: UUID, key: ArtifactKey[T], value: T, fingerprint: str) -> None:
         async with self._session_factory() as session:
-            await session.execute(self.upsert_statement(run_id, key, value, fingerprint))
+            for statement in self.upsert_statements(run_id, key, value, fingerprint):
+                await session.execute(statement)
             await session.commit()
 
     async def get[T: BaseModel](self, run_id: UUID, key: ArtifactKey[T]) -> T:
         async with self._session_factory() as session:
             row = await self._row(session, run_id, key.name)
-        if row is None:
-            raise ArtifactMissing(f"run has no '{key.name}' artifact")
-        return _decode(key, row)
+            if row is None:
+                raise ArtifactMissing(f"run has no '{key.name}' artifact")
+            return await _decode(session, key, row)
 
     async def fingerprint_of(self, run_id: UUID, key: ArtifactKey[Any]) -> str | None:
         async with self._session_factory() as session:
@@ -153,12 +205,12 @@ class PgArtifactStore:
         )
         async with self._session_factory() as session:
             row = (await session.execute(statement)).scalar_one_or_none()
-        if row is None:
-            return None
-        try:
-            return row.run_id, _decode(key, row)
-        except ArtifactSchemaMismatch:
-            return None
+            if row is None:
+                return None
+            try:
+                return row.run_id, await _decode(session, key, row)
+            except (ArtifactSchemaMismatch, ArtifactMissing):
+                return None
 
     async def find_latest[T: BaseModel](
         self, key: ArtifactKey[T], *, exclude_run_id: UUID | None = None
@@ -177,12 +229,13 @@ class PgArtifactStore:
             statement = statement.where(RunArtifact.run_id != exclude_run_id)
         async with self._session_factory() as session:
             row = (await session.execute(statement)).scalar_one_or_none()
-        if row is None:
-            return None
-        try:
-            return StoredArtifact(run_id=row.run_id, fingerprint=row.fingerprint, value=_decode(key, row))
-        except ArtifactSchemaMismatch:
-            return None
+            if row is None:
+                return None
+            try:
+                value = await _decode(session, key, row)
+            except (ArtifactSchemaMismatch, ArtifactMissing):
+                return None
+        return StoredArtifact(run_id=row.run_id, fingerprint=row.fingerprint, value=value)
 
     async def copy_into(
         self, session: AsyncSession, source_run_id: UUID, target_run_id: UUID, name: str
