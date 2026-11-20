@@ -122,6 +122,7 @@ class TopicAlias(TenantColumns, Base):
     weight: Mapped[float] = mapped_column(REAL)
     ambiguous: Mapped[bool] = mapped_column(server_default=sql_text("false"))
     rejected_reason: Mapped[str | None]
+    decided_by: Mapped[str | None]
 
 
 class RefEmbedding(TenantColumns, Base):

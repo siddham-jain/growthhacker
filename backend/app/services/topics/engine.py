@@ -3,7 +3,7 @@ import hashlib
 import json
 import time
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
@@ -34,6 +34,7 @@ from app.ports.buyer_questions import BuyerQuestionCandidate
 from app.ports.clock import Clock
 from app.ports.embeddings import EmbedderUnavailable
 from app.ports.llm import LLMClient
+from app.ports.locks import LockManager
 from app.services.topics import prompt_specs  # noqa: F401  registers the topic prompts with 10
 from app.services.topics.calibration.background import load_background
 from app.services.topics.corpus import corpus_frequencies
@@ -69,13 +70,20 @@ from app.services.topics.text.language import LEXICON_SCRIPTS
 from app.services.topics.text.prepare import VideoText, VideoTextPreparer, prepared_hash
 from app.services.topics.text.scripts import dominant_script
 from app.services.topics.universe.aliases import AliasStatus
-from app.services.topics.universe.builder import TopicUniverseBuilder, UniverseInputs, universe_stats
+from app.services.topics.universe.builder import (
+    TopicUniverseBuilder,
+    UniverseInputs,
+    apply_alias_decisions,
+    universe_stats,
+)
 from app.services.topics.universe.expansion.base import CorpusFrequencies
 from app.services.topics.universe.expansion.llm_proposer import LLMAliasProposer
 from app.services.topics.universe.fingerprint import ref_fingerprint, universe_hash
 from app.services.topics.versions import directness_version, engine_version, preparer_version
 
 REFERENCE_SAMPLE_PRIORITY = 0.1
+# a rebuild with llm alias proposals can take minutes; a second rebuild waits for it
+UNIVERSE_LOCK_WAIT_S = 600
 
 
 @dataclass(frozen=True)
@@ -110,8 +118,10 @@ class TopicEngine:
         router: EmbedderRouter | None,
         llm: LLMClient | None,
         lexicons: Lexicons | None = None,
+        locks: LockManager | None = None,
     ) -> None:
         self._settings = settings
+        self._locks = locks
         self._topics = settings.topics
         self._clock = clock
         self._uow = uow_factory
@@ -133,6 +143,7 @@ class TopicEngine:
             container.uow,
             router=_optional_adapter(container, "embedder"),
             llm=_optional_adapter(container, "llm"),
+            locks=getattr(container, "lock_manager", None),
         )
 
     def with_llm(self, llm: LLMClient | None) -> "TopicEngine":
@@ -160,6 +171,29 @@ class TopicEngine:
         guard: SpendGuard | None = None,
     ) -> UniverseBuild:
         scope = scope.for_client(profile.client_id)
+        if self._locks is None:
+            return await self._build_universe(
+                scope, profile, buyer_questions, extra_questions, competitor_names, corpus, run_id, guard
+            )
+        # one rebuild per client at a time; the lease is renewed while llm proposals run
+        async with self._locks.acquire(
+            f"topics:universe:{profile.client_id}", ttl_s=60, wait_s=UNIVERSE_LOCK_WAIT_S
+        ):
+            return await self._build_universe(
+                scope, profile, buyer_questions, extra_questions, competitor_names, corpus, run_id, guard
+            )
+
+    async def _build_universe(
+        self,
+        scope: TenantScope,
+        profile: BusinessProfile,
+        buyer_questions: Sequence[BuyerQuestion],
+        extra_questions: Sequence[BuyerQuestionCandidate],
+        competitor_names: Sequence[str],
+        corpus: CorpusFrequencies | None,
+        run_id: UUID | None,
+        guard: SpendGuard | None,
+    ) -> UniverseBuild:
         async with self._uow(read_only=True) as uow:
             repository = TopicUniverseRepository(uow.session, scope)
             previous = await repository.load()
@@ -186,17 +220,20 @@ class TopicEngine:
             built_at=self._clock.now(),
             run_id=run_id,
         )
-        diff = _diff(previous[0] if previous else None, built.universe)
-        rejections = dict(built.rejections)
-        if previous:
-            rejections.update({key: reason for key, reason in previous[2].items() if reason == USER_DECISION})
         async with self._uow() as uow:
-            await TopicUniverseRepository(uow.session, scope).save(
-                built.universe, built.non_topical_terms, rejections
-            )
+            await _lock_universe_writes(uow, profile.client_id)
+            repository = TopicUniverseRepository(uow.session, scope)
+            # a reviewer may have decided an alias while the build ran; their decision wins
+            latest = await repository.alias_decisions()
+            universe = _with_decisions(built.universe, latest) if latest != decisions else built.universe
+            stored = await repository.load()
+            diff = _diff(stored[0] if stored else None, universe)
+            rejections = dict(built.rejections)
+            rejections.update({key: USER_DECISION for key, status in latest.items() if status == "rejected"})
+            await repository.save(universe, built.non_topical_terms, rejections, latest)
             await TopicMatchRepository(uow.session, scope).soft_delete_refs(diff.removed, self._clock.now())
             await uow.commit()
-        return UniverseBuild(universe=built.universe, diff=diff, llm_calls=built.llm_calls)
+        return UniverseBuild(universe=universe, diff=diff, llm_calls=built.llm_calls)
 
     async def load_universe(
         self, scope: TenantScope, profile_version: int | None = None
@@ -222,41 +259,27 @@ class TopicEngine:
     async def decide_alias(
         self, scope: TenantScope, ref_id: str, norm_key: str, status: AliasStatus
     ) -> TopicUniverse:
-        async with self._uow(read_only=True) as uow:
-            loaded = await TopicUniverseRepository(uow.session, scope).load()
-        if loaded is None:
-            raise LookupError("this client has no topic universe yet")
-        universe, non_topical, rejections = loaded
-        refs, found = [], False
-        for ref in universe.refs:
-            if ref.id == ref_id:
-                aliases = []
-                for alias in ref.aliases:
-                    if alias.norm_key == norm_key and alias.kind != "canonical":
-                        found = True
-                        weight = 1.0 if status == "confirmed" else alias.weight
-                        alias = alias.model_copy(update={"status": status, "weight": weight})
-                    aliases.append(alias)
-                ref = ref.model_copy(update={"aliases": aliases})
-                ref = ref.model_copy(update={"fingerprint": ref_fingerprint(ref)})
-            refs.append(ref)
-        if not found:
-            raise LookupError(f"alias '{norm_key}' is not a reviewable alias of {ref_id}")
-        if status == "rejected":
-            rejections[(ref_id, norm_key)] = USER_DECISION
-        else:
-            rejections.pop((ref_id, norm_key), None)
-        updated = universe.model_copy(
-            update={
-                "refs": refs,
-                "stats": universe_stats(refs),
-                "universe_hash": universe_hash(
-                    refs, universe.profile_version, universe.engine_version, universe.embedder_model_ids
-                ),
-            }
-        )
         async with self._uow() as uow:
-            await TopicUniverseRepository(uow.session, scope).save(updated, non_topical, rejections)
+            await _lock_universe_writes(uow, scope.client_id)
+            repository = TopicUniverseRepository(uow.session, scope)
+            loaded = await repository.load()
+            if loaded is None:
+                raise LookupError("this client has no topic universe yet")
+            universe, non_topical, rejections = loaded
+            if not any(
+                alias.norm_key == norm_key and alias.kind != "canonical"
+                for ref in universe.refs
+                if ref.id == ref_id
+                for alias in ref.aliases
+            ):
+                raise LookupError(f"alias '{norm_key}' is not a reviewable alias of {ref_id}")
+            decisions = {**await repository.alias_decisions(), (ref_id, norm_key): status}
+            if status == "rejected":
+                rejections[(ref_id, norm_key)] = USER_DECISION
+            else:
+                rejections.pop((ref_id, norm_key), None)
+            updated = _with_decisions(universe, {(ref_id, norm_key): status})
+            await repository.save(updated, non_topical, rejections, decisions)
             await uow.commit()
         return updated
 
@@ -816,6 +839,32 @@ def _optional_adapter(container: Any, port: str) -> Any:
         return container.adapter(port)
     except (LookupError, UnknownRegistrationError):
         return None
+
+
+async def _lock_universe_writes(uow: UnitOfWork, client_id: UUID | None) -> None:
+    # serialises read-modify-write of one client's universe across workers until the transaction ends
+    await uow.session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+        {"key": f"topic_universe:{client_id}"},
+    )
+
+
+def _with_decisions(
+    universe: TopicUniverse, decisions: Mapping[tuple[str, str], AliasStatus]
+) -> TopicUniverse:
+    refs = []
+    for ref in universe.refs:
+        decided = apply_alias_decisions(ref, decisions)
+        refs.append(decided.model_copy(update={"fingerprint": ref_fingerprint(decided)}))
+    return universe.model_copy(
+        update={
+            "refs": refs,
+            "stats": universe_stats(refs),
+            "universe_hash": universe_hash(
+                refs, universe.profile_version, universe.engine_version, universe.embedder_model_ids
+            ),
+        }
+    )
 
 
 def _diff(previous: TopicUniverse | None, current: TopicUniverse) -> UniverseDiff:

@@ -429,15 +429,7 @@ class TopicUniverseBuilder:
         return ref.model_copy(update={"aliases": _dedupe_aliases(aliases)})
 
     def _apply_decisions(self, ref: TopicRef, decisions: Mapping[tuple[str, str], AliasStatus]) -> TopicRef:
-        aliases = []
-        for alias in ref.aliases:
-            decision = decisions.get((ref.id, alias.norm_key))
-            if decision == "confirmed" and alias.status != "confirmed":
-                alias = alias.model_copy(update={"status": "confirmed", "weight": 1.0})
-            elif decision == "rejected" and alias.kind != "canonical":
-                alias = alias.model_copy(update={"status": "rejected"})
-            aliases.append(alias)
-        return ref.model_copy(update={"aliases": aliases})
+        return apply_alias_decisions(ref, decisions)
 
     async def _alias_cosines(self, refs: Sequence[TopicRef]) -> dict[tuple[str, str], float]:
         pairs = sorted(
@@ -582,3 +574,15 @@ def universe_stats(refs: Sequence[TopicRef]) -> TopicUniverseStats:
         aliases_confirmed=sum(1 for alias in aliases if alias.status == "confirmed"),
         aliases_proposed=sum(1 for alias in aliases if alias.status == "proposed"),
     )
+
+
+def apply_alias_decisions(ref: TopicRef, decisions: Mapping[tuple[str, str], AliasStatus]) -> TopicRef:
+    aliases = []
+    for alias in ref.aliases:
+        decision = decisions.get((ref.id, alias.norm_key))
+        if decision == "confirmed" and alias.status != "confirmed":
+            alias = alias.model_copy(update={"status": "confirmed", "weight": 1.0})
+        elif decision == "rejected" and alias.kind != "canonical":
+            alias = alias.model_copy(update={"status": "rejected"})
+        aliases.append(alias)
+    return ref.model_copy(update={"aliases": aliases})

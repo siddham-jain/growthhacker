@@ -1,4 +1,5 @@
 from app.models import (
+    answer_citations,
     competitors,
     evaluation,
     ledgers,
@@ -19,6 +20,7 @@ from app.models.base import Base, Zone
 __all__ = [
     "Base",
     "Zone",
+    "answer_citations",
     "competitors",
     "evaluation",
     "ledgers",

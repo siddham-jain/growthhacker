@@ -36,7 +36,9 @@ class TopicUniverseRepository(TenantRepository[orm.TopicUniverse]):
         universe: TopicUniverse,
         non_topical_terms: Sequence[str],
         rejections: Mapping[tuple[str, str], str],
+        user_decisions: Mapping[tuple[str, str], str] | None = None,
     ) -> None:
+        user_decisions = user_decisions or {}
         scope = {"workspace_id": self.scope.workspace_id, "client_id": universe.client_id}
         values = {
             **scope,
@@ -82,6 +84,9 @@ class TopicUniverseRepository(TenantRepository[orm.TopicUniverse]):
                 **{column: getattr(alias, column) for column in ALIAS_COLUMNS},
                 "rejected_reason": rejections.get((ref.id, alias.norm_key))
                 if alias.status == "rejected"
+                else None,
+                "decided_by": USER_DECISION
+                if user_decisions.get((ref.id, alias.norm_key)) == alias.status
                 else None,
             }
             for ref in universe.refs
@@ -145,12 +150,13 @@ class TopicUniverseRepository(TenantRepository[orm.TopicUniverse]):
         return universe, non_topical, rejections
 
     async def alias_decisions(self) -> dict[tuple[str, str], str]:
-        # only a reviewer confirms a proposal or rejects with reason "user"; validator outcomes are recomputed
+        # reviewer decisions of any origin survive a rebuild; validator outcomes are recomputed
         statement = select(orm.TopicAlias.topic_ref_id, orm.TopicAlias.norm_key, orm.TopicAlias.status).where(
             orm.TopicAlias.workspace_id == self.scope.workspace_id,
             orm.TopicAlias.client_id == self.scope.client_id,
             (
-                (orm.TopicAlias.origin == "llm_proposed") & (orm.TopicAlias.status == "confirmed")
+                (orm.TopicAlias.decided_by == USER_DECISION)
+                | (orm.TopicAlias.origin == "llm_proposed") & (orm.TopicAlias.status == "confirmed")
                 | (orm.TopicAlias.rejected_reason == USER_DECISION)
             ),
         )
