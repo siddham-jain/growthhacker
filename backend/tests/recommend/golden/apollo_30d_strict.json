@@ -1,0 +1,445 @@
+[
+  {
+    "id": "rec_qxzz2cnvesqa",
+    "type": "video_idea",
+    "summary": "How much does a knee replacement cost at Apollo: a 3–8m long-form video",
+    "lens": [
+      "views",
+      "conversion"
+    ],
+    "buyer_question": "How much does a knee replacement cost at Apollo?",
+    "why_it_works": [
+      "4 of 5 competitors cover this; you haven't",
+      "3–8m long-form videos: 13 of 19 outliers vs 24 of 38 videos overall",
+      "6 of 19 outliers in the last 30 days cover How much does a knee replacement cost at Apollo?"
+    ],
+    "reference_videos": [
+      {
+        "video_id": "vidk3______",
+        "channel": "Medanta",
+        "published_at": "2026-11-08",
+        "views_day7": 25500,
+        "outlier_ratio": 5.1
+      },
+      {
+        "video_id": "vidk1______",
+        "channel": "Fortis Healthcare",
+        "published_at": "2026-11-14",
+        "views_day7": null,
+        "outlier_ratio": 4.2
+      },
+      {
+        "video_id": "vidk5______",
+        "channel": "Max Healthcare",
+        "published_at": "2026-11-02",
+        "views_day7": 13650,
+        "outlier_ratio": 3.9
+      },
+      {
+        "video_id": "vidk2______",
+        "channel": "Narayana Health",
+        "published_at": "2026-11-11",
+        "views_day7": 10800,
+        "outlier_ratio": 3.6
+      },
+      {
+        "video_id": "vidk4______",
+        "channel": "Ortho Simplified",
+        "published_at": "2026-11-05",
+        "views_day7": 2970,
+        "outlier_ratio": 3.3
+      }
+    ],
+    "fit_to_client": "Answers your tracked buyer question: How much does a knee replacement cost at Apollo?; Your 3–8m long-form videos run a median 1.5x your baseline (3 videos)",
+    "expected_range_vs_baseline": "1.6x-1.9x (indicative)",
+    "confidence": {
+      "label": "High",
+      "outliers": 6,
+      "channels": 6
+    },
+    "window_days": 30,
+    "generated_at": "2026-11-20T09:05:00Z"
+  },
+  {
+    "id": "rec_jpg2j3z3pyi2",
+    "type": "format",
+    "summary": "Format: Shorts",
+    "lens": [
+      "views"
+    ],
+    "buyer_question": null,
+    "why_it_works": [
+      "Shorts: 4 of 19 outliers vs 6 of 38 videos overall",
+      "Those outliers ran a median 3.7x their own channel's normal (5 videos)"
+    ],
+    "reference_videos": [
+      {
+        "video_id": "vidh1______",
+        "channel": "Health Desk India",
+        "published_at": "2026-11-16",
+        "views_day7": null,
+        "outlier_ratio": 4.5
+      },
+      {
+        "video_id": "vidg7______",
+        "channel": "Kids Health Fun",
+        "published_at": "2026-11-14",
+        "views_day7": null,
+        "outlier_ratio": 4.0
+      },
+      {
+        "video_id": "vidh2______",
+        "channel": "Dr Heart Talks",
+        "published_at": "2026-11-09",
+        "views_day7": 5550,
+        "outlier_ratio": 3.7
+      },
+      {
+        "video_id": "vidg1______",
+        "channel": "Health Desk India",
+        "published_at": "2026-11-15",
+        "views_day7": null,
+        "outlier_ratio": 3.5
+      },
+      {
+        "video_id": "vidh3______",
+        "channel": "Max Healthcare",
+        "published_at": "2026-11-04",
+        "views_day7": 11200,
+        "outlier_ratio": 3.2
+      }
+    ],
+    "fit_to_client": "3 of 5 supporting outliers match your topics; 2 of your last 8 videos use Shorts",
+    "expected_range_vs_baseline": "1.3x-1.9x (indicative)",
+    "confidence": {
+      "label": "High",
+      "outliers": 5,
+      "channels": 4
+    },
+    "window_days": 30,
+    "generated_at": "2026-11-20T09:05:00Z"
+  },
+  {
+    "id": "rec_pf7la53htvux",
+    "type": "video_idea",
+    "summary": "Which hospital is best for angioplasty in Chennai: a 3–8m long-form video",
+    "lens": [
+      "views",
+      "conversion"
+    ],
+    "buyer_question": "Which hospital is best for angioplasty in Chennai?",
+    "why_it_works": [
+      "1 of 5 competitors cover this; you haven't",
+      "3–8m long-form videos: 13 of 19 outliers vs 24 of 38 videos overall",
+      "3 of 19 outliers in the last 30 days cover Which hospital is best for angioplasty in Chennai?"
+    ],
+    "reference_videos": [
+      {
+        "video_id": "vida2______",
+        "channel": "Dr Heart Talks",
+        "published_at": "2026-11-10",
+        "views_day7": 5700,
+        "outlier_ratio": 3.8
+      },
+      {
+        "video_id": "vida1______",
+        "channel": "Narayana Health",
+        "published_at": "2026-11-13",
+        "views_day7": 10200,
+        "outlier_ratio": 3.4
+      },
+      {
+        "video_id": "vida4______",
+        "channel": "Dr Heart Talks",
+        "published_at": "2026-10-26",
+        "views_day7": 4800,
+        "outlier_ratio": 3.2
+      },
+      {
+        "video_id": "vida3______",
+        "channel": "Fortis Healthcare",
+        "published_at": "2026-11-06",
+        "views_day7": 8800,
+        "outlier_ratio": 2.2
+      },
+      {
+        "video_id": "vida5______",
+        "channel": "Medanta",
+        "published_at": "2026-10-24",
+        "views_day7": 5500,
+        "outlier_ratio": 1.1
+      }
+    ],
+    "fit_to_client": "Answers your tracked buyer question: Which hospital is best for angioplasty in Chennai?; Your 3–8m long-form videos run a median 1.5x your baseline (3 videos)",
+    "expected_range_vs_baseline": "not enough comparable videos for a range",
+    "confidence": {
+      "label": "Low",
+      "outliers": 3,
+      "channels": 2
+    },
+    "window_days": 30,
+    "generated_at": "2026-11-20T09:05:00Z"
+  },
+  {
+    "id": "rec_hysfdiptn6m3",
+    "type": "news_opportunity",
+    "summary": "News: Explain what the newly approved robotic knee implant means for patients choosing surgery",
+    "lens": [
+      "views"
+    ],
+    "buyer_question": null,
+    "why_it_works": [
+      "3 early videos on this ran a median 3.3x their channel's normal"
+    ],
+    "reference_videos": [
+      {
+        "video_id": "vidn1______",
+        "channel": "Health Desk India",
+        "published_at": "2026-11-17",
+        "views_day7": null,
+        "outlier_ratio": 3.4
+      },
+      {
+        "video_id": "vidn3______",
+        "channel": "Max Healthcare",
+        "published_at": "2026-11-17",
+        "views_day7": null,
+        "outlier_ratio": 3.3
+      },
+      {
+        "video_id": "vidn2______",
+        "channel": "Ortho Simplified",
+        "published_at": "2026-11-17",
+        "views_day7": null,
+        "outlier_ratio": 3.1
+      }
+    ],
+    "fit_to_client": "Links to your knee replacement service; You covered this on 2026-10-11 in a different format",
+    "expected_range_vs_baseline": null,
+    "confidence": {
+      "label": "Medium",
+      "outliers": 3,
+      "channels": 3
+    },
+    "window_days": 30,
+    "generated_at": "2026-11-20T09:05:00Z"
+  },
+  {
+    "id": "rec_fod75og6gve2",
+    "type": "title_pattern",
+    "summary": "Title pattern: [Question]",
+    "lens": [
+      "views"
+    ],
+    "buyer_question": null,
+    "why_it_works": [
+      "question titles: 4 of 9 outliers vs 8 of 38 videos overall",
+      "Those outliers ran a median 4.0x their own channel's normal (4 videos)"
+    ],
+    "reference_videos": [
+      {
+        "video_id": "vidk3______",
+        "channel": "Medanta",
+        "published_at": "2026-11-08",
+        "views_day7": 25500,
+        "outlier_ratio": 5.1
+      },
+      {
+        "video_id": "vidk1______",
+        "channel": "Fortis Healthcare",
+        "published_at": "2026-11-14",
+        "views_day7": null,
+        "outlier_ratio": 4.2
+      },
+      {
+        "video_id": "vidk5______",
+        "channel": "Max Healthcare",
+        "published_at": "2026-11-02",
+        "views_day7": 13650,
+        "outlier_ratio": 3.9
+      },
+      {
+        "video_id": "vida1______",
+        "channel": "Narayana Health",
+        "published_at": "2026-11-13",
+        "views_day7": 10200,
+        "outlier_ratio": 3.4
+      }
+    ],
+    "fit_to_client": "4 of 4 supporting outliers match your topics; 0 of your last 8 videos use question titles",
+    "expected_range_vs_baseline": "1.1x-1.9x (indicative)",
+    "confidence": {
+      "label": "Medium",
+      "outliers": 4,
+      "channels": 4
+    },
+    "window_days": 30,
+    "generated_at": "2026-11-20T09:05:00Z"
+  },
+  {
+    "id": "rec_wt5yh2kvr46f",
+    "type": "thumbnail_pattern",
+    "summary": "Thumbnail pattern: text on the thumbnail",
+    "lens": [
+      "views"
+    ],
+    "buyer_question": null,
+    "why_it_works": [
+      "text on the thumbnail: 18 of 19 outliers vs 30 of 36 videos overall",
+      "Those outliers ran a median 3.4x their own channel's normal (19 videos)"
+    ],
+    "reference_videos": [
+      {
+        "video_id": "vidh1______",
+        "channel": "Health Desk India",
+        "published_at": "2026-11-16",
+        "views_day7": null,
+        "outlier_ratio": 4.5
+      },
+      {
+        "video_id": "vidg7______",
+        "channel": "Kids Health Fun",
+        "published_at": "2026-11-14",
+        "views_day7": null,
+        "outlier_ratio": 4.0
+      },
+      {
+        "video_id": "vida2______",
+        "channel": "Dr Heart Talks",
+        "published_at": "2026-11-10",
+        "views_day7": 5700,
+        "outlier_ratio": 3.8
+      },
+      {
+        "video_id": "vidk2______",
+        "channel": "Narayana Health",
+        "published_at": "2026-11-11",
+        "views_day7": 10800,
+        "outlier_ratio": 3.6
+      },
+      {
+        "video_id": "vidn3______",
+        "channel": "Max Healthcare",
+        "published_at": "2026-11-17",
+        "views_day7": null,
+        "outlier_ratio": 3.3
+      }
+    ],
+    "fit_to_client": "12 of 19 supporting outliers match your topics; Your videos with text on the thumbnail run a median 1.1x your baseline (7 videos)",
+    "expected_range_vs_baseline": "1.0x-1.8x (indicative)",
+    "confidence": {
+      "label": "High",
+      "outliers": 12,
+      "channels": 7
+    },
+    "window_days": 30,
+    "generated_at": "2026-11-20T09:05:00Z"
+  },
+  {
+    "id": "rec_f5gkf4kwf4v5",
+    "type": "creator",
+    "summary": "Work with Dr Heart Talks",
+    "lens": [
+      "views",
+      "conversion"
+    ],
+    "buyer_question": null,
+    "why_it_works": [
+      "5 of 8 recent uploads match your topics (5 topics)",
+      "Mentions Fortis Healthcare with sponsor wording on 2026-11-10 (not YouTube's disclosure flag)",
+      "Matching uploads ran a median 3.2x their own normal (5 videos)"
+    ],
+    "reference_videos": [
+      {
+        "video_id": "vida2______",
+        "channel": "Dr Heart Talks",
+        "published_at": "2026-11-10",
+        "views_day7": 5700,
+        "outlier_ratio": 3.8
+      },
+      {
+        "video_id": "vidh2______",
+        "channel": "Dr Heart Talks",
+        "published_at": "2026-11-09",
+        "views_day7": 5550,
+        "outlier_ratio": 3.7
+      },
+      {
+        "video_id": "vida4______",
+        "channel": "Dr Heart Talks",
+        "published_at": "2026-10-26",
+        "views_day7": 4800,
+        "outlier_ratio": 3.2
+      },
+      {
+        "video_id": "vidk8______",
+        "channel": "Dr Heart Talks",
+        "published_at": "2026-11-12",
+        "views_day7": 4650,
+        "outlier_ratio": 3.1
+      }
+    ],
+    "fit_to_client": "Covers your topics: Which hospital is best for angioplasty in Chennai?; How much does a knee replacement cost at Apollo?",
+    "expected_range_vs_baseline": null,
+    "confidence": {
+      "label": "Medium",
+      "outliers": 4,
+      "channels": 1
+    },
+    "window_days": 30,
+    "generated_at": "2026-11-20T09:05:00Z"
+  },
+  {
+    "id": "rec_wh664sd62kzl",
+    "type": "creator",
+    "summary": "Work with Ortho Simplified",
+    "lens": [
+      "views"
+    ],
+    "buyer_question": null,
+    "why_it_works": [
+      "4 of 5 recent uploads match your topics (3 topics)",
+      "Matching uploads ran a median 2.0x their own normal (4 videos)",
+      "5 uploads in the last 90 days, a median 9.2 days apart"
+    ],
+    "reference_videos": [
+      {
+        "video_id": "vidk4______",
+        "channel": "Ortho Simplified",
+        "published_at": "2026-11-05",
+        "views_day7": 2970,
+        "outlier_ratio": 3.3
+      },
+      {
+        "video_id": "vidn2______",
+        "channel": "Ortho Simplified",
+        "published_at": "2026-11-17",
+        "views_day7": null,
+        "outlier_ratio": 3.1
+      },
+      {
+        "video_id": "vids3______",
+        "channel": "Ortho Simplified",
+        "published_at": "2026-10-30",
+        "views_day7": 900,
+        "outlier_ratio": 1.0
+      },
+      {
+        "video_id": "vidk7______",
+        "channel": "Ortho Simplified",
+        "published_at": "2026-10-29",
+        "views_day7": 720,
+        "outlier_ratio": 0.8
+      }
+    ],
+    "fit_to_client": "Covers your topics: How much does a knee replacement cost at Apollo?; spine surgery; knee replacement; Checked 5 recent uploads of this creator and 18 competitor uploads for collaborations",
+    "expected_range_vs_baseline": null,
+    "confidence": {
+      "label": "Medium",
+      "outliers": 2,
+      "channels": 1
+    },
+    "window_days": 30,
+    "generated_at": "2026-11-20T09:05:00Z"
+  }
+]
