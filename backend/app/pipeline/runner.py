@@ -2,7 +2,7 @@ import asyncio
 import hashlib
 import re
 import traceback
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Any
@@ -10,10 +10,11 @@ from zoneinfo import ZoneInfo
 
 from app.core.clock import Clock
 from app.core.config import PipelineSettings
+from app.core.logging import get_logger
 from app.domain.runs import RunEventType, RunNotice, RunStatus, StageStatus
 from app.pipeline import progress_messages as messages
 from app.pipeline.artifacts import ArtifactTooLarge, PgArtifactStore, RunArtifactReader
-from app.pipeline.checkpoints import CheckpointStore, StageRecord
+from app.pipeline.checkpoints import CheckpointStore, LeaseLost, StageRecord
 from app.pipeline.context import RunBudgetLedger, RunCancellation
 from app.pipeline.contracts import (
     BudgetExceeded,
@@ -29,6 +30,7 @@ from app.pipeline.plan import RunError, RunOutcome, RunPlan, RunTimings, StageOu
 from app.pipeline.progress import STAGE_TERMINAL_EVENT, ProgressTracker, RunProgress
 from app.pipeline.registry import PipelineCatalog, PipelineDefinition
 
+logger = get_logger(__name__)
 SKIP_DISABLED = "disabled"
 SKIP_NOT_APPLICABLE = "not_applicable"
 SKIP_UPSTREAM_FAILED = "upstream_failed"
@@ -42,6 +44,15 @@ class PrerequisiteMissing(LookupError):
 
 class _WallTimeout(Exception):
     pass
+
+
+class _StageCrashed(Exception):
+    """a stage task raised outside its own attempt handling (fingerprint, checkpoint or db errors)."""
+
+    def __init__(self, stage: str | None, error: BaseException) -> None:
+        super().__init__(f"{stage or 'scheduler'}: {type(error).__name__}")
+        self.stage = stage
+        self.error = error
 
 
 @dataclass
@@ -72,6 +83,12 @@ class _StageState:
         return self.status in STAGE_TERMINAL
 
 
+async def _cancel_all(tasks: Mapping[asyncio.Task[None], str]) -> None:
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
 def tracker_for(definition: PipelineDefinition, catalog: PipelineCatalog) -> ProgressTracker:
     return ProgressTracker(
         {
@@ -81,7 +98,7 @@ def tracker_for(definition: PipelineDefinition, catalog: PipelineCatalog) -> Pro
     )
 
 
-def error_from_exception(error: BaseException, stage: str, code: str = "stage_failed") -> RunError:
+def error_from_exception(error: BaseException, stage: str | None, code: str = "stage_failed") -> RunError:
     frames = traceback.extract_tb(error.__traceback__)
     top = f"{frames[-1].filename}:{frames[-1].name}" if frames else "?"
     template = re.sub(r"\d+", "N", str(error))[:200]
@@ -137,6 +154,10 @@ class DagRunner:
         except _WallTimeout:
             timed_out = True
             error = RunError(code="timeout", message="run exceeded its wall-time budget", retryable=True)
+        except _StageCrashed as crashed:
+            error = error_from_exception(crashed.error, crashed.stage)
+            if crashed.stage is not None:
+                states[crashed.stage].error = error
         status = self._final_status(states, progress.notices, cancel, error, timed_out)
         return RunOutcome(
             status=status,
@@ -281,8 +302,10 @@ class DagRunner:
                     if isinstance(exception, RunCancelled):
                         cancel.request(str(exception) or "user")
                         raise exception
-                    if exception is not None:
+                    if isinstance(exception, LeaseLost):
                         raise exception
+                    if exception is not None:
+                        raise _StageCrashed(name, exception) from exception
                     state = states[name]
                     if state.status is StageStatus.failed and state.stage.policy.critical and failure is None:
                         failure = state.error
@@ -291,6 +314,19 @@ class DagRunner:
             if cancel.is_cancelled():
                 return None
             raise
+        except LeaseLost:
+            # another worker owns the run now, so siblings stop without writing anything
+            await _cancel_all(tasks)
+            raise
+        except _StageCrashed:
+            try:
+                await self._stop(plan, states, tasks, progress, StageStatus.cancelled)
+            except Exception as error:  # noqa: BLE001 - the crash is the error the run reports
+                logger.warning("run.stop_record_failed", run_id=str(plan.run_id), error=type(error).__name__)
+            raise
+        except Exception as error:
+            await _cancel_all(tasks)
+            raise _StageCrashed(None, error) from error
         except asyncio.CancelledError:
             # a hard abort with a cancel request is a cancellation; otherwise a shutdown interruption
             target = StageStatus.cancelled if cancel.is_cancelled() else StageStatus.interrupted
@@ -350,9 +386,7 @@ class DagRunner:
         progress: RunProgress,
         target: StageStatus,
     ) -> None:
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await _cancel_all(tasks)
         now = self._clock.now()
         records = []
         for state in states.values():

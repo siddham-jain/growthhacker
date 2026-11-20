@@ -79,17 +79,19 @@ class RunExecutor:
             messages.run_started(RunKind(run.kind), attempt),
             status=RunStatus.running,
         )
-        supervisor = asyncio.create_task(self._supervise(run, owner, cancel, progress))
+        work = asyncio.ensure_future(self._work(run, scope, definition, owner, artifacts, progress, cancel))
+        lease = LeaseWatch(work)
+        supervisor = asyncio.create_task(self._supervise(run, owner, cancel, progress, lease))
         try:
-            params = RunParams.model_validate(run.params or {})
-            outcome = None
-            if params.confirm_setup and not params.setup_prepared:
-                run, outcome = await self._confirm_setup(run, scope, owner, progress)
-            if outcome is None:
-                outcome = await self._run_dag(run, scope, definition, owner, artifacts, progress, cancel)
+            run, outcome = await work
         except asyncio.CancelledError:
-            await asyncio.shield(self._interrupted(run, owner, cancel, progress))
-            raise
+            current = asyncio.current_task()
+            if not lease.lost or (current is not None and current.cancelling()):
+                await asyncio.shield(self._interrupted(run, owner, cancel, progress))
+                raise
+            logger.warning("run.lease_lost", run_id=str(run.id), owner=owner)
+            await progress.aclose()
+            return None
         except LeaseLost:
             logger.warning("run.lease_lost", run_id=str(run.id), owner=owner)
             await progress.aclose()
@@ -107,6 +109,24 @@ class RunExecutor:
         if final in {RunStatus.succeeded, RunStatus.partial} and definition.name == "onboarding":
             await self._auto_confirm(scope, run)
         return final
+
+    async def _work(
+        self,
+        run: PipelineRun,
+        scope: TenantScope,
+        definition: PipelineDefinition,
+        owner: str,
+        artifacts: PgArtifactStore,
+        progress: RunProgress,
+        cancel: RunCancellation,
+    ) -> tuple[PipelineRun, RunOutcome]:
+        params = RunParams.model_validate(run.params or {})
+        outcome = None
+        if params.confirm_setup and not params.setup_prepared:
+            run, outcome = await self._confirm_setup(run, scope, owner, progress)
+        if outcome is None:
+            outcome = await self._run_dag(run, scope, definition, owner, artifacts, progress, cancel)
+        return run, outcome
 
     async def _run_dag(
         self,
@@ -227,7 +247,12 @@ class RunExecutor:
         await progress.aclose()
 
     async def _supervise(
-        self, run: PipelineRun, owner: str, cancel: RunCancellation, progress: RunProgress
+        self,
+        run: PipelineRun,
+        owner: str,
+        cancel: RunCancellation,
+        progress: RunProgress,
+        lease: "LeaseWatch",
     ) -> None:
         pipeline = self._settings.pipeline
         key = cancel_key(self._settings.redis.key_prefix, run.id)
@@ -252,7 +277,7 @@ class RunExecutor:
                 continue
             failures = 0
             if not beat.alive:
-                logger.warning("run.lease_lost", run_id=str(run.id))
+                lease.lose()
                 return
             if beat.cancel_requested:
                 cancel.request("user")
@@ -266,6 +291,19 @@ class RunExecutor:
         except (SetupInvalid, SetupNotReady, SetupNotWired, RunServiceError, LookupError) as error:
             # the onboarding run already finished; the client simply waits for a manual confirmation
             logger.warning("run.auto_confirm_skipped", run_id=str(run.id), reason=str(error)[:200])
+
+
+class LeaseWatch:
+    """stops the run's work once another worker owns the lease, so no stage keeps writing."""
+
+    def __init__(self, work: asyncio.Future[Any]) -> None:
+        self._work = work
+        self.lost = False
+
+    def lose(self) -> None:
+        if not self._work.done():
+            self.lost = True
+            self._work.cancel()
 
 
 def setup_error(error: Exception) -> RunError:

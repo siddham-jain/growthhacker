@@ -418,3 +418,61 @@ async def test_dependents_start_only_after_the_artifact_is_committed(
     assert status is RunStatus.succeeded
     stages = await _stages(container, run_id)
     assert {name: row.status for name, row in stages.items()} == dict.fromkeys("abcd", "succeeded")
+
+
+async def test_a_crashing_stage_task_cancels_its_siblings(container: Container, tenant: TenantScope) -> None:
+    probe = Probe()
+
+    async def slow(ctx: RunContext[Any], probe: Probe) -> StageResult[FakeOut]:
+        probe.gate("c_started").set()
+        await asyncio.sleep(5)
+        probe.gate("c_finished").set()
+        return StageResult(status="succeeded", artifact=FakeOut(value=1))
+
+    class Unfingerprintable(fake_stage("b", probe, deps=("a",))):
+        def fingerprint_inputs(self, ctx: RunContext[Any]):
+            raise RuntimeError("cannot hash inputs")
+
+    Unfingerprintable.__name__ = "Fake_b"
+    stages = _diamond(probe, b=Unfingerprintable, c=fake_stage("c", probe, deps=("a",), behaviour=slow))
+    pipeline_services = services(container, catalog(stages, [pipeline(("a", "c", "b", "d"))]))
+    run_id, status = await asyncio.wait_for(run_pipeline(container, pipeline_services, tenant), timeout=4)
+
+    assert status is RunStatus.failed
+    run = await _run(container, run_id)
+    assert run.status == "failed" and run.lease_owner is None
+    assert run.error["stage"] == "b" and "cannot hash inputs" in run.error["message"]
+    rows = await _stages(container, run_id)
+    assert rows["c"].status == "cancelled" and not probe.gate("c_finished").is_set()
+    assert probe.calls["d"] == 0
+
+
+async def test_a_lost_lease_stops_the_dag(container: Container, tenant: TenantScope) -> None:
+    probe = Probe()
+
+    async def long_loop(ctx: RunContext[Any], probe: Probe) -> StageResult[FakeOut]:
+        probe.gate("b_started").set()
+        await asyncio.sleep(5)
+        probe.gate("b_finished").set()
+        return StageResult(status="succeeded", artifact=FakeOut(value=1))
+
+    pipeline_services = _services(
+        container, probe, b=fake_stage("b", probe, deps=("a",), behaviour=long_loop)
+    )
+    result = await pipeline_services.runs.request_run(
+        tenant, RunRequest(kind=RunKind.analysis, trigger=RunTrigger.user)
+    )
+    executor = RunExecutor(
+        container=container, runs=pipeline_services.runs, publisher=pipeline_services.publisher
+    )
+    task = asyncio.create_task(executor.execute(result.run.id, 1, "worker-a"))
+    await asyncio.wait_for(probe.gate("b_started").wait(), timeout=5)
+    async with container.session_factory() as session, session.begin():
+        run = await session.get(PipelineRun, result.run.id)
+        run.lease_owner = "worker-b"
+
+    assert await asyncio.wait_for(task, timeout=4) is None
+    assert not probe.gate("b_finished").is_set() and probe.calls["d"] == 0
+    rows = await _stages(container, result.run.id)
+    assert rows["b"].status == "running"
+    assert (await _run(container, result.run.id)).lease_owner == "worker-b"

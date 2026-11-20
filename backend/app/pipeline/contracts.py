@@ -82,6 +82,9 @@ class BudgetLedger(Protocol):
 
     def remaining(self, kind: BudgetKind) -> float | None: ...
 
+    # the run-wide remainder, ignoring the stage's own limit
+    def run_remaining(self, kind: BudgetKind) -> float | None: ...
+
     def usage(self) -> UsageLedger: ...
 
 

@@ -1,3 +1,4 @@
+import asyncio
 from collections import Counter
 from collections.abc import Mapping
 from datetime import datetime, timedelta
@@ -11,7 +12,13 @@ from app.domain.runs import RunKind, RunNotice, RunNoticeCode
 from app.domain.topics import TopicKind
 from app.domain.youtube import SearchQuery
 from app.pipeline.contracts import RunConfigSnapshot, RunContext, StageBudget, StagePolicy, StageResult
-from app.pipeline.stages.youtube import charge_usage, data_layer, open_run_budget, youtube_context
+from app.pipeline.stages.youtube import (
+    CHANNEL_CONCURRENCY,
+    charge_usage,
+    data_layer,
+    open_run_budget,
+    youtube_context,
+)
 from app.ports.artifacts import ArtifactKey
 from app.ports.quota import QuotaExhausted
 from app.services.competitors.repository import CompetitorRepository
@@ -103,29 +110,11 @@ class NicheDiscoveryStage:
             channels = [(cid, ChannelRole.niche) for cid in competitor_set.niche_channel_ids]
             channels += [(cid, ChannelRole.niche) for cid in competitor_set.benchmark_channel_ids]
         layer = data_layer(ctx)
-        await open_run_budget(ctx, layer)
-        before = await layer.quota.run_usage(ctx.run_id)
+        before = await open_run_budget(ctx, layer)
         request = youtube_context(ctx)
         mode = "incremental" if ctx.kind is RunKind.daily_refresh else "full"
-        found: list[NicheChannel] = []
         notices: list[RunNotice] = []
-        for channel_id, role in channels:
-            await ctx.checkpoint()
-            result = await layer.ingest.ingest_channel(channel_id, role, request, mode=mode)
-            found.append(
-                NicheChannel(
-                    channel_id=channel_id, role=role, status=result.status, videos=len(result.videos)
-                )
-            )
-            if result.status == "quota_limited":
-                notices.append(
-                    RunNotice(
-                        code=RunNoticeCode.quota_limited,
-                        stage=self.name,
-                        message="Some niche channels were not refreshed today because of the daily data limit.",
-                    )
-                )
-                break
+        found = await self._ingest_channels(ctx, layer, request, channels, mode, notices)
         artifact = NicheDiscovery(channels=found)
         query = niche_query(ctx.snapshot, ctx.as_of)
         if query and NICHE_QUERIES.get(ctx.kind, 0) and not notices:
@@ -170,6 +159,44 @@ class NicheDiscoveryStage:
                 )
             )
         return artifact.model_copy(update={"channels": [*artifact.channels, *found]})
+
+    async def _ingest_channels(
+        self,
+        ctx: RunContext[Any],
+        layer: Any,
+        request: Any,
+        channels: list[tuple[str, ChannelRole]],
+        mode: str,
+        notices: list[RunNotice],
+    ) -> list[NicheChannel]:
+        results: list[NicheChannel | None] = [None] * len(channels)
+        gate = asyncio.Semaphore(CHANNEL_CONCURRENCY)
+        limited = False
+
+        async def ingest_one(index: int, channel_id: str, role: ChannelRole) -> None:
+            nonlocal limited
+            async with gate:
+                await ctx.checkpoint()
+                # channels not started once the quota ran out are left out, as before
+                if limited:
+                    return
+                result = await layer.ingest.ingest_channel(channel_id, role, request, mode=mode)
+                results[index] = NicheChannel(
+                    channel_id=channel_id, role=role, status=result.status, videos=len(result.videos)
+                )
+                if result.status == "quota_limited":
+                    limited = True
+
+        await asyncio.gather(*(ingest_one(index, *channel) for index, channel in enumerate(channels)))
+        if limited:
+            notices.append(
+                RunNotice(
+                    code=RunNoticeCode.quota_limited,
+                    stage=self.name,
+                    message="Some niche channels were not refreshed today because of the daily data limit.",
+                )
+            )
+        return [item for item in results if item is not None]
 
     @staticmethod
     async def _search(ctx, layer, request, query: str, artifact: NicheDiscovery, notices) -> NicheDiscovery:

@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Mapping
 from datetime import date, datetime
 from typing import Any
@@ -20,6 +21,8 @@ from app.services.youtube.ingest import ChannelIngestResult
 from app.services.youtube.snapshots import CollectReport
 
 DATA_LAYER_PORT = "youtube_data_layer"
+# channels fetched at once; the gateway caps concurrent requests itself
+CHANNEL_CONCURRENCY = 4
 
 
 class ChannelIngestSummary(BaseModel):
@@ -78,7 +81,9 @@ def run_priority(ctx: RunContext[Any]) -> QuotaPriority:
 
 
 def youtube_context(ctx: RunContext[Any], priority: QuotaPriority | None = None) -> YouTubeRequestContext:
-    return request_context(priority or run_priority(ctx), client_id=ctx.client_id, run_id=ctx.run_id)
+    return request_context(
+        priority or run_priority(ctx), client_id=ctx.client_id, run_id=ctx.run_id, budget_stage=ctx.stage
+    )
 
 
 def quota_notice(ctx: RunContext[Any], stage: str, bucket: QuotaBucket, resets_at: datetime) -> RunNotice:
@@ -91,24 +96,35 @@ def quota_notice(ctx: RunContext[Any], stage: str, bucket: QuotaBucket, resets_a
     )
 
 
-async def open_run_budget(ctx: RunContext[Any], layer: YouTubeDataLayer) -> None:
+def _run_cap(setting: int, counted: int, remaining: float | None) -> int:
+    # the counter already holds this run's earlier spend, the ledger's remainder excludes it
+    return setting if remaining is None else int(min(setting, counted + remaining))
+
+
+async def open_run_budget(ctx: RunContext[Any], layer: YouTubeDataLayer) -> dict[QuotaBucket, int]:
+    """fixes the run-wide caps once and returns this stage's spend so far, the base for charge_usage."""
     quota = layer.settings.quota
     onboarding = ctx.kind in (RunKind.onboarding, RunKind.analysis)
     units = quota.onboarding_run_units if onboarding else quota.daily_refresh_run_units
     calls = quota.onboarding_run_search_calls if onboarding else quota.daily_refresh_run_search_calls
-    remaining_units = ctx.budget.remaining(BudgetKind.youtube_units)
-    remaining_calls = ctx.budget.remaining(BudgetKind.search_calls)
+    counted = await layer.quota.run_usage(ctx.run_id)
     caps = {
-        QuotaBucket.main: int(min(units, remaining_units) if remaining_units is not None else units),
-        QuotaBucket.search: int(min(calls, remaining_calls) if remaining_calls is not None else calls),
+        QuotaBucket.main: _run_cap(
+            units, counted[QuotaBucket.main], ctx.budget.run_remaining(BudgetKind.youtube_units)
+        ),
+        QuotaBucket.search: _run_cap(
+            calls, counted[QuotaBucket.search], ctx.budget.run_remaining(BudgetKind.search_calls)
+        ),
     }
     await layer.quota.open_run_budget(ctx.run_id, caps)
+    return await layer.quota.run_usage(ctx.run_id, ctx.stage)
 
 
 async def charge_usage(
     ctx: RunContext[Any], layer: YouTubeDataLayer, before: Mapping[QuotaBucket, int]
 ) -> int:
-    after = await layer.quota.run_usage(ctx.run_id)
+    # only this stage's tally: parallel stages charge their own spend
+    after = await layer.quota.run_usage(ctx.run_id, ctx.stage)
     units = after[QuotaBucket.main] - before[QuotaBucket.main]
     calls = after[QuotaBucket.search] - before[QuotaBucket.search]
     if units > 0:
@@ -163,79 +179,101 @@ class IngestStage:
 
     async def run(self, ctx: RunContext[Any]) -> StageResult[IngestArtifact]:
         layer = data_layer(ctx)
-        await open_run_budget(ctx, layer)
-        before = await layer.quota.run_usage(ctx.run_id)
+        before = await open_run_budget(ctx, layer)
         request = youtube_context(ctx)
         channels = [(ctx.snapshot.own_channel_id, ChannelRole.own)] if ctx.snapshot.own_channel_id else []
         channels += [
             (channel_id, ChannelRole.competitor) for channel_id in ctx.snapshot.competitor_channel_ids
         ]
         languages = [ctx.snapshot.market.language.split("-")[0]]
-        summaries: list[ChannelIngestSummary] = []
-        notices: list[RunNotice] = []
-        quota_limited = False
-        for done, (channel_id, role) in enumerate(channels):
-            await ctx.checkpoint()
-            if quota_limited:
-                summaries.append(ChannelIngestSummary(channel_id=channel_id, role=role, status="skipped"))
-                continue
-            try:
-                result = await layer.ingest.ingest_channel(
-                    channel_id, role, request, mode=self.mode(ctx), languages=languages
-                )
-            except KeyRejected:
-                notices.append(
-                    RunNotice(code=RunNoticeCode.data_stale, stage=self.name, message=messages.KEY_REJECTED)
-                )
-                quota_limited = True
-                summaries.append(ChannelIngestSummary(channel_id=channel_id, role=role, status="unavailable"))
-                continue
-            summaries.append(summary(result, role))
-            if result.status == "quota_limited" and result.quota_bucket and result.quota_resets_at:
-                quota_limited = True
-                notices.append(quota_notice(ctx, self.name, result.quota_bucket, result.quota_resets_at))
-            elif result.status == "unavailable":
-                notices.append(
-                    RunNotice(
-                        code=RunNoticeCode.data_stale,
-                        stage=self.name,
-                        message=messages.PARTIAL,
-                        detail={"channel_id": channel_id},
+        summaries: list[ChannelIngestSummary | None] = [None] * len(channels)
+        found: dict[int, RunNotice] = {}
+        stopped = False
+        done = 0
+        gate = asyncio.Semaphore(CHANNEL_CONCURRENCY)
+
+        async def ingest_one(index: int, channel_id: str, role: ChannelRole) -> None:
+            nonlocal stopped, done
+            async with gate:
+                await ctx.checkpoint()
+                # a rejected key or an exhausted quota stops channels that have not started yet
+                if stopped:
+                    summaries[index] = ChannelIngestSummary(
+                        channel_id=channel_id, role=role, status="skipped"
                     )
-                )
-            elif result.status in ("not_found", "forbidden") and role is ChannelRole.competitor:
-                notices.append(
-                    RunNotice(
-                        code=RunNoticeCode.competitor_unavailable,
-                        stage=self.name,
-                        message=(result.message or messages.FORBIDDEN)[:200],
-                        detail={"channel_id": channel_id},
+                    return
+                try:
+                    result = await layer.ingest.ingest_channel(
+                        channel_id, role, request, mode=self.mode(ctx), languages=languages
                     )
-                )
-            if result.channel is not None:
-                await ctx.reporter.insight(
-                    f"{len(result.videos)} videos from {result.channel.title}",
-                    VideosFetchedPayload(
-                        channel_id=channel_id,
-                        channel_title=result.channel.title,
-                        count=len(result.videos),
-                        window_days=ctx.window_days,
-                    ),
-                )
-            await ctx.reporter.progress(done + 1, len(channels), "channels")
+                except KeyRejected:
+                    if not stopped:
+                        found[index] = RunNotice(
+                            code=RunNoticeCode.data_stale, stage=self.name, message=messages.KEY_REJECTED
+                        )
+                    stopped = True
+                    summaries[index] = ChannelIngestSummary(
+                        channel_id=channel_id, role=role, status="unavailable"
+                    )
+                    return
+                summaries[index] = summary(result, role)
+                notice = self._notice(ctx, result, role)
+                if result.status == "quota_limited" and result.quota_bucket and result.quota_resets_at:
+                    if stopped:
+                        notice = None
+                    stopped = True
+                if notice is not None:
+                    found[index] = notice
+                if result.channel is not None:
+                    await ctx.reporter.insight(
+                        f"{len(result.videos)} videos from {result.channel.title}",
+                        VideosFetchedPayload(
+                            channel_id=channel_id,
+                            channel_title=result.channel.title,
+                            count=len(result.videos),
+                            window_days=ctx.window_days,
+                        ),
+                    )
+                done += 1
+                await ctx.reporter.progress(done, len(channels), "channels")
+
+        await asyncio.gather(*(ingest_one(index, *channel) for index, channel in enumerate(channels)))
+        quota_limited = stopped
+        notices = [found[index] for index in sorted(found)]
         units = await charge_usage(ctx, layer, before)
         for notice in notices:
             await ctx.reporter.notice(notice)
         artifact = IngestArtifact(
             mode=self.mode(ctx),
-            channels=summaries,
+            channels=[item for item in summaries if item is not None],
             quota_limited=quota_limited,
             youtube_units=units,
             data_as_of=layer.clock.now(),
         )
         status = "degraded" if notices else "succeeded"
-        counts = {"channels": len(channels), "videos": sum(item.videos for item in summaries)}
+        counts = {"channels": len(channels), "videos": sum(item.videos for item in artifact.channels)}
         return StageResult(status=status, artifact=artifact, counts=counts, notices=tuple(notices))
+
+    def _notice(
+        self, ctx: RunContext[Any], result: ChannelIngestResult, role: ChannelRole
+    ) -> RunNotice | None:
+        if result.status == "quota_limited" and result.quota_bucket and result.quota_resets_at:
+            return quota_notice(ctx, self.name, result.quota_bucket, result.quota_resets_at)
+        if result.status == "unavailable":
+            return RunNotice(
+                code=RunNoticeCode.data_stale,
+                stage=self.name,
+                message=messages.PARTIAL,
+                detail={"channel_id": result.channel_id},
+            )
+        if result.status in ("not_found", "forbidden") and role is ChannelRole.competitor:
+            return RunNotice(
+                code=RunNoticeCode.competitor_unavailable,
+                stage=self.name,
+                message=(result.message or messages.FORBIDDEN)[:200],
+                detail={"channel_id": result.channel_id},
+            )
+        return None
 
 
 @stage_registry.register("prefetch_own_channel")
@@ -263,8 +301,7 @@ class PrefetchOwnChannelStage:
         if channel_id is None:
             return StageResult(status="skipped", artifact=None)
         layer = data_layer(ctx)
-        await open_run_budget(ctx, layer)
-        before = await layer.quota.run_usage(ctx.run_id)
+        before = await open_run_budget(ctx, layer)
         [result] = await layer.ingest.ensure_baseline(
             [channel_id], youtube_context(ctx, QuotaPriority.interactive)
         )

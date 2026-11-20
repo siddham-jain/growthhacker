@@ -87,6 +87,9 @@ class StageBudgetLedger:
             candidates.append(run_remaining)
         return min(candidates) if candidates else None
 
+    def run_remaining(self, kind: BudgetKind) -> float | None:
+        return self._run.remaining(kind)
+
     def ensure(self, kind: BudgetKind, amount: float) -> None:
         if amount < 0:
             raise ValueError("budget amounts must not be negative")
