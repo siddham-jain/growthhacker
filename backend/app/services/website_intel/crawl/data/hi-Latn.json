@@ -1,0 +1,22 @@
+{
+  "language": "hi-Latn",
+  "hubs": {
+    "offering": ["sevayen", "sevaen", "sewayen", "hamari-sevayen", "upchar", "vibhag"],
+    "locations": ["shakhayen", "sthan"],
+    "team": ["hamari-team", "visheshagya"],
+    "blog": ["lekh"]
+  },
+  "types": {
+    "about": ["hamare-bare-mein", "hamare-baare-mein", "parichay"],
+    "pricing": ["kimat", "keemat", "shulk", "daam"],
+    "faq": ["sawal-jawab", "prashn"],
+    "case_study": ["safalta-ki-kahaniyan"],
+    "contact": ["sampark", "sampark-karen"],
+    "booking": ["appointment-book-karen", "book-karen"],
+    "knowledge_library": ["bimariyan", "lakshan"],
+    "news_press": ["samachar"],
+    "careers": ["naukri", "naukriyan"],
+    "legal": ["niyam-aur-shartein"],
+    "investor": ["niveshak"]
+  }
+}

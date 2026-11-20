@@ -1,0 +1,253 @@
+import hashlib
+from collections.abc import Mapping
+from typing import Any
+
+import app.adapters.context  # noqa: F401  registers every ContextSource tier
+from app.core.registry import artifact_schema_registry, stage_registry
+from app.core.tenancy import TenantScope
+from app.domain.profile import BusinessProfile
+from app.domain.runs import RunNotice, RunNoticeCode
+from app.domain.web import CoverageFacet, SourceKind
+from app.pipeline.contracts import (
+    BudgetKind,
+    RunConfigSnapshot,
+    RunContext,
+    StageBudget,
+    StagePolicy,
+    StageResult,
+)
+from app.ports.artifacts import ArtifactKey
+from app.ports.context import BusinessLookup
+from app.services.website_intel.artifacts import SiteAcquisition
+from app.services.website_intel.identity.locator import LocatedBusinessDetail
+from app.services.website_intel.persistence import PgMapCache, WebsiteIntelStore
+from app.services.website_intel.profile.prompts import WEBSITE_PROMPTS, prompt_version
+from app.services.website_intel.service import WebsiteIntelService, deps_from_container
+
+LOCATED_BUSINESS = ArtifactKey(
+    name="located_business", model=LocatedBusinessDetail, schema_version=1, contains_api_data=True
+)
+SITE_ACQUISITION = ArtifactKey(
+    name="site_acquisition", model=SiteAcquisition, schema_version=1, contains_api_data=True
+)
+BUSINESS_PROFILE = ArtifactKey(
+    name="business_profile", model=BusinessProfile, schema_version=1, contains_api_data=False
+)
+for _key in (LOCATED_BUSINESS, SITE_ACQUISITION, BUSINESS_PROFILE):
+    artifact_schema_registry.register(_key.name, _key.schema_version, _key.model)
+
+SITE_TIERS = frozenset({SourceKind.site_direct, SourceKind.site_rendered})
+
+
+def website_service(ctx: RunContext[Any]) -> WebsiteIntelService:
+    return WebsiteIntelService(deps_from_container(ctx.deps))
+
+
+def scope(ctx: RunContext[Any]) -> TenantScope:
+    return TenantScope(workspace_id=ctx.workspace_id, client_id=ctx.client_id)
+
+
+@stage_registry.register("resolve_inputs")
+class ResolveInputsStage:
+    """normalises the website, resolves the channel through 02 and links the two by real links only."""
+
+    name = "resolve_inputs"
+    version = 1
+    depends_on: tuple[str, ...] = ()
+    optional_deps: tuple[str, ...] = ()
+    produces = LOCATED_BUSINESS
+    policy = StagePolicy(timeout_s=90, soft_timeout_s=45, max_attempts=2)
+    weight = 5.0
+
+    def enabled(self, snapshot: RunConfigSnapshot) -> bool:
+        return True
+
+    def fingerprint_inputs(self, ctx: RunContext[Any]) -> Mapping[str, Any]:
+        snapshot = ctx.snapshot
+        return {
+            "website": snapshot.website_url,
+            "channel": snapshot.own_channel_id,
+            "country": snapshot.market.country,
+        }
+
+    async def run(self, ctx: RunContext[Any]) -> StageResult[LocatedBusinessDetail]:
+        snapshot = ctx.snapshot
+        if not (snapshot.website_url or snapshot.own_channel_id):
+            raise ValueError("Add your website or YouTube channel.")
+        service = website_service(ctx)
+        located = await service.locate(
+            BusinessLookup(
+                website_url=snapshot.website_url,
+                channel_ref=snapshot.own_channel_id,
+                country_hint=snapshot.market.country,
+            ),
+            ctx.reporter,
+            client_id=ctx.client_id,
+            run_id=ctx.run_id,
+        )
+        notices = tuple(
+            RunNotice(code=RunNoticeCode.partial_profile, stage=self.name, message=note[:200])
+            for note in located.notes[:3]
+        )
+        status = "degraded" if located.site is None and located.channel_id is None else "succeeded"
+        return StageResult(
+            status=status,
+            artifact=located,
+            counts={"site": int(located.site is not None), "channel": int(located.channel_id is not None)},
+            notices=notices,
+        )
+
+
+@stage_registry.register("crawl_site")
+class CrawlSiteStage:
+    """runs the acquisition cascade so a blocked or missing site still yields business context (§14)."""
+
+    name = "crawl_site"
+    version = 1
+    depends_on: tuple[str, ...] = ("resolve_inputs",)
+    optional_deps: tuple[str, ...] = ()
+    produces = SITE_ACQUISITION
+    policy = StagePolicy(
+        timeout_s=600, soft_timeout_s=300, max_attempts=2, budget=StageBudget(tavily_credits=60)
+    )
+    weight = 35.0
+
+    def enabled(self, snapshot: RunConfigSnapshot) -> bool:
+        return True
+
+    def fingerprint_inputs(self, ctx: RunContext[Any]) -> Mapping[str, Any]:
+        settings = ctx.deps.settings.website_intel
+        digest = hashlib.sha256(settings.model_dump_json().encode()).hexdigest()[:16]
+        return {"website": ctx.snapshot.website_url, "settings": digest, "day": ctx.as_of.date().isoformat()}
+
+    async def run(self, ctx: RunContext[Any]) -> StageResult[SiteAcquisition]:
+        located = await ctx.artifacts.get(LOCATED_BUSINESS)
+        service = website_service(ctx)
+        started = ctx.clock.now()
+        try:
+            outcome = await service.acquire(
+                located,
+                ctx.reporter,
+                client_id=ctx.client_id,
+                run_id=ctx.run_id,
+                country_hint=ctx.snapshot.market.country,
+                tavily_credit_cap=ctx.budget.remaining(BudgetKind.tavily_credits),
+            )
+        finally:
+            await service.aclose()
+        ctx.budget.charge(BudgetKind.tavily_credits, outcome.tavily_credits)
+        ctx.budget.charge(BudgetKind.pages, outcome.fetches)
+        website_id = crawl_run_id = None
+        if located.site is not None:
+            async with ctx.deps.uow() as uow:
+                store = WebsiteIntelStore(uow.session, scope(ctx))
+                website_id = await store.upsert_website(
+                    located.site,
+                    scope_mode="subpath" if located.site.focus_path else "domain",
+                    ownership_attested=False,
+                    related=[],
+                )
+                crawl_run_id = await store.record_crawl(
+                    website_id,
+                    run_id=ctx.run_id,
+                    trigger="onboarding",
+                    profile=service.profile_kind,
+                    outcome=outcome,
+                    started_at=started,
+                    finished_at=ctx.clock.now(),
+                )
+                await store.upsert_pages(website_id, crawl_run_id, outcome.pages)
+                await store.upsert_inventory(website_id, outcome, ctx.clock.now())
+                await uow.commit()
+        artifact = SiteAcquisition.from_outcome(outcome, website_id=website_id, crawl_run_id=crawl_run_id)
+        site_pages = sum(1 for page in outcome.pages if page.page.source_kind in SITE_TIERS)
+        notices = []
+        if outcome.missing:
+            notices.append(
+                RunNotice(
+                    code=RunNoticeCode.partial_profile,
+                    stage=self.name,
+                    message="Some business details were not found: "
+                    + ", ".join(sorted(facet.value for facet in outcome.missing)),
+                    detail={"missing": sorted(facet.value for facet in outcome.missing)},
+                )
+            )
+        status = "succeeded" if site_pages and CoverageFacet.home in outcome.covered else "degraded"
+        if not outcome.pages:
+            status = "degraded"
+        return StageResult(
+            status=status,
+            artifact=artifact,
+            counts={"pages": len(outcome.pages), "site_pages": site_pages, "blocked": len(outcome.blocked)},
+            notices=tuple(notices),
+        )
+
+
+@stage_registry.register("build_profile")
+class BuildProfileStage:
+    """map → verify → reduce → enrich → validate → merge with user edits → persist a new version."""
+
+    name = "build_profile"
+    version = 1
+    depends_on: tuple[str, ...] = ("resolve_inputs", "crawl_site")
+    optional_deps: tuple[str, ...] = ()
+    produces = BUSINESS_PROFILE
+    policy = StagePolicy(timeout_s=600, soft_timeout_s=360, max_attempts=2)
+    weight = 20.0
+
+    def enabled(self, snapshot: RunConfigSnapshot) -> bool:
+        return True
+
+    def fingerprint_inputs(self, ctx: RunContext[Any]) -> Mapping[str, Any]:
+        return {prompt_id: prompt_version(prompt_id) for prompt_id in WEBSITE_PROMPTS}
+
+    async def run(self, ctx: RunContext[Any]) -> StageResult[BusinessProfile]:
+        located = await ctx.artifacts.get(LOCATED_BUSINESS)
+        acquisition = await ctx.artifacts.get(SITE_ACQUISITION)
+        service = website_service(ctx)
+        async with ctx.deps.uow() as uow:
+            store = WebsiteIntelStore(uow.session, scope(ctx))
+            previous = await store.latest_profile()
+            version = await store.next_version()
+            tombstones = await store.tombstones()
+            existing = await store.buyer_questions()
+        result = await service.build(
+            client_id=ctx.client_id,
+            run_id=ctx.run_id,
+            located=located,
+            outcome=acquisition.to_outcome(),
+            reporter=ctx.reporter,
+            version=version,
+            previous=previous,
+            tombstones=tombstones,
+            existing_questions=existing,
+            crawl_run_id=acquisition.crawl_run_id,
+            country_hint=ctx.snapshot.market.country,
+            map_cache=PgMapCache(ctx.deps.session_factory, scope(ctx)),
+        )
+        usage = result.llm_usage
+        ctx.budget.charge(BudgetKind.llm_usd, float(usage.get("cost_usd", 0.0)))  # type: ignore[arg-type]
+        async with ctx.deps.uow() as uow:
+            store = WebsiteIntelStore(uow.session, scope(ctx))
+            await store.save_profile(
+                result.profile,
+                created_by="system",
+                llm_usage=usage,
+                prompt_versions={prompt_id: prompt_version(prompt_id) for prompt_id in WEBSITE_PROMPTS},
+            )
+            await store.save_diff(result.diff)
+            await store.save_questions(result.questions)
+            await uow.commit()
+        profile = result.profile
+        status = "degraded" if result.notices else "succeeded"
+        return StageResult(
+            status=status,
+            artifact=profile,
+            counts={
+                "offerings": len(profile.offerings),
+                "conversion_actions": len(profile.conversion_actions),
+                "buyer_questions": len(result.questions),
+                "facts": len(result.facts.facts),
+            },
+            notices=tuple(result.notices),
+        )
