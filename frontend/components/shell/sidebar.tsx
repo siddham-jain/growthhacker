@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -17,11 +18,18 @@ import { LifecycleDot } from "./lifecycle-dot";
 export function Brand({ compact = false }: { compact?: boolean }) {
   const slug = useWorkspaceSlug();
   return (
-    <Link href={`/w/${slug}/clients`} className="flex items-center gap-2 rounded-control px-1 py-1">
-      <span aria-hidden className="grid size-7 place-items-center rounded-full bg-primary text-[13px] font-semibold text-primary-foreground">
-        G
+    <Link href={`/w/${slug}/clients`} className="flex items-center gap-2.5 rounded-control px-1 py-1">
+      <Image
+        src="/brand/logo.png"
+        alt=""
+        width={64}
+        height={64}
+        priority
+        className="size-8 shrink-0 rounded-[9px] object-cover ring-1 ring-border [image-rendering:pixelated]"
+      />
+      <span className={cx("font-display text-[23px] leading-none tracking-[-0.015em] text-foreground", compact && "lg:max-xl:sr-only")}>
+        GrowthHacker
       </span>
-      <span className={cx("font-heading text-[17px] font-semibold tracking-tight", compact && "lg:max-xl:sr-only")}>GrowthHacker</span>
     </Link>
   );
 }
