@@ -1,6 +1,6 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
@@ -122,8 +122,19 @@ def views_at_exact_age(series: CleanSeries, age: float, max_gap_days: float) -> 
     return interpolate(lo, hi, age)
 
 
+def nearest_day_end(anchor: datetime, target_age: int) -> tuple[date, float]:
+    """the pacific day whose midnight is closest to anchor + target_age days, and that midnight's real age."""
+    target = (anchor + timedelta(days=target_age)).astimezone(ANALYTICS_DAY_TZ)
+    before = datetime.combine(target.date(), time.min, ANALYTICS_DAY_TZ)
+    after = datetime.combine(target.date() + timedelta(days=1), time.min, ANALYTICS_DAY_TZ)
+    end = before if target - before <= after - target else after
+    return end.date() - timedelta(days=1), (end - anchor).total_seconds() / 86_400
+
+
 @age_strategy_registry.register("owner_analytics")
 class OwnerAnalyticsStrategy:
+    # day n is the sum of whole pacific days up to the midnight nearest the real age n, held to the
+    # observed ladder's tolerance; any missing day means the series is incomplete and the ladder falls back
     method = AgeMethod.owner_analytics
 
     def resolve(self, ctx: AgeContext, target_age: int) -> ViewsAtAge | None:
@@ -131,16 +142,20 @@ class OwnerAnalyticsStrategy:
         if owner is None or ctx.age_now < target_age:
             return None
         first_day = ctx.anchor.astimezone(ANALYTICS_DAY_TZ).date()
-        days = [first_day + timedelta(days=offset) for offset in range(target_age)]
-        if days[-1] > owner.data_through:
+        last_day, covered_age = nearest_day_end(ctx.anchor, target_age)
+        if last_day < first_day or last_day > owner.data_through:
             return None
-        total = sum(owner.days.get(day, 0) for day in days)
+        if abs(covered_age - target_age) > ctx.settings.tol_days(target_age):
+            return None
+        days = [first_day + timedelta(days=offset) for offset in range((last_day - first_day).days + 1)]
+        if any(day not in owner.days for day in days):
+            return None
         return _build(
             ctx,
             target_age,
             self.method,
-            views=total,
-            observed_age=float(target_age),
+            views=sum(owner.days[day] for day in days),
+            observed_age=covered_age,
             source="analytics_api",
             source_oldest_at=owner.verified_at,
         )

@@ -254,7 +254,8 @@ def test_retention_expiry_reverts_older_videos_to_the_proxy(result):
 
 def test_owner_analytics_give_exact_values_and_a_separate_conversion_block():
     vid = apollo_vid(ORGANIC)
-    first = date(2026, 11, 1)
+    # the video went up at 19:24 pacific on 28 oct; owner days must cover it from that day on
+    first = date(2026, 10, 28)
     analytics = OwnAnalytics(
         connection=OAuthConnectionStatus(
             status="active", channel_id=APOLLO, scopes=["yt-analytics.readonly"], last_verified_at=AS_OF
@@ -304,6 +305,7 @@ def test_owner_analytics_give_exact_values_and_a_separate_conversion_block():
     owned = AnalyticsEngine(AnalyticsEngineSettings()).run(build_inputs(own_analytics=analytics), AS_OF)
     value = owned.metrics[7][vid].views_at_age[7]
     assert value.method is AgeMethod.owner_analytics and value.source == "analytics_api"
+    assert value.views == 8 * 2_000 and value.observed_age_days == pytest.approx(7.23, abs=0.01)
     report = owned.windows[90].own_report
     own = report.conversion.own_channel
     assert own.subscribers_gained_by_video[vid] == 120
