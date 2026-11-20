@@ -1,7 +1,7 @@
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from app.domain.recommendations import PatternSpec, RecommendationDraft, RecType
+from app.domain.recommendations import PatternSpec, RecommendationDraft, RecType, VideoIdeaSubject
 from app.services.recommend.context import RecommendContext
 from app.services.recommend.stats import jaccard
 
@@ -75,6 +75,8 @@ class CandidateMerger:
         return survivors
 
     def _overlaps(self, left: RecommendationDraft, right: RecommendationDraft, ctx: RecommendContext) -> bool:
+        if self._same_topic_text(left, right):
+            return True
         settings = ctx.settings
         overlap = jaccard(pool_ids(left), pool_ids(right))
         if overlap >= settings.merge_jaccard:
@@ -85,6 +87,17 @@ class CandidateMerger:
             for b in right.topic_ids
         )
         return similar_topics and overlap >= settings.merge_topic_jaccard
+
+    @staticmethod
+    def _same_topic_text(left: RecommendationDraft, right: RecommendationDraft) -> bool:
+        # an offering and a keyword can share a label; two cards would read as the same idea
+        a, b = left.subject, right.subject
+        if not (isinstance(a, VideoIdeaSubject) and isinstance(b, VideoIdeaSubject)):
+            return False
+        return (
+            a.format_key == b.format_key
+            and a.topic_text.strip().casefold() == b.topic_text.strip().casefold()
+        )
 
     @staticmethod
     def _intent(draft: RecommendationDraft, ctx: RecommendContext) -> float:

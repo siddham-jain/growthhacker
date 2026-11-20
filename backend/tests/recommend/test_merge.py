@@ -35,9 +35,42 @@ def test_overlapping_ideas_merge_and_keep_the_higher_intent_question(ctx) -> Non
 
 
 def test_distinct_evidence_is_not_merged(ctx) -> None:
-    result = MERGER.merge([draft(pool(1, 2, 3), key="a"), draft(pool(4, 5, 6), key="b")], ctx)
+    other = draft(pool(4, 5, 6), key="b")
+    other = other.model_copy(
+        update={"subject": other.subject.model_copy(update={"topic_text": "hip replacement"})}
+    )
+    result = MERGER.merge([draft(pool(1, 2, 3), key="a"), other], ctx)
 
     assert len(result.kept) == 2 and result.dropped == []
+
+
+def test_same_topic_label_in_another_format_is_not_merged(ctx) -> None:
+    other = draft(pool(4, 5, 6), key="b")
+    other = other.model_copy(
+        update={"subject": other.subject.model_copy(update={"format_key": "short_form|<60s"})}
+    )
+    result = MERGER.merge([draft(pool(1, 2, 3), key="a"), other], ctx)
+
+    assert len(result.kept) == 2 and result.dropped == []
+
+
+def test_ideas_on_the_same_topic_label_merge_even_without_shared_evidence(ctx) -> None:
+    offering = draft(pool(1, 2, 3), key="a", topic_ids=["tr_offering"])
+    keyword = draft(pool(4, 5, 6), key="b", topic_ids=["tr_keyword"])
+    keyword = keyword.model_copy(
+        update={
+            "subject": keyword.subject.model_copy(
+                update={"topic_id": "tr_keyword", "topic_text": "Knee Replacement Cost "}
+            )
+        }
+    )
+    result = MERGER.merge([offering, keyword], ctx)
+
+    (survivor,) = result.kept
+    assert {ref.video_id for ref in survivor.reference_pool} == {
+        ref.video_id for ref in pool(1, 2, 3, 4, 5, 6)
+    }
+    assert codes(result) == ["merged_into"]
 
 
 def pattern(traits: dict[str, str], lift: float, n_with: int, key: str, refs):
