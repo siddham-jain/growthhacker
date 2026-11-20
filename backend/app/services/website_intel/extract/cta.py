@@ -5,6 +5,7 @@ from urllib.parse import unquote, urlsplit
 
 import phonenumbers
 
+from app.services.website_intel.extract.contact import contact_is_valid, full_phone, meaningful_label
 from app.services.website_intel.models import CtaCandidate, CtaMedium, CtaType, LinkRegion, PageLink
 
 SCHEDULING_HOSTS = (
@@ -112,15 +113,15 @@ def region_for_country(country_hint: str | None, page_url: str) -> str | None:
     return None
 
 
-def normalize_phone(raw: str, region: str | None) -> str:
+def normalize_phone(raw: str, *regions: str | None) -> str:
     number = unquote(raw).strip()
-    try:
-        parsed = phonenumbers.parse(number, region)
-    except phonenumbers.NumberParseException:
-        parsed = None
-    if parsed is not None and phonenumbers.is_valid_number(parsed):
-        return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
-    return _DIGITS.sub("", number)
+    return full_phone(number, *regions) or _DIGITS.sub("", number)
+
+
+def international(number: str) -> str:
+    return phonenumbers.format_number(
+        phonenumbers.parse(number), phonenumbers.PhoneNumberFormat.INTERNATIONAL
+    )
 
 
 def _without_scheme(url: str) -> str:
@@ -139,14 +140,15 @@ class CtaExtractor:
         country_hint: str | None = None,
     ) -> list[CtaCandidate]:
         region = region_for_country(country_hint, page_url)
+        site_region = region_for_country(None, page_url)
         found: dict[str, CtaCandidate] = {}
         for link in links:
-            candidate = self._from_link(link, page_url=page_url, region=region)
-            if candidate is not None:
+            candidate = self._from_link(link, page_url=page_url, regions=(region, site_region))
+            if candidate is not None and contact_is_valid(candidate):
                 self._merge(found, candidate)
         for form in forms:
             candidate = self._from_form(form, page_url=page_url)
-            if candidate is not None:
+            if candidate is not None and contact_is_valid(candidate):
                 self._merge(found, candidate)
         return list(found.values())
 
@@ -163,12 +165,19 @@ class CtaExtractor:
             }
         )
 
-    def _from_link(self, link: PageLink, *, page_url: str, region: str | None) -> CtaCandidate | None:
+    def _from_link(
+        self, link: PageLink, *, page_url: str, regions: tuple[str | None, ...]
+    ) -> CtaCandidate | None:
         target = link.url.strip()
         lowered = target.lower()
+        label = link.anchor
         cta_type: CtaType | None = None
         if lowered.startswith("tel:"):
-            cta_type, target = "call", "tel:" + normalize_phone(target[4:], region)
+            cta_type, target = "call", "tel:" + normalize_phone(target[4:], *regions)
+            number = full_phone(target[4:])
+            # a bare "+91" or icon anchor on a valid tel link reads as the number itself
+            if number and not (meaningful_label(label) or full_phone(label, *regions)):
+                label = international(number)
         elif lowered.startswith("mailto:"):
             cta_type, target = "email", "mailto:" + target[7:].split("?", 1)[0].strip().lower()
         elif lowered.startswith("whatsapp:") or _without_scheme(target).startswith(WHATSAPP_PREFIXES):
@@ -183,9 +192,11 @@ class CtaExtractor:
             return None
         if lowered.startswith(("tel:", "mailto:")) and len(target.split(":", 1)[1]) < 3:
             return None
+        if cta_type == "email" and not meaningful_label(label):
+            label = target[7:]
         return CtaCandidate(
             type=cta_type,
-            label=link.anchor,
+            label=label,
             target=target,
             medium=self._medium(cta_type, target),
             page_url=page_url,
@@ -211,6 +222,9 @@ class CtaExtractor:
     def _from_form(self, form: FormInfo, *, page_url: str) -> CtaCandidate | None:
         fields = " ".join(form.fields)
         if "password" in fields or "search" in fields:
+            return None
+        # "Submit", "Get OTP" or a "+91" dial-code button says nothing about what the form is for
+        if not any(pattern.search(form.submit_label) for pattern, _ in ANCHOR_LEXICON):
             return None
         if any(name in fields for name in BOOKING_FIELDS):
             cta_type: CtaType = "book_appointment"

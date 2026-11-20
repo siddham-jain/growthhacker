@@ -297,7 +297,11 @@ class DefaultBusinessLocator:
             if best is not None and basis == "website_link":
                 break
         if best is None:
-            notes.append("Add your website so we can understand your services.")
+            notes.append(
+                "We couldn't confirm which YouTube channel is yours."
+                if hint.website_domain
+                else "Add your website so we can understand your services."
+            )
             return None, None, None, tried, None
         return best[0], best[1], best[2], tried, best[3]
 

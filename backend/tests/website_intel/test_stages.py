@@ -62,8 +62,8 @@ NAV = [
 def site(request: httpx.Request) -> httpx.Response:
     path = request.url.path
     links = [(ORIGIN + href, text) for href, text in NAV] + [
-        ("tel:+912012345678", "Call now"),
-        ("https://wa.me/912012345678", "Chat on WhatsApp"),
+        ("tel:+912026123456", "Call now"),
+        ("https://wa.me/912026123456", "Chat on WhatsApp"),
     ]
     pages = {
         "/robots.txt": (b"User-agent: *\nAllow: /\n", "text/plain"),

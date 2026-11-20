@@ -20,7 +20,8 @@ def test_apollo_home_golden(apollo_home):
     assert all("apollohospitals.com" in url for url in page.links_internal)
     assert len(details.nav) > 100
     targets = {cta.target for cta in details.ctas}
-    assert "tel:1066" in targets
+    # the 1066 short code is not a full phone number, so it is not a contact fact
+    assert "tel:1066" not in targets
     assert any(target.endswith("18005701033") for target in targets)
     assert any(cta.type == "whatsapp" for cta in details.ctas)
     assert any("/book-doctor-appointment/" in cta.target for cta in details.ctas)
@@ -130,7 +131,7 @@ def test_markdown_from_reader_proxy():
         "# Apollo Hospitals\n"
         "## Health checks\n"
         "Executive Health Check for ₹8,200. [Book Appointment](https://www.apollohospitals.com/book) "
-        "or [call 1066](tel:1066).\n"
+        "or [call 1860 500 1066](tel:+914043441066).\n"
     )
     extracted = PageExtractor().from_markdown(
         markdown=markdown,
@@ -145,7 +146,7 @@ def test_markdown_from_reader_proxy():
     assert page.text.split("\n") == [
         "# Apollo Hospitals",
         "## Health checks",
-        "Executive Health Check for ₹8,200. Book Appointment or call 1066.",
+        "Executive Health Check for ₹8,200. Book Appointment or call 1860 500 1066.",
     ]
     assert page.title == "Apollo Hospitals" and page.h1 == "Apollo Hospitals"
     assert page.headings == ["Apollo Hospitals", "Health checks"]
@@ -169,7 +170,7 @@ def test_plain_text_from_knowledge_base():
         title="Apollo Hospitals",
         source_kind=SourceKind.knowledge_base,
         fetched_at=FETCHED_AT,
-        links=[PageLink(url="https://wa.me/911860500", anchor="WhatsApp")],
+        links=[PageLink(url="https://wa.me/919876543210", anchor="WhatsApp")],
         lang="en",
     )
     assert extracted.page.lang == "en"

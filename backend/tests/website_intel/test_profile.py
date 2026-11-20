@@ -84,7 +84,7 @@ def home_page() -> Any:
                 header=True,
             ),
             cta("book_appointment", HOME + "book-doctor-appointment/oncology", HOME, "Consult Oncologist"),
-            cta("call", "tel:1066", HOME, "1066", header=True),
+            cta("call", "tel:+914043441066", HOME, "040 4344 1066", header=True),
         ],
         prices=[
             PriceCandidate(

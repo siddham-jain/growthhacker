@@ -11,11 +11,13 @@ from app.domain.profile import (
     ClaimOrigin,
     ClaimStatus,
     CompetitorHint,
+    ConversionAction,
     Evidence,
     FreshnessProfile,
     FreshnessSensitivity,
     Offering,
     ProfileQuality,
+    Prominence,
     StatedAudience,
     ValueProposition,
 )
@@ -223,6 +225,31 @@ def test_validator_chain_drops_instruction_text_demographics_and_own_brand_hints
         "own_brand_as_competitor",
         "duplicate",
     }
+
+
+def conversion(action_id: str, cta_type: str, label: str, target: str) -> ConversionAction:
+    return ConversionAction(
+        id=action_id,
+        type=cta_type,
+        label=label,
+        target=target,
+        medium="phone" if cta_type == "call" else "web",
+        prominence=Prominence(pages_seen=1, on_home=True, in_header=False, in_footer=False),
+        meta=meta(),
+    )
+
+
+def test_validator_chain_drops_form_buttons_and_partial_numbers() -> None:
+    actions = [
+        conversion("cta_call", "call", "+91-88-0000-1068", "tel:+918800001068"),
+        conversion("cta_short", "call", "1068", "tel:1068"),
+        conversion("cta_submit", "contact_form", "Submit", "https://www.medanta.org/"),
+        conversion("cta_code", "contact_form", "+91", "https://www.medanta.org/patient-education/query"),
+        conversion("cta_contact", "contact_form", "Contact Us", "https://www.medanta.org/contact-us"),
+    ]
+    cleaned, issues = ValidatorChain().apply(profile(1, [offering("Cardiology")], conversion_actions=actions))
+    assert [action.id for action in cleaned.conversion_actions] == ["cta_call", "cta_contact"]
+    assert {issue.code for issue in issues} == {"not_a_contact"}
 
 
 def test_question_normalisation_and_intent_rules() -> None:

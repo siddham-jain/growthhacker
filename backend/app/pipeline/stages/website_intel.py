@@ -104,7 +104,7 @@ class ResolveInputsStage:
     """normalises the website, resolves the channel through 02 and links the two by real links only."""
 
     name = "resolve_inputs"
-    version = 1
+    version = 2
     depends_on: tuple[str, ...] = ()
     optional_deps: tuple[str, ...] = ()
     produces = LOCATED_BUSINESS
@@ -159,7 +159,7 @@ class CrawlSiteStage:
     """runs the acquisition cascade so a blocked or missing site still yields business context (§14)."""
 
     name = "crawl_site"
-    version = 1
+    version = 2
     depends_on: tuple[str, ...] = ("resolve_inputs",)
     optional_deps: tuple[str, ...] = ()
     produces = SITE_ACQUISITION
@@ -248,7 +248,7 @@ class BuildProfileStage:
     """map → verify → reduce → enrich → validate → merge with user edits → persist a new version."""
 
     name = "build_profile"
-    version = 1
+    version = 2
     depends_on: tuple[str, ...] = ("resolve_inputs", "crawl_site")
     optional_deps: tuple[str, ...] = ()
     produces = BUSINESS_PROFILE

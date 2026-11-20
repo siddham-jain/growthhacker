@@ -5,6 +5,7 @@ from typing import Any, Literal, Protocol
 
 from app.core.registry import Registry
 from app.domain.profile import BusinessProfile
+from app.services.website_intel.extract.contact import contact_is_valid
 from app.services.website_intel.extract.injection import contains_instruction
 from app.services.website_intel.profile.claims import normalise_name
 
@@ -91,6 +92,17 @@ class CompetitorSanityValidator:
             Issue("competitor_hints", hint.name, "own_brand_as_competitor", "drop")
             for hint in profile.competitor_hints
             if normalise_name(hint.name) in own or (hint.domain and hint.domain in own_domains)
+        ]
+
+
+@profile_validator_registry.register("contact_actions")
+class ContactActionValidator:
+    # pages extracted before the contact rules can still carry form buttons, bare dialling codes or short codes
+    def validate(self, profile: BusinessProfile) -> list[Issue]:
+        return [
+            Issue("conversion_actions", action.id, "not_a_contact", "drop")
+            for action in profile.conversion_actions
+            if not contact_is_valid(action)
         ]
 
 

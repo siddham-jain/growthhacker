@@ -30,6 +30,7 @@ from app.domain.profile import (
 )
 from app.domain.web import SiteRef
 from app.ports.llm import PayloadClass, PromptInput, TaskId, TrustedBlock, UntrustedBlock
+from app.services.website_intel.extract.contact import meaningful_address
 from app.services.website_intel.extract.injection import contains_instruction
 from app.services.website_intel.identity.locator import LocatedBusinessDetail
 from app.services.website_intel.identity.related_brands import BrandSignal
@@ -625,7 +626,7 @@ class CoreBinder:
                 id=key,
                 name=item.name[:160],
                 kind=choice(item.kind, LocationKind, "other"),
-                address=item.address or None,
+                address=item.address if meaningful_address(item.address) else None,
                 city=item.city or None,
                 region=item.region or None,
                 country=country,

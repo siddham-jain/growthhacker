@@ -32,7 +32,7 @@ def test_region_falls_back_to_country_tld():
     ("url", "anchor", "expected_type", "medium"),
     [
         ("https://wa.me/919876543210", "", "whatsapp", "whatsapp"),
-        ("https://api.whatsapp.com/send?phone=91987", "Chat", "whatsapp", "whatsapp"),
+        ("https://api.whatsapp.com/send?phone=919876543210", "Chat", "whatsapp", "whatsapp"),
         ("mailto:Info@Clinic.example.in?subject=hi", "Mail", "email", "email"),
         ("https://apps.apple.com/in/app/x/id1", "iOS", "app_install", "app"),
         ("https://play.google.com/store/apps/details?id=x", "Android", "app_install", "app"),
@@ -86,18 +86,52 @@ def test_duplicates_merge_prominence_flags():
 
 def test_forms_are_classified_by_fields():
     forms = [
-        FormInfo(action="https://clinic.example.in/book", fields=("name", "phone", "appointment-date")),
+        FormInfo(
+            action="https://clinic.example.in/book",
+            fields=("name", "phone", "appointment-date"),
+            submit_label="Book appointment",
+        ),
         FormInfo(
             action="https://clinic.example.in/contact",
             fields=("your-name", "email", "message"),
-            submit_label="Send",
+            submit_label="Request a call back",
         ),
-        FormInfo(action="https://clinic.example.in/news", fields=("email",)),
+        FormInfo(action="https://clinic.example.in/news", fields=("email",), submit_label="Subscribe"),
         FormInfo(action="https://clinic.example.in/login", fields=("username", "password")),
         FormInfo(action="https://clinic.example.in/search", fields=("search",)),
     ]
     found = CtaExtractor().extract([], page_url=PAGE, forms=forms)
     assert [cta.type for cta in found] == ["book_appointment", "contact_form", "newsletter"]
+
+
+@pytest.mark.parametrize(
+    ("link", "form"),
+    [
+        (PageLink(url="tel:1068", anchor="1068"), None),
+        (PageLink(url="tel:+91", anchor="+91"), None),
+        (PageLink(url="mailto:info@", anchor="Email us"), None),
+        (PageLink(url="https://api.whatsapp.com/send?phone=91", anchor="WhatsApp"), None),
+        (
+            None,
+            FormInfo(action="https://clinic.example.in/q", fields=("name", "phone"), submit_label="Submit"),
+        ),
+        (None, FormInfo(action="https://clinic.example.in/q", fields=("name", "phone"), submit_label="+91")),
+        (None, FormInfo(action="https://clinic.example.in/q", fields=("name", "message"))),
+        (None, FormInfo(action="https://clinic.example.in/q", fields=("mobile",), submit_label="Get OTP")),
+    ],
+)
+def test_junk_contact_facts_are_dropped(link, form):
+    found = CtaExtractor().extract(
+        [link] if link else [], page_url=PAGE, forms=[form] if form else [], country_hint="IN"
+    )
+    assert found == []
+
+
+def test_meaningless_anchor_on_a_full_number_reads_as_the_number():
+    cta = _one(PageLink(url="tel:+918800001068", anchor="+91"))
+    assert cta is not None and cta.label == "+91 88000 01068"
+    mail = _one(PageLink(url="mailto:info@clinic.example.in", anchor="Submit"))
+    assert mail is not None and mail.label == "info@clinic.example.in"
 
 
 def test_markdown_links_handle_images_and_autolinks():
