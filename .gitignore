@@ -7,3 +7,5 @@ __pycache__/
 node_modules/
 .next/
 .DS_Store
+# evaluation bundles and packs hold youtube api data (30-day rule)
+var/

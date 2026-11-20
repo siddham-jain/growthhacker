@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Add README, design review (docs/DESIGN.md) and evaluation status (docs/evaluation/EVALUATION.md).
 - Add weekly answer-citation tracking: tavily answers for the top 10 buyer questions, cited videos resolved via videos.list, a read endpoint and Your channel / Competitors panels.
 - Add CSP with frame-ancestors 'none' and security headers to the frontend.
 - Add full per-provider LLM settings (tiers, limits, retries, effort, extra params, enable, order) and a no-token connection test.
@@ -30,6 +31,8 @@
 - Add shared context brief, env template and gitignore.
 
 ### Changed
+- Regenerate the ops report and screenshots from the real stack; rewrite the runbook with UI, demo login and evaluation steps.
+- Ignore var/, where evaluation bundles and packs with API data live.
 - Expected range is the reference videos' plain outlier ratios (capped 0.5x–3.0x, interquartile or min–max) times the client's median baseline, labelled "calculated by GrowthHacker".
 - Strict contract mode (`?format=contract`) lists only the five assignment card types and says so in `data.meta`.
 - Competitor API views carry raw channel facts ("matching uploads: N of last M") instead of overlap/activity/agreement scores.
@@ -55,6 +58,12 @@
 - Move confirm-setup's competitor freeze and topic rebuild into the worker; the endpoint returns 202 with the run.
 
 ### Fixed
+- Fix run usage missing llm spend from stages that bill only the provider ledger.
+- Fix duplicate video ideas when an offering and a keyword share a label.
+- Fix backtest runs failing in write_cards; backtests replay without the writer.
+- Fix a progress tick landing after a run's terminal event.
+- Fix topic-matching notices showing card-wording copy and repeated notices showing twice.
+- Show creator subscriber bands as labels instead of raw codes.
 - Fix owner analytics day-N treating missing days as zero; partial series fall back down the ladder and are re-pulled.
 - Fix one failed quota-ledger flush making every later YouTube call raise after it succeeded.
 - Fix the uploads ETag being saved before new videos were hydrated.
@@ -105,6 +114,7 @@
 - Fix rapidocr 3.10 enum params that failed thumbnail enrichment.
 
 ### Decisions
+- The evaluation ops report covers the period after the final deploy — whole-day figures include forced recomputes, which are not warm refreshes by definition.
 - Video lookups coalesce only within one quota identity (client, run) — cross-client sharing happens through in-flight claims, so each caller pays its own calls and one cap never fails another.
 - Owner day N ends at the pacific midnight nearest the real age N, within the observed ladder's tolerance — the same definition as observed snapshots, so owner values never cover a different age.
 - News lexical scoring prunes (term, item) pairs and sliding windows by difflib's quick_ratio bound — results stay identical to the full scan, so relevance is unchanged.
