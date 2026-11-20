@@ -18,14 +18,14 @@ import { LifecycleDot } from "./lifecycle-dot";
 export function Brand({ compact = false }: { compact?: boolean }) {
   const slug = useWorkspaceSlug();
   return (
-    <Link href={`/w/${slug}/clients`} className="flex items-center gap-2.5 rounded-control px-1 py-1">
+    <Link href={`/w/${slug}/clients`} className="flex items-center gap-3 rounded-control px-1 py-1">
       <Image
         src="/brand/logo.png"
         alt=""
-        width={64}
-        height={64}
+        width={96}
+        height={96}
         priority
-        className="size-8 shrink-0 rounded-[9px] object-cover ring-1 ring-border [image-rendering:pixelated]"
+        className="size-11 shrink-0 rounded-[11px] object-cover ring-1 ring-border [image-rendering:pixelated]"
       />
       <span className={cx("font-display text-[23px] leading-none tracking-[-0.015em] text-foreground", compact && "lg:max-xl:sr-only")}>
         GrowthHacker
