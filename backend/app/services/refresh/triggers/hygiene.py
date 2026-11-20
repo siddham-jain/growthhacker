@@ -10,6 +10,7 @@ from app.services.refresh.context import RefreshContext
 from app.services.refresh.eligibility import VideoEligibility, VideoState
 from app.services.refresh.evidence import VideoContentEvidence
 from app.services.refresh.links.urls import same_target
+from app.services.refresh.structure import MIN_CHAPTER_SECONDS, MIN_CHAPTERS
 from app.services.refresh.text import TOKEN, KeywordPresence, content_tokens
 from app.services.refresh.triggers.base import Finding, TriggerKind, dedupe_key, register_detector
 
@@ -149,6 +150,24 @@ class MissingContactDetector:
         return any(True for _ in phonenumbers.PhoneNumberMatcher(text, country))
 
 
+def clock_time(seconds: int) -> str:
+    hours, rest = divmod(max(0, seconds), 3600)
+    minutes, secs = divmod(rest, 60)
+    return f"{hours}:{minutes:02d}:{secs:02d}" if hours else f"{minutes}:{secs:02d}"
+
+
+def chapter_scaffold(duration_s: int) -> str:
+    # chapter times and titles are never invented: public data has no transcript (99 G10)
+    last_start = clock_time(duration_s - MIN_CHAPTER_SECONDS)
+    return (
+        "Adding chapters helps viewers jump to the answer. Write them from the video itself; we can't see what "
+        "is said, so we don't guess times or topics. Paste this in Studio and replace each [m:ss] and [topic] "
+        f"with a real start time and topic: at least {MIN_CHAPTERS} lines, each chapter {MIN_CHAPTER_SECONDS}+ "
+        f"seconds, the last starting no later than {last_start}.\n"
+        "0:00 Introduction\n[m:ss] [topic]\n[m:ss] [topic]"
+    )
+
+
 @register_detector
 class MissingChaptersDetector:
     kind: ClassVar[TriggerKind] = TriggerKind.missing_chapters
@@ -171,17 +190,7 @@ class MissingChaptersDetector:
             )
             defect = "timestamps don't form valid chapters"
         else:
-            # chapter text is never invented without the owner's transcript (99 G10)
-            follow_up = (
-                "Add timestamps starting at 00:00 in Studio."
-                if ctx.oauth_connected
-                else "We can draft them if you connect your channel."
-            )
-            advisory = Advisory(
-                kind="chapters_needed",
-                message=f"Adding chapters helps viewers jump to the answer. {follow_up}",
-                risk="low",
-            )
+            advisory = Advisory(kind="chapters_needed", message=chapter_scaffold(duration), risk="low")
             defect = "no chapters"
         return [
             Finding(

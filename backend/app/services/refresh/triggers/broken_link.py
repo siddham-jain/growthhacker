@@ -4,9 +4,19 @@ from app.domain.refresh import Advisory, ClaimLevel, TriggerEvidence
 from app.services.refresh.context import RefreshContext
 from app.services.refresh.eligibility import VideoEligibility, VideoState
 from app.services.refresh.evidence import VideoContentEvidence
-from app.services.refresh.links.status import LinkStatusClass
-from app.services.refresh.links.urls import normalise_url
+from app.services.refresh.links.status import LinkStatus, LinkStatusClass
+from app.services.refresh.links.urls import malformation, normalise_url
 from app.services.refresh.triggers.base import Finding, TriggerKind, dedupe_key, register_detector
+
+OPENED = frozenset({LinkStatusClass.ok, LinkStatusClass.redirect})
+UNVERIFIED_REPAIR = Advisory(
+    kind="manual_review",
+    message=(
+        "We corrected the link from its own address but couldn't open it to check (some sites block "
+        "automated checks). Open it once after saving to make sure it loads."
+    ),
+    risk="low",
+)
 
 
 @register_detector
@@ -28,9 +38,13 @@ class BrokenLinkDetector:
                 continue
             seen.add(url.raw)
             repaired = status.repaired_url
-            repaired_ok = repaired is not None and self._repair_verified(repaired, ctx)
+            repaired_status = self._repair_status(repaired, ctx)
             fixable = (
-                status.status_class is LinkStatusClass.malformed and repaired_ok and not state.maybe_short
+                status.status_class is LinkStatusClass.malformed
+                and repaired is not None
+                and malformation(repaired) is None
+                and not (repaired_status is not None and repaired_status.broken)
+                and not state.maybe_short
             )
             advisories: tuple[Advisory, ...] = ()
             if state.maybe_short:
@@ -52,6 +66,8 @@ class BrokenLinkDetector:
                         risk="medium",
                     ),
                 )
+            elif repaired_status is None or repaired_status.status_class not in OPENED:
+                advisories = (UNVERIFIED_REPAIR,)
             findings.append(
                 Finding(
                     kind=self.kind,
@@ -69,6 +85,5 @@ class BrokenLinkDetector:
         return findings
 
     @staticmethod
-    def _repair_verified(repaired: str, ctx: RefreshContext) -> bool:
-        status = ctx.link_statuses.get(normalise_url(repaired))
-        return status is not None and status.status_class in (LinkStatusClass.ok, LinkStatusClass.redirect)
+    def _repair_status(repaired: str | None, ctx: RefreshContext) -> LinkStatus | None:
+        return ctx.link_statuses.get(normalise_url(repaired)) if repaired else None

@@ -1,11 +1,13 @@
 from dataclasses import dataclass, field
 from typing import ClassVar, Protocol
 
+import regex
+
 from app.core.registry import Registry
 from app.domain.refresh import ClaimLevel, InsertionKind
 from app.services.refresh.context import RefreshContext
 from app.services.refresh.evidence import VideoContentEvidence
-from app.services.refresh.links.urls import add_utm
+from app.services.refresh.links.urls import URL, add_utm
 from app.services.refresh.policy.claims import asserted_level
 from app.services.refresh.text import KeywordPresence, content_tokens
 from app.services.refresh.triggers.base import Finding, TriggerKind
@@ -21,6 +23,7 @@ DEFAULT_LABELS = {
     "whatsapp": "Message us on WhatsApp",
 }
 MAX_LABEL_CHARS = 80
+PHONE_LIKE = regex.compile(r"[\d\s+().-]+")
 LAUNCH_KINDS = frozenset({"model", "product"})
 
 
@@ -69,6 +72,15 @@ def safe_label(label: str, action_type: str, description: str, ctx: RefreshConte
     if ctx.policy.violations(cleaned, description) or asserted_level(cleaned) is ClaimLevel.l3_applicability:
         return default
     return cleaned
+
+
+def phone_label(label: str, target: str) -> tuple[str, str]:
+    # a crawled label that is only the number would print it twice; show it once, as the site writes it
+    if not PHONE_LIKE.fullmatch(label.strip()):
+        return label, target
+    digits = "".join(char for char in label if char.isdigit()).lstrip("0")
+    same_number = bool(digits) and "".join(char for char in target if char.isdigit()).endswith(digits)
+    return "", label.strip() if same_number and not URL.match(target) else target
 
 
 @register_template
@@ -134,8 +146,9 @@ class _LinkTemplate:
             target = add_utm(target, finding.video_id)
         if evidence.language not in ctx.settings.supported_languages:
             return template_line(target, allowed_urls=frozenset({target}))
-        label = safe_label(params["label"], params["action_type"], evidence.structure.text, ctx)
-        return template_line(f"{label}: {target}", allowed_urls=frozenset({target}))
+        label, shown = phone_label(params["label"], target)
+        label = safe_label(label, params["action_type"], evidence.structure.text, ctx)
+        return template_line(f"{label}: {shown}", allowed_urls=frozenset({target}))
 
 
 @register_template

@@ -523,7 +523,8 @@ class RefreshEngine:
                 continue
             top = max(items, key=lambda item: item.priority)
             merged.append((top.priority, top.finding.urgency, video_id, result))
-        merged.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        # under the per-run cap, a fix the user can paste outranks an advice-only note
+        merged.sort(key=lambda item: (bool(item[3].operations), item[0], item[1]), reverse=True)
         cap = self.settings.max_refreshes_per_run
         for _, _, _, result in merged[cap:]:
             for finding in result.findings:
