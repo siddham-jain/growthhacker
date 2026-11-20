@@ -148,6 +148,8 @@ class YouTubeSnapshotSettings(BaseModel):
     max_batches_per_tick: int = 40
     compact_after_days: int = 8
     weekly_after_days: int = 35
+    retry_base_minutes: float = 10
+    retry_max_hours: float = 24
     counting_regimes: list[CountingRegime] = [
         CountingRegime(since=date(2025, 3, 31), label="2025-03-31-shorts-replays"),
         CountingRegime(since=date(2026, 8, 27), label="2026-08-27-playback-start"),
@@ -381,6 +383,8 @@ class LLMRoute(BaseModel):
 
 class LLMSettings(BaseModel):
     enabled: bool = True
+    # dev only: hosts a workspace base_url may reach over plain http or on a private address (e.g. localhost)
+    workspace_base_url_dev_hosts: list[str] = []
     anthropic: AnthropicSettings = Field(default_factory=lambda: AnthropicSettings())
     openai_compat: OpenAICompatSettings = Field(default_factory=lambda: OpenAICompatSettings())
     provider_order: list[Literal["anthropic", "openai_compat"]] = ["anthropic", "openai_compat"]
@@ -943,20 +947,11 @@ class RecommendNoCopySettings(BaseModel):
 
 
 class RecommendRangeSettings(BaseModel):
-    n_min: float = 5
-    k_peer: float = 8
-    k_own: float = 5
-    k_blend: float = 5
     own_min_n: int = 3
-    own_only_n: int = 20
-    fallback_min_matching: int = 8
-    ratio_clip_low: float = 0.1
-    ratio_clip_high: float = 20.0
+    min_references: int = 3
+    quartile_min_n: int = 4
     floor: float = 0.5
     cap: float = 3.0
-    cap_size_mismatch: float = 2.0
-    min_width: float = 1.15
-    size_mismatch_share: float = 0.3
     min_client_baseline_n: int = 3
     provisional_baseline_n: int = 5
 
@@ -1317,6 +1312,7 @@ class AdapterSettings(BaseModel):
     thumbnail_text_reader: str = "rapidocr"
     run_config_source: str = "tables"
     setup_confirmer: str = "tables"
+    answer_search: str = "tavily"
 
 
 class RunBudgetSettings(BaseModel):
@@ -1400,6 +1396,8 @@ class ApiRateLimitSettings(BaseModel):
     run_start_per_hour_workspace: int = 100
     sse_open_per_min: int = 60
     oauth_per_min: int = 10
+    # per target account, whichever address the attempts come from
+    login_per_hour_account: int = 20
     local_fallback_share: float = Field(default=0.5, gt=0, le=1)
 
 
@@ -1423,6 +1421,16 @@ class ApiSettings(BaseModel):
     interactive_backlog_depth: int = 20
     oauth_state_ttl_s: int = 600
     rate_limits: ApiRateLimitSettings = ApiRateLimitSettings()
+
+
+class AnswerCitationSettings(BaseModel):
+    # web answer search over the client's top buyer questions; each basic search costs one tavily credit
+    enabled: bool = True
+    questions_per_week: int = Field(default=10, ge=1, le=10)
+    max_results: int = Field(default=10, ge=1, le=20)
+    weekly_max_credits_total: int = Field(default=200, ge=1)
+    min_days_between_checks: int = Field(default=6, ge=1)
+    search_cache_ttl_s: int = Field(default=6 * 86_400, ge=0)
 
 
 class LegacyEnvSource(PydanticBaseSettingsSource):
@@ -1487,6 +1495,7 @@ class Settings(BaseSettings):
     adapters: AdapterSettings = AdapterSettings()
     pipeline: PipelineSettings = PipelineSettings()
     api: ApiSettings = ApiSettings()
+    answer_citations: AnswerCitationSettings = AnswerCitationSettings()
 
     @classmethod
     def settings_customise_sources(
