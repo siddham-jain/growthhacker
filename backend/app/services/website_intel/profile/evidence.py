@@ -7,6 +7,7 @@ from rapidfuzz import fuzz
 
 from app.domain.profile import Evidence, Fact, FactKind
 from app.domain.web import ExtractionKind
+from app.services.website_intel.extract.sanitizer import looks_like_code
 from app.services.website_intel.models import ExtractedPage
 
 QUOTE_CHAR_CAP = 300
@@ -40,7 +41,7 @@ class EvidenceVerifier:
         self.min_quote_chars = min_quote_chars
 
     def verify(self, text: str, quote: str, page_text: str) -> Verification | None:
-        if not quote.strip():
+        if not quote.strip() or looks_like_code(text) or looks_like_code(quote):
             return None
         page_norm = normalise_for_match(page_text)
         quote_norm = normalise_for_match(quote)

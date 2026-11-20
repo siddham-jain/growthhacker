@@ -50,11 +50,13 @@ class LlmGateway:
         client_id: UUID | None,
         run_id: UUID | None,
         stage: str = "build_profile",
+        cost_cap_usd: float | None = None,
     ) -> None:
         self._client = client
         self._client_id = client_id
         self._run_id = run_id
         self._stage = stage
+        self._cost_cap_usd = cost_cap_usd
         self.usage = LlmUsage()
 
     @property
@@ -89,7 +91,7 @@ class LlmGateway:
                     payload_classes=payload,
                     idempotency_key=idempotency_key,
                 ),
-                budget=CallBudget(max_output_tokens=max_output_tokens) if max_output_tokens else None,
+                budget=self._budget(max_output_tokens),
             )
         except LLMError as error:
             self.usage.failures += 1
@@ -100,3 +102,10 @@ class LlmGateway:
         self.usage.output_tokens += result.usage.output_tokens
         self.usage.models[task.value] = result.model
         return result.value
+
+    def _budget(self, max_output_tokens: int | None) -> CallBudget | None:
+        # the client refuses a call whose worst-case estimate exceeds what is left of the stage's budget
+        headroom = None if self._cost_cap_usd is None else max(self._cost_cap_usd - self.usage.cost_usd, 0.0)
+        if max_output_tokens is None and headroom is None:
+            return None
+        return CallBudget(max_output_tokens=max_output_tokens, max_cost_usd=headroom)

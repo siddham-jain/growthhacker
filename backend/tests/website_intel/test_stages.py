@@ -9,13 +9,14 @@ import app.pipeline.stages.website_intel as stages
 from app.adapters.llm.testing import FakeLLMClient
 from app.core.config import CrawlProfileSettings
 from app.core.db import SessionFactory, UnitOfWork
-from app.domain.runs import RunKind, RunTrigger
+from app.domain.runs import RunKind, RunNoticeCode, RunTrigger
 from app.models.runs import PipelineRun
 from app.models.website import BusinessProfile as ProfileRow
 from app.models.website import BuyerQuestion, CrawledPage, CrawlRun, ProfileDiff, Website
-from app.pipeline.contracts import Market, RunConfigSnapshot, RunContext
+from app.pipeline.context import RunBudgetLedger
+from app.pipeline.contracts import BudgetKind, Market, RunBudget, RunConfigSnapshot, RunContext, StageBudget
 from app.ports.artifacts import ArtifactKey
-from app.ports.llm import LLMError, LLMErrorKind, TaskId
+from app.ports.llm import LLMBudgetExceeded, LLMError, LLMErrorKind, TaskId
 from app.services.website_intel.artifacts import SiteAcquisition
 from app.services.website_intel.inputs.ssrf import SsrfGuard
 from app.services.website_intel.service import WebsiteIntelService, deps_from_container
@@ -134,7 +135,7 @@ class Artifacts:
         return self.values.get(key.name)
 
 
-def llm() -> FakeLLMClient:
+def llm(client_class: type[FakeLLMClient] = FakeLLMClient) -> FakeLLMClient:
     def map_reply(call: Any) -> dict[str, Any]:
         pages = []
         for block in call.input.untrusted:
@@ -154,7 +155,7 @@ def llm() -> FakeLLMClient:
         return {"pages": pages}
 
     freshness = {"llm_score": 1, "rationale": "dental demand is steady"}
-    return FakeLLMClient(
+    return client_class(
         {
             TaskId.website_page_selection: {"picks": []},
             TaskId.website_page_map: map_reply,
@@ -164,15 +165,22 @@ def llm() -> FakeLLMClient:
     )
 
 
-async def test_onboarding_stages_persist_crawl_profile_and_questions(
-    session_factory: SessionFactory, clock: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def run_onboarding_stages(
+    session_factory: SessionFactory,
+    clock: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    client: FakeLLMClient,
+    budget: Any,
+    slug: str,
+) -> tuple[Any, Artifacts, RecordingReporter, dict[str, Any]]:
     async with session_factory() as session:
-        scope = await create_tenant(session, "smile", website_url=ORIGIN)
+        scope = await create_tenant(session, slug, website_url=ORIGIN)
         run = await insert_row(session, PipelineRun.__table__, scope, {"kind": "onboarding"})
         await session.commit()
+    results: dict[str, Any] = {}
     async with httpx.AsyncClient(transport=httpx.MockTransport(site)) as http:
-        container = FakeContainer(session_factory, http, llm(), clock)
+        container = FakeContainer(session_factory, http, client, clock)
 
         def service(ctx: Any) -> WebsiteIntelService:
             deps = deps_from_container(ctx.deps)
@@ -200,7 +208,7 @@ async def test_onboarding_stages_persist_crawl_profile_and_questions(
             as_of=NOW,
             snapshot=snapshot,
             clock=clock,
-            budget=UnlimitedLedger(),
+            budget=budget,
             reporter=reporter,
             artifacts=artifacts,
             cancel=Token(),
@@ -210,6 +218,16 @@ async def test_onboarding_stages_persist_crawl_profile_and_questions(
             result = await stage.run(ctx)
             assert result.artifact is not None
             artifacts.values[stage.produces.name] = result.artifact
+            results[stage.name] = result
+    return scope, artifacts, reporter, results
+
+
+async def test_onboarding_stages_persist_crawl_profile_and_questions(
+    session_factory: SessionFactory, clock: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scope, artifacts, reporter, _ = await run_onboarding_stages(
+        session_factory, clock, monkeypatch, client=llm(), budget=UnlimitedLedger(), slug="smile"
+    )
     located = artifacts.values["located_business"]
     assert located.site.canonical_origin == ORIGIN
     acquisition = artifacts.values["site_acquisition"]
@@ -244,3 +262,29 @@ async def test_onboarding_stages_persist_crawl_profile_and_questions(
     assert counts["websites"] == 1 and counts["crawl_runs"] == 1 and counts["crawled_pages"] >= 4
     assert counts["business_profiles"] == 1 and counts["profile_diffs"] == 1
     assert "Do dental implants hurt?" in questions
+
+
+class CostedLLM(FakeLLMClient):
+    """each call costs more than its worst-case estimate, so the first map call overshoots a small cap."""
+
+    async def generate_structured(self, **kwargs: Any) -> Any:
+        budget = kwargs.get("budget")
+        if budget is not None and budget.max_cost_usd is not None and budget.max_cost_usd < 0.02:
+            raise LLMBudgetExceeded("call estimate exceeds the call budget")
+        result = await super().generate_structured(**kwargs)
+        return result.model_copy(update={"cost_usd": 0.06})
+
+
+async def test_build_profile_degrades_instead_of_failing_when_llm_budget_runs_out(
+    session_factory: SessionFactory, clock: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_budget = RunBudget(wall_s=600, youtube_units=0, search_calls=0, llm_usd=0.05, tavily_credits=40)
+    ledger = RunBudgetLedger(run_budget).for_stage(StageBudget())
+    _, artifacts, _, results = await run_onboarding_stages(
+        session_factory, clock, monkeypatch, client=llm(CostedLLM), budget=ledger, slug="smile-budget"
+    )
+    result = results["build_profile"]
+    assert result.status == "degraded"
+    assert RunNoticeCode.llm_fallback in {notice.code for notice in result.notices}
+    assert artifacts.values["business_profile"].identity.name == "Smile Dental Clinic"
+    assert ledger.remaining(BudgetKind.llm_usd) == 0.0

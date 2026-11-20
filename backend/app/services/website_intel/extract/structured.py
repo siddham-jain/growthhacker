@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
 from app.services.website_intel.extract.cta import FormInfo
-from app.services.website_intel.extract.sanitizer import normalize_text
+from app.services.website_intel.extract.sanitizer import inline_text, looks_like_code, normalize_text
 from app.services.website_intel.inputs.urls import InvalidUrlError, normalize_url
 from app.services.website_intel.models import Hreflang, LinkRegion, NavItem, PageLink
 
@@ -232,7 +232,9 @@ def extract_meta(tree: LexborHTMLParser, base_url: str) -> MetaInfo:
 
 
 def _anchor_label(node: LexborNode) -> str:
-    label = normalize_text(node.text(deep=True, separator=" ") or "")
+    label = inline_text(node)
+    if looks_like_code(label):
+        label = ""
     if not label:
         label = normalize_text(node.attributes.get("aria-label") or node.attributes.get("title") or "")
     if not label:
@@ -364,7 +366,7 @@ def extract_forms(tree: LexborHTMLParser, base_url: str) -> list[FormInfo]:
         button = form.css_first("button, input[type=submit]")
         label = ""
         if button is not None:
-            label = normalize_text(button.text(deep=True) or button.attributes.get("value") or "")
+            label = inline_text(button) or normalize_text(button.attributes.get("value") or "")
         forms.append(FormInfo(action=action, fields=tuple(fields), submit_label=label[:MAX_LABEL_CHARS]))
     return forms
 

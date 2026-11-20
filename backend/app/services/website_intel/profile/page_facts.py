@@ -17,7 +17,7 @@ from app.services.website_intel.profile.llm import LlmGateway
 from app.services.website_intel.profile.prompts import prompt_version
 from app.services.website_intel.profile.schemas import LlmFact, PageFactsOutput
 
-EXTRACTOR_VERSION = "1"
+EXTRACTOR_VERSION = "3"
 MAX_PAGES_PER_CALL = 4
 MAX_BATCH_CHARS = 48_000
 HEAD_CHARS = 8_000
@@ -195,7 +195,7 @@ class PageFactExtractor:
             untrusted.append(
                 UntrustedBlock(
                     label=job.key,
-                    source=path_of(job.page.page.url),
+                    source="website_page",
                     text=f"{job.text}\n\nCALL-TO-ACTION CANDIDATES:\n{ctas or 'none'}\n\nPRICE CANDIDATES:\n{prices or 'none'}",
                 )
             )

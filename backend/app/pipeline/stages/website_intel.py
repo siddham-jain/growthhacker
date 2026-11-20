@@ -289,9 +289,13 @@ class BuildProfileStage:
             crawl_run_id=acquisition.crawl_run_id,
             country_hint=ctx.snapshot.market.country,
             map_cache=PgMapCache(ctx.deps.session_factory, scope(ctx)),
+            llm_cost_cap_usd=ctx.budget.remaining(BudgetKind.llm_usd),
         )
         usage = result.llm_usage
-        ctx.budget.charge(BudgetKind.llm_usd, float(usage.get("cost_usd", 0.0)))  # type: ignore[arg-type]
+        cost = float(usage.get("cost_usd", 0.0))  # type: ignore[arg-type]
+        remaining = ctx.budget.remaining(BudgetKind.llm_usd)
+        # concurrent calls can overshoot the cap; the spend already happened, so record what fits
+        ctx.budget.charge(BudgetKind.llm_usd, cost if remaining is None else min(cost, remaining))
         async with ctx.deps.uow() as uow:
             store = WebsiteIntelStore(uow.session, scope(ctx))
             await store.save_profile(

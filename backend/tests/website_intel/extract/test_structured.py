@@ -93,3 +93,13 @@ def test_nuxt_payload_strings():
 
 def test_no_app_state_returns_none():
     assert embedded_app_state_text("<html><body><p>plain</p></body></html>") is None
+
+
+def test_link_labels_skip_inline_svg_styles():
+    html = (
+        "<body><a href='tel:+919972899728'><svg><style>.st0 {fill: none; stroke-width: 40px;}</style>"
+        "<path d='M12 2C6.48 2 2 6.48 2 12'/></svg>+91 99728-99728</a>"
+        "<a href='/contact' aria-label='Contact us'>.cls-1 {fill: none;}</a></body>"
+    )
+    labels = {link.url: link.anchor for link in extract_links(LexborHTMLParser(html), BASE)}
+    assert labels == {"tel:+919972899728": "+91 99728-99728", BASE + "contact": "Contact us"}

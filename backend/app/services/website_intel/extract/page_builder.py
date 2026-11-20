@@ -14,7 +14,7 @@ from app.services.website_intel.extract.injection import InjectionScanner
 from app.services.website_intel.extract.language import LanguageDetector
 from app.services.website_intel.extract.main_text import MIN_MAIN_TEXT_CHARS, MainTextExtractor
 from app.services.website_intel.extract.prices import PriceSignalExtractor
-from app.services.website_intel.extract.sanitizer import DomSanitizer, normalize_text
+from app.services.website_intel.extract.sanitizer import DomSanitizer, drop_code_lines, normalize_text
 from app.services.website_intel.extract.structured import (
     MetaInfo,
     NavExtractor,
@@ -262,7 +262,7 @@ class PageExtractor:
         h1: str | None = None,
         embeds: Sequence[str] = (),
     ) -> ExtractedPage:
-        scan = self._injection.scan(text)
+        scan = self._injection.scan(drop_code_lines(text))
         clean = scan.text
         prices = self._prices.extract(clean, page_url=final_url, json_ld=json_ld)
         ctas = self._ctas.extract(links, page_url=final_url, forms=forms, country_hint=country_hint)

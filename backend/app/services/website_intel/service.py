@@ -200,8 +200,12 @@ class WebsiteIntelService:
             country_hint=country_hint,
         )
 
-    def llm(self, *, client_id: UUID | None, run_id: UUID | None, stage: str) -> LlmGateway:
-        return LlmGateway(self._deps.llm, client_id=client_id, run_id=run_id, stage=stage)
+    def llm(
+        self, *, client_id: UUID | None, run_id: UUID | None, stage: str, cost_cap_usd: float | None = None
+    ) -> LlmGateway:
+        return LlmGateway(
+            self._deps.llm, client_id=client_id, run_id=run_id, stage=stage, cost_cap_usd=cost_cap_usd
+        )
 
     async def acquire(
         self,
@@ -251,9 +255,12 @@ class WebsiteIntelService:
         crawl_run_id: UUID | None = None,
         country_hint: str | None = None,
         map_cache: MapCache | None = None,
+        llm_cost_cap_usd: float | None = None,
     ) -> BuildResult:
         builder = ProfileBuilder(
-            llm=self.llm(client_id=client_id, run_id=run_id, stage="build_profile"),
+            llm=self.llm(
+                client_id=client_id, run_id=run_id, stage="build_profile", cost_cap_usd=llm_cost_cap_usd
+            ),
             settings=self.settings,
             profile_settings=self.profile,
             clock=self._deps.clock,

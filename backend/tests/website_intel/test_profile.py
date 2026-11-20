@@ -10,7 +10,15 @@ from app.core.config import CrawlProfileSettings, WebsiteIntelSettings
 from app.domain.profile import ClaimOrigin, ClaimStatus, FactKind, FreshnessSensitivity, SiteChangeStats
 from app.domain.runs import RunNoticeCode
 from app.domain.web import CoverageFacet, ExtractionKind, SourceKind
-from app.ports.llm import LLMError, LLMErrorKind, TaskId
+from app.ports.llm import (
+    CallBudget,
+    LLMBudgetExceeded,
+    LLMError,
+    LLMErrorKind,
+    LLMResult,
+    PromptInput,
+    TaskId,
+)
 from app.services.website_intel.acquisition.cascade import CascadeOutcome
 from app.services.website_intel.identity.locator import LocatedBusinessDetail
 from app.services.website_intel.models import InventoryUrl, NavItem, PageType, PriceCandidate, TemplateSummary
@@ -23,6 +31,7 @@ from app.services.website_intel.profile.industry import REFRESH_POLICIES, bucket
 from app.services.website_intel.profile.llm import LlmGateway
 from app.services.website_intel.profile.page_facts import PageFactExtractor, llm_view
 from app.services.website_intel.profile.quality import profile_quality
+from app.services.website_intel.profile.schemas import PageFactsOutput
 from app.services.website_intel.profile.synthesizer import ProfileSynthesizer, SynthesisContext
 from tests.website_intel.conftest import APOLLO, CLIENT_ID, NOW, RecordingReporter, cta, make_page
 
@@ -101,6 +110,16 @@ def test_verifier_accepts_exact_and_near_quotes_and_guards_numbers() -> None:
     assert verifier.verify("100 hospitals", "network with 71+ hospitals", HOME_TEXT) is None
     assert verifier.verify("x", "free parking for everyone always", HOME_TEXT) is None
     assert verifier.verify("x", "call", "nothing") is None
+
+
+def test_verifier_rejects_markup_and_css_quotes() -> None:
+    page_text = (
+        "Call us\n.st0 {fill: none; stroke-width: 40px;}\n<svg viewBox='0 0 24 24'>\nPackages from ₹4,100/-"
+    )
+    verifier = EvidenceVerifier()
+    assert verifier.verify("Phone icon", ".st0 {fill: none; stroke-width: 40px;}", page_text) is None
+    assert verifier.verify("Icon", "<svg viewBox='0 0 24 24'>", page_text) is None
+    assert verifier.verify("Packages from ₹4,100", "Packages from ₹4,100/-", page_text) is not None
 
 
 def test_fact_store_merges_duplicate_facts_across_pages() -> None:
@@ -647,3 +666,87 @@ async def test_builder_degrades_to_deterministic_profile_without_llm(clock: Any)
         result.profile.freshness.score_components["llm"]
         == result.profile.freshness.score_components["industry_prior"]
     )
+
+
+class CostedLLM(FakeLLMClient):
+    """charges a fixed cost per call and refuses calls whose estimate exceeds the call budget, like the real client."""
+
+    def __init__(self, replies: Any, *, estimates: dict[TaskId, float], cost: float) -> None:
+        super().__init__(replies)
+        self.estimates = estimates
+        self.cost = cost
+        self.budgets: list[CallBudget | None] = []
+
+    async def generate_structured(self, **kwargs: Any) -> LLMResult[Any]:
+        budget = kwargs.get("budget")
+        self.budgets.append(budget)
+        estimate = self.estimates[kwargs["task"]]
+        if budget is not None and budget.max_cost_usd is not None and estimate > budget.max_cost_usd:
+            raise LLMBudgetExceeded(f"call estimate ${estimate:.4f} exceeds the call budget")
+        result = await super().generate_structured(**kwargs)
+        return result.model_copy(update={"cost_usd": self.cost})
+
+
+async def test_gateway_refuses_calls_once_the_cost_cap_is_spent() -> None:
+    llm = CostedLLM(
+        {TaskId.website_page_map: map_reply([GOOD])}, estimates={TaskId.website_page_map: 0.02}, cost=0.02
+    )
+    gateway = LlmGateway(llm, client_id=CLIENT_ID, run_id=None, cost_cap_usd=0.05)
+    prompt = PromptInput()
+    results = [await gateway.structured(TaskId.website_page_map, PageFactsOutput, prompt) for _ in range(3)]
+    assert [result is not None for result in results] == [True, True, False]
+    assert [budget.max_cost_usd if budget else None for budget in llm.budgets] == pytest.approx(
+        [0.05, 0.03, 0.01]
+    )
+    assert gateway.usage.cost_usd == pytest.approx(0.04) and gateway.usage.failures == 1
+    assert "budget_exceeded" in gateway.usage.errors[0]
+
+
+async def test_gateway_without_a_cap_sends_no_cost_budget() -> None:
+    llm = CostedLLM(
+        {TaskId.website_page_map: map_reply([GOOD])}, estimates={TaskId.website_page_map: 9.0}, cost=0.0
+    )
+    gateway = LlmGateway(llm, client_id=CLIENT_ID, run_id=None)
+    assert await gateway.structured(TaskId.website_page_map, PageFactsOutput, PromptInput()) is not None
+    assert (
+        await gateway.structured(
+            TaskId.website_page_map, PageFactsOutput, PromptInput(), max_output_tokens=100
+        )
+        is not None
+    )
+    assert llm.budgets[0] is None and llm.budgets[1] == CallBudget(max_output_tokens=100)
+
+
+async def test_builder_falls_back_to_deterministic_draft_when_the_budget_runs_out(clock: Any) -> None:
+    llm = CostedLLM(
+        {
+            TaskId.website_page_map: map_reply([GOOD]),
+            TaskId.website_profile_reduce: r1_reply,
+            TaskId.website_keyword_enrichment: r2_reply,
+            TaskId.website_freshness_profile: r3_reply,
+        },
+        estimates={
+            TaskId.website_page_map: 0.02,
+            TaskId.website_profile_reduce: 0.30,
+            TaskId.website_keyword_enrichment: 0.02,
+            TaskId.website_freshness_profile: 0.02,
+        },
+        cost=0.02,
+    )
+    result = await ProfileBuilder(
+        llm=LlmGateway(llm, client_id=CLIENT_ID, run_id=None, cost_cap_usd=0.10),
+        settings=WebsiteIntelSettings(),
+        profile_settings=CrawlProfileSettings(),
+        clock=clock,
+    ).build(
+        client_id=CLIENT_ID,
+        outcome=outcome_for([home_page()]),
+        located=LOCATED,
+        reporter=RecordingReporter(),
+        version=1,
+    )
+    assert not llm.calls_for(TaskId.website_profile_reduce)
+    assert result.profile.identity.name == "Apollo Hospitals" and result.profile.conversion_actions
+    assert RunNoticeCode.llm_fallback in {notice.code for notice in result.notices}
+    assert result.llm_usage["cost_usd"] <= 0.10
+    assert any("budget_exceeded" in error for error in result.llm_usage["errors"])  # type: ignore[attr-defined]
