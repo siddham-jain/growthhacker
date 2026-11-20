@@ -1,0 +1,44 @@
+{
+  "capacity_estimate": {
+    "batch_stats": null,
+    "main": null,
+    "search": null
+  },
+  "clients": 0,
+  "crawl": null,
+  "generated_at": "2026-11-20T04:02:28.114824Z",
+  "llm": [],
+  "measured": false,
+  "notes": [
+    "No daily_refresh runs were recorded in this period; the planning figures below are estimates."
+  ],
+  "period_from": "2026-11-13T04:02:27.994605Z",
+  "period_to": "2026-11-20T04:02:27.994605Z",
+  "prices_verified_at": "2026-11-20",
+  "project_quota": [],
+  "provider_errors": {},
+  "queue_wait": {},
+  "quota": [],
+  "quota_days_pt": [
+    "2026-11-12",
+    "2026-11-19"
+  ],
+  "quota_timezone": "America/Los_Angeles",
+  "retention": {
+    "compliant": true,
+    "oldest_age_days": {
+      "run_events": 0.0
+    },
+    "rules_checked": 40,
+    "violations": []
+  },
+  "run_time": {},
+  "targets": {
+    "daily_refresh_p95_under_120s": null,
+    "llm_prices_fresh": true,
+    "onboarding_p95_under_8min": null,
+    "retention_compliant": true,
+    "units_per_client_within_budget": null
+  },
+  "tavily": []
+}
