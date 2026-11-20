@@ -15,7 +15,7 @@ Every displayed figure is YouTube API data plus simple maths, labelled 'calculat
 
 Cells: **OK** complies; **COND** complies under the stated condition; **FLAG** complies by our reading but needs reviewer sign-off; **n/a** guardrail not applicable.
 
-## Matrix (49 features, 8 FLAG cells on 7 features)
+## Matrix (50 features, 9 FLAG cells on 8 features)
 
 | # | Feature (owner) | Source · maths | G1 | G2 | G3 | G4 | G5 | G6 | Condition / mitigation |
 |---|---|---|---|---|---|---|---|---|---|
@@ -68,6 +68,7 @@ Cells: **OK** complies; **COND** complies under the stated condition; **FLAG** c
 | 47 | Outlier precision/recall and threshold curve (12) | YT public + internal · ratio, statistical test | OK | OK | OK | OK | COND | n/a | detector ratios and video ids in label tasks are nulled at 28 d; labels and aggregates are kept |
 | 48 | Human review ratings (12) | internal · mean, statistical test | n/a | n/a | OK | OK | COND | n/a | card snapshots in review items are nulled at 28 d; ratings are human judgements and are kept |
 | 49 | Ops metrics: quota units, latency, tokens, cost (12) | internal · count, sum, quantile | n/a | n/a | n/a | n/a | n/a | n/a | internal telemetry; no API data |
+| 50 | Cited in AI answers: YouTube videos a web answer search cites per buyer question (own, competitor, other) (03/07) | web search + YT public + client input · count, lexical match | COND | **FLAG** | OK | OK | COND | n/a | web answer sources are matched to video ids and resolved through videos.list; counts of questions are shown side by side with YouTube data, never merged into a YouTube metric; at most 10 questions a week per client; citations and channel ids are deleted at 28 d; labelled 'calculated by GrowthHacker, not a YouTube metric' |
 
 ## Needs reviewer sign-off (FLAG)
 
@@ -78,6 +79,7 @@ Cells: **OK** complies; **COND** complies under the stated condition; **FLAG** c
 - **#31 Competitor candidate evidence: web mentions, YouTube keyword overlap, ownership verification** (G2): web and YouTube evidence both decide which channels are proposed; they are kept as separate fields behind threshold rules and a human confirms, so no merged number exists. Reviewer to confirm selection by two sources is not a combined metric.
 - **#32 Recommendation card ordering: evidence, fit, gap, intent, recency x penalties** (G2): the internal ordering multiplies YouTube evidence with client fit and buyer intent; under D-POL-7 a composite may order cards because it ranks ideas, not channels, and is never shown. Reviewer to confirm.
 - **#41 news_opportunity ordering** (G2): news and YouTube demand both influence which news card comes first; ordering is lexicographic with each figure shown separately, so no merged metric exists (D-POL-7). Reviewer to confirm.
+- **#50 Cited in AI answers: YouTube videos a web answer search cites per buyer question (own, competitor, other)** (G2): a web search answer decides which videos count as cited, and YouTube supplies each video's channel; the two sources meet only in a per-question owner label, never in one number. Reviewer to confirm this side-by-side reading of G2.
 
 ## Coverage
 

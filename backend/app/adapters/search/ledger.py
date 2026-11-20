@@ -40,9 +40,12 @@ class CreditMeter:
 class PgUsageRecorder:
     """writes one provider_usage_ledger row per tavily call (hashes and counts only)."""
 
-    def __init__(self, session_factory: SessionFactory, clock: Clock) -> None:
+    def __init__(
+        self, session_factory: SessionFactory, clock: Clock, *, stage: str = "website_intel"
+    ) -> None:
         self._session_factory = session_factory
         self._clock = clock
+        self._stage = stage
 
     async def record(self, charge: CreditCharge, *, client_id: UUID | None, run_id: UUID | None) -> None:
         async with self._session_factory() as session:
@@ -53,7 +56,7 @@ class PgUsageRecorder:
                     provider_kind="tavily",
                     provider="tavily",
                     operation=charge.operation,
-                    stage="website_intel",
+                    stage=self._stage,
                     outcome=charge.outcome,
                     error_kind=charge.error_kind,
                     credits=Decimal(str(round(charge.credits, 2))),

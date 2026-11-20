@@ -1,4 +1,4 @@
-"""the 49 computed features and their guardrail checks (plan 12 §9.1 with the 99 review applied).
+"""the 50 computed features and their guardrail checks (plan 12 §9.1 with the 99 review applied).
 
 the catalogue lives with 12 so one owner keeps it complete; each row names its owning component.
 """
@@ -776,4 +776,21 @@ feature(
     "internal telemetry; no API data",
     displayed=True,
     retention_days=LEDGER_DAYS,
+)
+feature(
+    50,
+    "answer_citations.cited_in_answers",
+    "03/07",
+    "Cited in AI answers: YouTube videos a web answer search cites per buyer question (own, competitor, other)",
+    ("web_search", "yt_data_public", "client_input"),
+    ("count", "lexical_match"),
+    ALL,
+    "COND FLAG OK OK COND n/a",
+    "web answer sources are matched to video ids and resolved through videos.list; counts of questions are "
+    "shown side by side with YouTube data, never merged into a YouTube metric; at most 10 questions a week per "
+    "client; citations and channel ids are deleted at 28 d; " + DISCLOSED,
+    displayed=True,
+    review_note="a web search answer decides which videos count as cited, and YouTube supplies each video's "
+    "channel; the two sources meet only in a per-question owner label, never in one number. Reviewer to confirm "
+    "this side-by-side reading of G2.",
 )

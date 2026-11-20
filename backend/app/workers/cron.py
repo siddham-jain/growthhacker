@@ -9,6 +9,7 @@ from app.core.registry import UnknownRegistrationError
 from app.retention.sweeper import RetentionSweeper
 from app.workers.jobs import WorkerState
 from app.workers.tasks import (
+    ANSWER_CITATIONS,
     CACHE_HITS_FLUSH,
     COMPETITOR_REDISCOVERY,
     NEWS_POLL,
@@ -98,6 +99,7 @@ ops_alerts = locked_tick(OPS_ALERTS, 900)(owner_task(OPS_ALERTS))
 snapshot_maintenance = locked_tick(SNAPSHOT_MAINTENANCE, 86400)(owner_task(SNAPSHOT_MAINTENANCE))
 cache_hits_flush = locked_tick(CACHE_HITS_FLUSH, 86400)(owner_task(CACHE_HITS_FLUSH))
 competitor_rediscovery = locked_tick(COMPETITOR_REDISCOVERY, 86400)(owner_task(COMPETITOR_REDISCOVERY))
+answer_citations = locked_tick(ANSWER_CITATIONS, 86400)(owner_task(ANSWER_CITATIONS))
 
 
 def _every(minutes: int, offset: int = 0) -> set[int]:
@@ -118,4 +120,5 @@ def cron_jobs() -> list[CronJob]:
         cron(cache_hits_flush, name="cache_hits_flush", hour={0}, minute={20}),
         cron(competitor_rediscovery, name="competitor_rediscovery", hour={2}, minute={30}),
         cron(snapshot_maintenance, name="snapshot_maintenance", hour={3}, minute={10}),
+        cron(answer_citations, name="answer_citations", weekday={0}, hour={4}, minute={40}),
     ]

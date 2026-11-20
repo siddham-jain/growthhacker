@@ -24,10 +24,10 @@ SCORE_TERMS = re.compile(r"leaderboard|channel score|creator score|channel rank"
 NEGATIONS = re.compile(r"\b(no|never|not)\b", re.IGNORECASE)
 
 
-def test_matrix_has_49_contiguous_rows() -> None:
+def test_matrix_has_50_contiguous_rows() -> None:
     specs = feature_registry.all()
-    assert len(specs) == 49
-    assert [spec.number for spec in specs] == list(range(1, 50))
+    assert len(specs) == 50
+    assert [spec.number for spec in specs] == list(range(1, 51))
     assert feature_registry.problems() == []
 
 
@@ -47,6 +47,7 @@ def test_flag_rows_have_review_notes_and_match_the_signed_off_set() -> None:
         31: ["G2"],
         32: ["G2"],
         41: ["G2"],
+        50: ["G2"],
     }
 
 
