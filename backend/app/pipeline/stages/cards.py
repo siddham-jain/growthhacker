@@ -1,10 +1,12 @@
 import asyncio
 from collections.abc import Mapping
 from typing import Any, ClassVar, Protocol
+from uuid import UUID
 
 from app.core.config import Settings
 from app.core.registry import stage_registry
 from app.core.tenancy import TenantScope
+from app.domain.card_copy import CardCopy
 from app.domain.common import DomainModel
 from app.domain.recommendations import RecommendationDraft, recommendation_id
 from app.domain.runs import CardWrittenPayload, RunNotice, RunNoticeCode
@@ -29,11 +31,17 @@ BUDGET_MESSAGE = "Some cards use standard wording today because the writing budg
 class CardInputs(DomainModel):
     drafts: list[RecommendationDraft]
     client: WriterClientContext
+    # the run whose recommendation rows hold the drafts; an inherited recommend output keeps its own run
+    card_run_id: UUID
 
 
 class CardInputSource(Protocol):
     # gated drafts for the run's window (07) plus the client facts the pack builder needs (02/03/04)
     async def load(self, ctx: RunContext[Any]) -> CardInputs: ...
+
+
+class CardCopyTarget(Protocol):
+    async def attach_copy(self, scope: TenantScope, run_id: UUID, copies: Mapping[str, CardCopy]) -> int: ...
 
 
 class WriteCardsDeps(Protocol):
@@ -42,6 +50,7 @@ class WriteCardsDeps(Protocol):
     card_writing: CardWritingService
     llm_budget: LLMBudgetLedger
     recommendation_copy: RecommendationCopyStore
+    recommendation_store: CardCopyTarget
 
 
 def fallback_notice(cards: list[WrittenCard]) -> RunNotice | None:
@@ -121,8 +130,10 @@ class WriteCardsStage:
             deadline_s=self._deadline_s(ctx),
             on_card=on_card,
         )
-        await deps.recommendation_copy.save(
-            TenantScope(workspace_id=ctx.workspace_id, client_id=ctx.client_id), ctx.run_id, written.cards
+        scope = TenantScope(workspace_id=ctx.workspace_id, client_id=ctx.client_id)
+        await deps.recommendation_copy.save(scope, ctx.run_id, written.cards)
+        await deps.recommendation_store.attach_copy(
+            scope, inputs.card_run_id, {card.stable_key: card.card_copy for card in written.cards}
         )
         notice = fallback_notice(written.cards)
         service_degraded = any(

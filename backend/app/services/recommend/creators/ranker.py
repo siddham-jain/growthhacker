@@ -1,3 +1,4 @@
+import re
 import statistics
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -79,6 +80,35 @@ class CreatorList(DomainModel):
     groups: dict[RelevanceGroup, list[CreatorListEntry]]
 
 
+# a hospital, society or shop is a rival or an institution, not a creator to work with
+INSTITUTION_TOKENS = frozenset(
+    {
+        "hospital",
+        "hospitals",
+        "clinic",
+        "clinics",
+        "institute",
+        "university",
+        "college",
+        "pharmacy",
+        "foundation",
+        "society",
+        "association",
+        "conference",
+        "store",
+        "ltd",
+        "limited",
+        "pvt",
+        "inc",
+        "llc",
+    }
+)
+
+
+def institutional(title: str) -> bool:
+    return any(token.casefold() in INSTITUTION_TOKENS for token in re.findall(r"\w+", title))
+
+
 class CreatorRanker:
     def __init__(self, detector: CollaborationDetector) -> None:
         self.detector = detector
@@ -119,6 +149,8 @@ class CreatorRanker:
         return blocked | until
 
     def _allowed(self, ctx: RecommendContext, channel: ChannelRecord) -> bool:
+        if institutional(channel.title):
+            return False
         description = channel.description.lower()
         own_domains = [domain.lower().removeprefix("www.") for domain in ctx.client.website_domains]
         competitor_domains = [c.domain.lower().removeprefix("www.") for c in ctx.competitors if c.domain]

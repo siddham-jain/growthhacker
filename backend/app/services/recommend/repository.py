@@ -1,5 +1,5 @@
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -8,10 +8,12 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.db import UnitOfWork
 from app.core.tenancy import TenantScope
+from app.domain.card_copy import CardCopy
 from app.domain.recommendations import (
     CreatorSubject,
     EvidenceSource,
     FeedbackStatus,
+    Recommendation,
     RecommendationDraft,
     VideoIdeaSubject,
 )
@@ -35,7 +37,7 @@ from app.models.recommendations import (
     WhiteSpaceNote as WhiteSpaceRow,
 )
 from app.repositories.tenant.base import TenantRepository
-from app.services.recommend.assembly import AssembledCard
+from app.services.recommend.assembly import LLM_COPY_SOURCES, AssembledCard, with_copy
 from app.services.recommend.evidence.index import OwnVideo
 from app.services.recommend.feedback import FeedbackRow, Outcome, OutcomeTracker, TrackedCard
 from app.services.recommend.inputs import (
@@ -197,6 +199,29 @@ class RecommendationRepository(TenantRepository[RecommendationRow]):
                     channel_role=ref.channel_role.value,
                 )
             )
+
+    async def attach_copy(self, run_id: uuid.UUID, copies: Mapping[str, CardCopy]) -> int:
+        # only llm wording lands on the card rows, so a later template fallback never replaces it
+        written = {key: copy for key, copy in copies.items() if copy.copy_source in LLM_COPY_SOURCES}
+        if not written:
+            return 0
+        statement = self._scoped(
+            select(RecommendationRow)
+            .where(
+                RecommendationRow.run_id == run_id,
+                RecommendationRow.stable_key.in_(written),
+                RecommendationRow.payload.is_not(None),
+            )
+            .with_for_update()
+        )
+        rows = (await self.session.execute(statement)).scalars().all()
+        for row in rows:
+            copy = written[row.stable_key]
+            card = with_copy(Recommendation.model_validate(row.payload), copy)
+            row.payload = card.model_dump(mode="json")
+            row.writer_meta = {**row.writer_meta, "rendered_by": "llm", "attempts": copy.attempts}
+        await self.session.flush()
+        return len(rows)
 
     async def previous_cards(self, window_days: int) -> dict[str, PreviousCard]:
         latest = (
@@ -406,3 +431,9 @@ class SqlRecommendationStore:
             await repository.save_outcomes(outcomes, run.output.as_of)
             await uow.commit()
         return len(outcomes)
+
+    async def attach_copy(self, scope: TenantScope, run_id: uuid.UUID, copies: Mapping[str, CardCopy]) -> int:
+        async with self.uow_factory() as uow:
+            attached = await uow.repository(RecommendationRepository, scope).attach_copy(run_id, copies)
+            await uow.commit()
+        return attached

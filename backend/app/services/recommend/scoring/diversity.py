@@ -54,13 +54,21 @@ class MmrSelector:
         return selection
 
     def fill(self, selection: Selection, slots: int) -> None:
+        self._fill(selection, slots, extra=0)
+        capped = [draft for draft, reason in selection.skipped if reason == "type_cap"]
+        if len(selection.selected) < slots and capped:
+            # caps keep the mix varied; slots no other type can fill go to capped drafts that passed every gate
+            selection.skipped = [item for item in selection.skipped if item[1] != "type_cap"]
+            selection.queue = sorted([*selection.queue, *capped], key=tie_break_key)
+            self._fill(selection, slots, extra=self.ctx.settings.type_cap_spill)
+
+    def _fill(self, selection: Selection, slots: int, extra: int) -> None:
         settings = self.ctx.settings
         while len(selection.selected) < slots and selection.queue:
             best = self._best(selection)
             selection.queue.remove(best)
-            if sum(1 for item in selection.selected if item.type is best.type) >= settings.type_caps.get(
-                best.type.value, 0
-            ):
+            cap = settings.type_caps.get(best.type.value, 0)
+            if sum(1 for item in selection.selected if item.type is best.type) >= cap + (extra if cap else 0):
                 selection.skipped.append((best, "type_cap"))
                 continue
             placed = self._respect_reuse(best, selection.selected)

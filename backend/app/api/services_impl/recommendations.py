@@ -30,28 +30,13 @@ from app.models.recommendations import RecommendationFeedback as FeedbackRow
 from app.models.runs import PipelineRun
 from app.pipeline.stages.cards import WRITTEN_CARDS
 from app.pipeline.stages.recommend import RECOMMEND_ARTIFACT
+from app.services.recommend.assembly import reworded, with_copy
 from app.services.recommend.feedback_service import FeedbackService, UnknownRecommendationError
 from app.services.recommend.repository import RecommendationRepository
 from app.services.recommend.service import WindowOutput
 
 # without a status filter, cards the user put away stay out of the list
 HIDDEN_BY_DEFAULT = frozenset({FeedbackStatus.dismissed, FeedbackStatus.snoozed})
-LLM_COPY = frozenset({"llm", "llm_revised"})
-
-
-def with_copy(card: Recommendation, copy: CardCopy | None) -> Recommendation:
-    """10's written wording replaces 07's template text; the evidence and numbers stay 07's."""
-    if copy is None:
-        return card
-    rendered_by = "llm" if copy.copy_source in LLM_COPY else "template"
-    return card.model_copy(
-        update={
-            "summary": copy.summary,
-            "why_it_works": list(copy.why_it_works),
-            "fit_to_client": copy.fit_to_client,
-            "extras": card.extras.model_copy(update={"rendered_by": rendered_by}),
-        }
-    )
 
 
 def feedback_domain(row: FeedbackRow) -> RecommendationFeedback:
@@ -82,6 +67,61 @@ class RecommendationReadService(ServiceBase):
     async def copies(self, scope: TenantScope, run_id: UUID) -> dict[str, CardCopy]:
         written = await self.optional_artifact(scope, run_id, WRITTEN_CARDS)
         return {card.stable_key: card.card_copy for card in written.cards} if written else {}
+
+    async def worded(
+        self, scope: TenantScope, run_id: UUID, cards: list[Recommendation]
+    ) -> list[Recommendation]:
+        """each card with the llm wording attached to its row, then the published run's own written copy."""
+        copies = await self.copies(scope, run_id)
+        attached = await self._attached(scope, cards)
+        return [
+            with_copy(
+                attached.get((card.extras.run_id, card.extras.stable_key), card),
+                copies.get(card.extras.stable_key),
+            )
+            for card in cards
+        ]
+
+    async def _attached(
+        self, scope: TenantScope, cards: list[Recommendation]
+    ) -> dict[tuple[UUID, str], Recommendation]:
+        # a later cards run words template cards on the rows of the run that saved them
+        pending = {
+            (card.extras.run_id, card.extras.stable_key): card
+            for card in cards
+            if card.extras.rendered_by == "template"
+        }
+        if not pending:
+            return {}
+        payload = RecommendationRow.payload
+        async with self.session_factory() as session:
+            rows = await session.execute(
+                select(
+                    RecommendationRow.run_id,
+                    RecommendationRow.stable_key,
+                    payload["summary"].astext,
+                    payload["why_it_works"],
+                    payload["fit_to_client"].astext,
+                ).where(
+                    RecommendationRow.workspace_id == scope.workspace_id,
+                    RecommendationRow.client_id == scope.client_id,
+                    RecommendationRow.run_id.in_({run for run, _ in pending}),
+                    RecommendationRow.stable_key.in_({key for _, key in pending}),
+                    RecommendationRow.writer_meta["rendered_by"].astext == "llm",
+                    payload.is_not(None),
+                )
+            )
+            return {
+                (run, key): reworded(
+                    pending[(run, key)],
+                    summary=summary,
+                    why_it_works=list(why_it_works),
+                    fit_to_client=fit_to_client,
+                    rendered_by="llm",
+                )
+                for run, key, summary, why_it_works, fit_to_client in rows
+                if (run, key) in pending
+            }
 
     async def cards_written(self, scope: TenantScope, run_id: UUID, window_days: int) -> bool:
         window = await self.window_output(scope, run_id, window_days)
@@ -123,14 +163,13 @@ class RecommendationReadService(ServiceBase):
         user_id: UUID | None,
     ) -> RecommendationListing:
         window = await self.window_output(scope, run_id, window_days)
-        copies = await self.copies(scope, run_id)
         # description refreshes are their own surface; they join the list only when asked for by type
         pool = (
             window.refresh_cards
             if filters.type == RecType.description_refresh
             else window.set.recommendations
         )
-        cards = [with_copy(card, copies.get(card.extras.stable_key)) for card in pool]
+        cards = await self.worded(scope, run_id, pool)
         feedback = await self._feedback(scope, user_id, {card.extras.stable_key for card in cards})
         question = (
             ids.decode(ids.BUYER_QUESTION, filters.buyer_question_id) if filters.buyer_question_id else None

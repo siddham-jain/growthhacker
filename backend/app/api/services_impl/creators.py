@@ -4,7 +4,7 @@ from app.api.pagination import PageRequest
 from app.api.schemas.results import CreatorsData, CreatorView
 from app.api.services import CREATORS, api_service_registry
 from app.api.services_impl.common import ServiceBase, channel_refs, sort_items
-from app.api.services_impl.recommendations import RecommendationReadService, with_copy
+from app.api.services_impl.recommendations import RecommendationReadService
 from app.core.container import Container
 from app.core.tenancy import TenantScope
 from app.domain.recommendations import CreatorSubject, Recommendation, RecType
@@ -35,12 +35,15 @@ class CreatorReadService(ServiceBase):
         window = await self.recommendations.window_output(scope, run_id, window_days)
         criterion = sort or window.creator_list.sort
         strong_share = self.settings.recommend.creators.strong_match_share
-        copies = await self.recommendations.copies(scope, run_id)
-        cards = [
-            with_copy(card, copies.get(card.extras.stable_key))
-            for card in window.set.recommendations
-            if card.type is RecType.creator and isinstance(card.extras.subject, CreatorSubject)
-        ]
+        cards = await self.recommendations.worded(
+            scope,
+            run_id,
+            [
+                card
+                for card in window.set.recommendations
+                if card.type is RecType.creator and isinstance(card.extras.subject, CreatorSubject)
+            ],
+        )
         refs = await channel_refs(self.session_factory, [card.extras.subject.channel_id for card in cards])  # type: ignore[union-attr]
         views = []
         for position, card in enumerate(ordered(cards, criterion, strong_share), 1):

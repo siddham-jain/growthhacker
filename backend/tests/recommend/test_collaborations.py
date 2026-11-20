@@ -66,3 +66,21 @@ def test_labels_never_claim_a_sponsor() -> None:
     label = collaboration_label(found)
     assert "sponsored by" not in label.lower()
     assert label.startswith("Disclosed paid promotion on ")
+
+
+@pytest.mark.parametrize(
+    ("title", "blocked"),
+    [
+        ("ILS Hospitals", True),
+        ("Endocrine Society", True),
+        ("MENA Conference", True),
+        ("Maa Chandi Medicine Store", True),
+        ("Diabetes Care - Umid Shayusupov (Endocrinologist)", False),
+        ("Dr Nishant Jain", False),
+        ("The Diabetes Podcast®", False),
+    ],
+)
+def test_institutions_are_never_creator_candidates(title: str, blocked: bool) -> None:
+    from app.services.recommend.creators.ranker import institutional
+
+    assert institutional(title) is blocked

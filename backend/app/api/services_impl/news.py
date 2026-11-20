@@ -11,7 +11,7 @@ from app.api.pagination import Page, PageRequest
 from app.api.schemas.results import DemandCheckView, EarlySignalView, NewsOpportunityView, NewsRef
 from app.api.services import NEWS, api_service_registry
 from app.api.services_impl.common import ServiceBase
-from app.api.services_impl.recommendations import RecommendationReadService, with_copy
+from app.api.services_impl.recommendations import RecommendationReadService
 from app.core.container import Container
 from app.core.tenancy import TenantScope
 from app.domain.news import NewsSignal
@@ -80,12 +80,15 @@ class NewsReadService(ServiceBase):
     ) -> Page[NewsOpportunityView]:
         output = await self.artifact(scope, run_id, RECOMMEND_ARTIFACT)
         window = output.window(output.selected_window)
-        copies = await self.recommendations.copies(scope, run_id)
-        cards = [
-            with_copy(card, copies.get(card.extras.stable_key))
-            for card in (window.set.recommendations if window else [])
-            if card.type is RecType.news_opportunity and isinstance(card.extras.subject, NewsSubject)
-        ]
+        cards = await self.recommendations.worded(
+            scope,
+            run_id,
+            [
+                card
+                for card in (window.set.recommendations if window else [])
+                if card.type is RecType.news_opportunity and isinstance(card.extras.subject, NewsSubject)
+            ],
+        )
         signals = await self._signals(scope)
         views = [
             opportunity_view(signals[subject.news_signal_id], card)

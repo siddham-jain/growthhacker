@@ -6,7 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import RecommendSettings
 from app.core.db import UnitOfWork
+from app.domain.card_copy import CardCopy
 from app.domain.recommendations import FeedbackStatus
+from app.domain.recommendations import Recommendation as RecommendationCard
 from app.models.recommendations import (
     CreatorCollaboration,
     Recommendation,
@@ -19,6 +21,7 @@ from app.models.recommendations import (
 from app.models.runs import PipelineRun
 from app.models.tenancy import User
 from app.models.website import BuyerQuestion as BuyerQuestionRow
+from app.services.recommend.assembly import with_copy
 from app.services.recommend.feedback import OutcomeTracker, feedback_state
 from app.services.recommend.feedback_service import FeedbackService, UnknownRecommendationError
 from app.services.recommend.inputs import FeedbackState
@@ -206,3 +209,64 @@ async def test_cards_missing_from_the_next_run_expire_and_collaborations_are_sha
     assert statuses == ["expired"]
     kinds = set((await session.execute(select(CreatorCollaboration.kind))).scalars().all())
     assert {"sponsor_language", "disclosed_paid_promotion"} <= kinds
+
+
+def written(card: RecommendationCard, source: str, summary: str) -> CardCopy:
+    structured = card.extras.why_it_works_structured
+    return CardCopy(
+        draft_id=f"d_{card.extras.stable_key[:16]}",
+        summary=summary,
+        why_it_works=[reason.statement for reason in structured[:1]],
+        fit_to_client="Fits the knee replacement service you already offer",
+        reason_fact_ids=[[reason.reason_id] for reason in structured[:1]],
+        fit_fact_ids=[card.extras.fit_structured[0].reason_id],
+        copy_source=source,  # type: ignore[arg-type]
+        prompt_id="card_write",
+        prompt_version="1",
+        attempts=2,
+        language="en",
+    )
+
+
+async def stored_card(session: AsyncSession, run_id: uuid.UUID, stable_key: str) -> Recommendation:
+    statement = select(Recommendation).where(
+        Recommendation.run_id == run_id, Recommendation.stable_key == stable_key
+    )
+    return (await session.execute(statement.execution_options(populate_existing=True))).scalar_one()
+
+
+async def test_llm_copy_lands_on_the_card_row_and_template_never_replaces_it(session, scope, run_row) -> None:
+    result = await generate()
+    repository = RecommendationRepository(session, scope)
+    await repository.save_run(run_row, result)
+    card = result.output.window(30).set.recommendations[0]
+    key = card.extras.stable_key
+    rows_before = await count(session, Recommendation)
+
+    llm = written(card, "llm_revised", "Film a knee recovery explainer answering the top patient question")
+    assert await repository.attach_copy(run_row, {key: llm}) == 1
+    row = await stored_card(session, run_row, key)
+    stored = RecommendationCard.model_validate(row.payload)
+    assert stored.summary == llm.summary and stored.why_it_works == llm.why_it_works
+    assert stored.extras.rendered_by == "llm" and row.writer_meta["rendered_by"] == "llm"
+    assert row.writer_meta["evidence_hash"] and row.writer_meta["attempts"] == 2
+    # numbers and references stay as recommend assembled them
+    assert stored.reference_videos == card.reference_videos
+    assert stored.expected_range_vs_baseline == card.expected_range_vs_baseline
+    assert stored.confidence == card.confidence and stored.extras.subject == card.extras.subject
+
+    template = written(card, "template", "Knee replacement: a long-form video")
+    assert await repository.attach_copy(run_row, {key: template}) == 0
+    assert await repository.attach_copy(run_row, {key: llm}) == 1
+    row = await stored_card(session, run_row, key)
+    assert row.payload["summary"] == llm.summary
+    assert await count(session, Recommendation) == rows_before
+
+
+async def test_template_copy_never_rewords_an_llm_card() -> None:
+    card = (await generate()).output.window(30).set.recommendations[0]
+    card = card.model_copy(update={"extras": card.extras.model_copy(update={"rendered_by": "llm"})})
+    template = written(card, "template", "Knee replacement: a long-form video")
+    assert with_copy(card, template) is card
+    llm = written(card, "llm", "Film a knee recovery explainer this week")
+    assert with_copy(card, llm).summary == llm.summary

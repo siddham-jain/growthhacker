@@ -1,12 +1,14 @@
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from app.adapters.llm.testing import FakeLLMClient
 from app.core.clock import FrozenClock
 from app.core.config import Settings
 from app.core.registry import stage_registry
 from app.core.tenancy import TenantScope
+from app.domain.card_copy import CardCopy
 from app.domain.runs import CardWrittenPayload, RunKind, RunNoticeCode, RunTrigger
 from app.pipeline.contracts import Market, RunConfigSnapshot, RunContext
 from app.pipeline.stages.cards import CardInputs, WriteCardsStage
@@ -60,6 +62,18 @@ class CopyStore:
         self.saved.append((scope, run_id, cards))
 
 
+class CardRows:
+    def __init__(self) -> None:
+        self.attached: list[tuple[TenantScope, UUID, Mapping[str, CardCopy]]] = []
+
+    async def attach_copy(self, scope: TenantScope, run_id: UUID, copies: Mapping[str, CardCopy]) -> int:
+        self.attached.append((scope, run_id, copies))
+        return len(copies)
+
+
+SOURCE_RUN_ID = uuid4()
+
+
 @dataclass
 class Deps:
     settings: Settings
@@ -67,6 +81,7 @@ class Deps:
     card_writing: Any
     llm_budget: MemoryBudgetLedger
     recommendation_copy: CopyStore = field(default_factory=CopyStore)
+    recommendation_store: CardRows = field(default_factory=CardRows)
 
 
 class Cancel:
@@ -108,7 +123,9 @@ def deps_for(llm: FakeLLMClient, drafts: list[Any]) -> Deps:
     settings = make_settings()
     return Deps(
         settings=settings,
-        card_inputs=Inputs(CardInputs(drafts=drafts, client=make_client_context())),
+        card_inputs=Inputs(
+            CardInputs(drafts=drafts, client=make_client_context(), card_run_id=SOURCE_RUN_ID)
+        ),
         card_writing=build_card_writing_service(
             llm, settings.llm.writer.model_copy(update={"critic_enabled": False})
         ),
@@ -134,6 +151,12 @@ async def test_stage_writes_cards_and_streams_progress() -> None:
     assert reporter.progress_calls[-1] == (2, 2, "cards")
     scope, run_id, cards = deps.recommendation_copy.saved[0]
     assert scope.client_id == CLIENT_ID and run_id == RUN_ID and len(cards) == 2
+    # the written text goes onto the rows of the run that saved the drafts, not the writing run
+    _, card_run_id, copies = deps.recommendation_store.attached[0]
+    assert card_run_id == SOURCE_RUN_ID
+    assert {key: copy.summary for key, copy in copies.items()} == {
+        card.stable_key: card.card_copy.summary for card in cards
+    }
 
 
 async def test_stage_degrades_with_a_notice_when_the_llm_is_down() -> None:

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Literal
 from uuid import UUID
 
 from app.domain.card_copy import CardCopy
@@ -21,6 +22,41 @@ from app.services.recommend.fingerprint import evidence_hash
 
 MIN_EXPIRY_DAYS = 3
 EXAMPLE_TITLE_TYPES = frozenset({RecType.video_idea, RecType.title_pattern})
+LLM_COPY_SOURCES = frozenset({"llm", "llm_revised"})
+
+
+def reworded(
+    card: Recommendation,
+    *,
+    summary: str,
+    why_it_works: list[str],
+    fit_to_client: str,
+    rendered_by: Literal["llm", "template"],
+) -> Recommendation:
+    return card.model_copy(
+        update={
+            "summary": summary,
+            "why_it_works": why_it_works,
+            "fit_to_client": fit_to_client,
+            "extras": card.extras.model_copy(update={"rendered_by": rendered_by}),
+        }
+    )
+
+
+def with_copy(card: Recommendation, copy: CardCopy | None) -> Recommendation:
+    """10's wording replaces the card's text, but template never replaces llm; ids, numbers, references stay."""
+    if copy is None:
+        return card
+    rendered_by = "llm" if copy.copy_source in LLM_COPY_SOURCES else "template"
+    if rendered_by == "template" and card.extras.rendered_by == "llm":
+        return card
+    return reworded(
+        card,
+        summary=copy.summary,
+        why_it_works=list(copy.why_it_works),
+        fit_to_client=copy.fit_to_client,
+        rendered_by=rendered_by,
+    )
 
 
 @dataclass(frozen=True, slots=True)

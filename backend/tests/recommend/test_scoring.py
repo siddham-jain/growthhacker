@@ -1,4 +1,5 @@
 import random
+from collections import Counter
 from dataclasses import replace
 
 import pytest
@@ -73,8 +74,23 @@ def test_selection_respects_type_caps(ctx) -> None:
     ]
     selection = selector(ctx).select(candidates, 8)
 
-    assert len(selection.selected) == ctx.settings.type_caps["video_idea"]
+    # only video ideas exist, so the empty slots take the spill allowance and no more
+    assert len(selection.selected) == ctx.settings.type_caps["video_idea"] + ctx.settings.type_cap_spill
     assert {reason for _, reason in selection.skipped} == {"type_cap"}
+
+
+def test_type_caps_hold_while_other_types_can_fill_the_slots(ctx) -> None:
+    def scored(key: int, rec_type: RecType):
+        refs = [reference(10 * key + index, channel=f"c{key}{index}") for index in range(4)]
+        return Scorer().score(draft(refs, rec_type, key=str(key)), ctx)
+
+    ideas = [scored(key, RecType.video_idea) for key in range(6)]
+    titles = [scored(10 + key, RecType.title_pattern) for key in range(3)]
+    selection = selector(ctx).select([*ideas, *titles], 6)
+
+    counts = Counter(item.type for item in selection.selected)
+    assert counts[RecType.video_idea] == ctx.settings.type_caps["video_idea"]
+    assert counts[RecType.title_pattern] == ctx.settings.type_caps["title_pattern"]
 
 
 def test_a_reference_is_used_by_at_most_two_cards_and_swaps_keep_the_minimum(ctx) -> None:
@@ -118,3 +134,20 @@ def test_ranking_never_depends_on_input_order(ctx) -> None:
     first = [item.stable_key for item in selector(ctx).select(candidates, 4).selected]
     second = [item.stable_key for item in selector(ctx).select(shuffled, 4).selected]
     assert first == second
+
+
+def test_references_keep_every_outlier_before_spreading_channels() -> None:
+    same_channel_outliers = [reference(index, channel="manipal") for index in range(3)]
+    other_channels = [reference(10 + index, outlier=False) for index in range(4)]
+    chosen = ReferenceSelector().select(draft([*same_channel_outliers, *other_channels]))
+
+    assert sum(ref.is_outlier for ref in chosen) == 3
+    assert len(chosen) == 5
+    assert len({ref.channel_id for ref in chosen}) == 3
+
+
+def test_references_spread_channels_among_outliers_first() -> None:
+    outliers = [reference(0, channel="a"), reference(1, channel="a"), reference(2, channel="b")]
+    chosen = ReferenceSelector(display=2).select(draft(outliers))
+
+    assert {ref.channel_id for ref in chosen} == {outliers[0].channel_id, outliers[2].channel_id}
