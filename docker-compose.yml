@@ -1,0 +1,84 @@
+# local parity and small-prod outline; homebrew postgres 18 + redis are used for local dev today
+x-backend: &backend
+  build:
+    context: ./backend
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://growth:growth@postgres:5432/growthhacker
+    REDIS_URL: redis://redis:6379/0
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: growth
+      POSTGRES_PASSWORD: growth
+      POSTGRES_DB: growthhacker
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U growth -d growthhacker"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:8
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build:
+      context: ./backend
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://growth:growth@postgres:5432/growthhacker
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *backend
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--timeout-keep-alive", "120"]
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  worker-interactive:
+    <<: *backend
+    command: ["arq", "app.workers.settings.InteractiveWorkerSettings"]
+
+  worker-batch:
+    <<: *backend
+    command: ["arq", "app.workers.settings.BatchWorkerSettings"]
+
+  worker-maintenance:
+    <<: *backend
+    command: ["arq", "app.workers.settings.MaintenanceWorkerSettings"]
+
+volumes:
+  postgres-data:
+  redis-data:
