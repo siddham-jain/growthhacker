@@ -5,7 +5,17 @@ import respx
 
 from app.adapters.freshness.base import FreshnessDeps
 from app.adapters.freshness.rss import RssSource
+from app.services.website_intel.inputs.ssrf import SsrfGuard
 from tests.news.adapters.conftest import SINCE, planned
+
+
+async def public_resolver(host: str, port: int) -> list[str]:
+    return ["93.184.216.34"]
+
+
+def source(deps: FreshnessDeps) -> RssSource:
+    return RssSource(deps, guard=SsrfGuard(public_resolver))
+
 
 FEED_URL = "https://openai.com/news/rss.xml"
 RSS = b"""<?xml version="1.0"?>
@@ -27,7 +37,7 @@ ATOM = b"""<?xml version="1.0" encoding="utf-8"?>
 @respx.mock
 async def test_rss_items_dates_and_html(deps: FreshnessDeps) -> None:
     respx.get(FEED_URL).mock(return_value=httpx.Response(200, content=RSS))
-    result = await RssSource(deps).fetch(planned("rss", "openai_news", url=FEED_URL), SINCE)
+    result = await source(deps).fetch(planned("rss", "openai_news", url=FEED_URL), SINCE)
     assert result.status == "ok"
     assert [item.title for item in result.items] == ["New model", "Undated note"]
     dated, undated = result.items
@@ -40,7 +50,7 @@ async def test_rss_items_dates_and_html(deps: FreshnessDeps) -> None:
 async def test_atom_feed(deps: FreshnessDeps) -> None:
     url = "https://deepmind.google/blog/rss.xml"
     respx.get(url).mock(return_value=httpx.Response(200, content=ATOM))
-    result = await RssSource(deps).fetch(planned("rss", "deepmind", url=url), SINCE)
+    result = await source(deps).fetch(planned("rss", "deepmind", url=url), SINCE)
     assert result.items[0].url == "https://deepmind.google/blog/atom-entry"
     assert result.items[0].published_at == datetime(2026, 11, 18, 9, 30, tzinfo=UTC)
 
@@ -49,11 +59,11 @@ async def test_atom_feed(deps: FreshnessDeps) -> None:
 async def test_missing_feed_is_an_error(deps: FreshnessDeps) -> None:
     url = "https://www.anthropic.com/rss.xml"
     respx.get(url).mock(return_value=httpx.Response(404))
-    result = await RssSource(deps).fetch(planned("rss", "anthropic", url=url), SINCE)
+    result = await source(deps).fetch(planned("rss", "anthropic", url=url), SINCE)
     assert result.status == "error"
     assert "404" in (result.error or "")
 
 
 async def test_query_without_url_is_an_error(deps: FreshnessDeps) -> None:
-    result = await RssSource(deps).fetch(planned("rss", "nothing"), SINCE)
+    result = await source(deps).fetch(planned("rss", "nothing"), SINCE)
     assert result.status == "error"

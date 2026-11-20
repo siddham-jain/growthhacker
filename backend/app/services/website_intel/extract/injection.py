@@ -58,7 +58,7 @@ def _spans(text: str) -> list[tuple[int, int]]:
 
 
 class InjectionScanner:
-    """replaces instruction-like spans in untrusted page text and counts them (plan 03 §5.11.3)."""
+    """masks and counts instruction-like spans (plan 03 §5.11.3); a signal, the llm data fence is the defence."""
 
     def scan(self, text: str) -> ScanResult:
         spans = _spans(text)
@@ -75,4 +75,5 @@ class InjectionScanner:
 
 
 def contains_instruction(text: str) -> bool:
+    """drops model outputs that echo instructions; a signal, not the input defence."""
     return any(pattern.search(text) for pattern in INJECTION_PATTERNS)

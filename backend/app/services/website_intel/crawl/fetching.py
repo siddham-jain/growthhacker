@@ -32,6 +32,8 @@ class RawResponse:
     redirect_chain: list[str] = field(default_factory=list)
     error: str | None = None
     too_large: bool = False
+    # extracted off the event loop by the fetcher; "" when the pdf had no readable text
+    pdf_text: str | None = None
 
     @property
     def content_type(self) -> str | None:

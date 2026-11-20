@@ -1,8 +1,15 @@
 import asyncio
 import ipaddress
 import socket
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
+from types import MappingProxyType
+from typing import Any
 from urllib.parse import urlsplit
+
+import httpcore
+import httpx
 
 ALLOWED_PORTS = frozenset({80, 443})
 CGNAT = ipaddress.ip_network("100.64.0.0/10")
@@ -55,7 +62,8 @@ class SsrfGuard:
     def __init__(self, resolver: Resolver = system_resolver) -> None:
         self._resolver = resolver
 
-    async def check(self, url: str) -> None:
+    async def check(self, url: str) -> list[str]:
+        """the vetted addresses for the url's host; pin them so the connection cannot be re-resolved."""
         parts = urlsplit(url)
         if parts.scheme not in {"http", "https"} or not parts.hostname:
             raise UnsafeTargetError(f"unsupported target {url!r}")
@@ -68,3 +76,75 @@ class SsrfGuard:
         unsafe = [address for address in addresses if not is_public_address(address)]
         if unsafe:
             raise UnsafeTargetError(f"{parts.hostname} resolves to non-public {unsafe[0]}")
+        return addresses
+
+
+_pins: ContextVar[Mapping[str, tuple[str, ...]]] = ContextVar("ssrf_pins", default=MappingProxyType({}))
+
+
+def _pin_key(host: str) -> str:
+    try:
+        return host.encode("idna").decode("ascii").lower()
+    except UnicodeError:
+        return host.lower()
+
+
+@contextmanager
+def pinned(url: str, addresses: Sequence[str] | None) -> Iterator[None]:
+    """new connections to the url's host made inside this block go to the vetted addresses only."""
+    host = urlsplit(url).hostname
+    if not host or not addresses:
+        yield
+        return
+    token = _pins.set({**_pins.get(), _pin_key(host): tuple(addresses)})
+    try:
+        yield
+    finally:
+        _pins.reset(token)
+
+
+class PinnedNetworkBackend(httpcore.AsyncNetworkBackend):
+    """connects pinned hosts to their vetted ip; tls sni and the host header still use the hostname."""
+
+    def __init__(self, inner: httpcore.AsyncNetworkBackend | None = None) -> None:
+        self._inner = inner or httpcore.AnyIOBackend()
+
+    async def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,  # noqa: ASYNC109  (httpcore's backend interface)
+        local_address: str | None = None,
+        socket_options: Iterable[Any] | None = None,
+    ) -> httpcore.AsyncNetworkStream:
+        addresses = _pins.get().get(_pin_key(host), (host,))
+        failure: Exception | None = None
+        for address in addresses:
+            try:
+                return await self._inner.connect_tcp(
+                    address, port, timeout=timeout, local_address=local_address, socket_options=socket_options
+                )
+            except (httpcore.ConnectError, httpcore.ConnectTimeout) as error:
+                failure = error
+        assert failure is not None
+        raise failure
+
+    async def connect_unix_socket(
+        self,
+        path: str,
+        timeout: float | None = None,  # noqa: ASYNC109  (httpcore's backend interface)
+        socket_options: Iterable[Any] | None = None,
+    ) -> httpcore.AsyncNetworkStream:
+        return await self._inner.connect_unix_socket(path, timeout=timeout, socket_options=socket_options)
+
+    async def sleep(self, seconds: float) -> None:
+        await self._inner.sleep(seconds)
+
+
+class PinnedTransport(httpx.AsyncHTTPTransport):
+    """httpx transport that honours pinned(); unpinned hosts resolve as usual."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        # httpx exposes no network backend option, so the pool's backend is wrapped in place
+        self._pool._network_backend = PinnedNetworkBackend(self._pool._network_backend)

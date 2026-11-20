@@ -11,6 +11,7 @@ from app.core.db import SessionFactory, UnitOfWork, build_engine, build_session_
 from app.core.redis import LockManager, QuotaCounter, RateLimiter, build_redis
 from app.core.registry import PortRegistry, adapter_registry
 from app.core.security import PasswordService, SecretCipher
+from app.services.website_intel.inputs.ssrf import PinnedTransport
 
 
 class Container:
@@ -37,7 +38,9 @@ class Container:
 
     @cached_property
     def http(self) -> httpx.AsyncClient:
+        # the transport honours ssrf pins, so guarded fetchers connect only to the address they vetted
         return httpx.AsyncClient(
+            transport=PinnedTransport(),
             timeout=httpx.Timeout(30.0, connect=5.0),
             limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
             follow_redirects=False,

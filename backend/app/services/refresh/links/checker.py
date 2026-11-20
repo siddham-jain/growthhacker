@@ -14,6 +14,7 @@ from app.core.config import RefreshSettings
 from app.ports.clock import Clock
 from app.services.refresh.links.status import LinkStatus, LinkStatusClass
 from app.services.refresh.links.urls import malformation, normalise_url, on_domains
+from app.services.website_intel.inputs.ssrf import pinned
 
 USER_AGENT = "GrowthHackerLinkCheck/1.0"
 DEAD_STATUSES = frozenset({404, 410})
@@ -25,6 +26,9 @@ NOT_FOUND_TITLE = regex.compile(
 )
 FIRST_5XX = "server error on first probe"
 CGNAT = ipaddress.ip_network("100.64.0.0/10")
+ALLOWED_PORTS = frozenset({80, 443})
+# google reads at most 500 KiB of robots.txt; anything past it is ignored
+ROBOTS_MAX_BYTES = 500 * 1024
 
 Resolver = Callable[[str], Awaitable[list[str]]]
 
@@ -119,26 +123,35 @@ class LinkChecker:
             except (httpx.HTTPError, OSError) as error:
                 return self._status(key, LinkStatusClass.unverifiable, error=type(error).__name__)
 
-    async def _guard(self, url: str) -> None:
+    async def _guard(self, url: str) -> list[str]:
+        """the vetted addresses; requests pin them so a second dns answer cannot point elsewhere."""
         parts = urlsplit(url)
         if parts.scheme not in ("http", "https") or not parts.hostname:
             raise UnsafeTarget("only http and https links are checked")
+        try:
+            port = parts.port or (443 if parts.scheme == "https" else 80)
+        except ValueError:
+            raise UnsafeTarget("link has an invalid port") from None
+        if port not in ALLOWED_PORTS:
+            raise UnsafeTarget(f"links on port {port} are not checked")
         try:
             addresses = await self.resolver(parts.hostname)
         except socket.gaierror as error:
             raise httpx.ConnectError(f"cannot resolve {parts.hostname}") from error
         if not addresses or not all(is_public_address(address) for address in addresses):
             raise UnsafeTarget("link points at a private or internal address")
+        return addresses
 
     async def _follow(self, url: str, key: str, previous: LinkStatus | None) -> LinkStatus:
         current = url
         first_status: int | None = None
         for _ in range(self.settings.link_max_redirects + 1):
-            await self._guard(current)
+            addresses = await self._guard(current)
             if not await self._robots_allow(current):
                 return self._status(key, LinkStatusClass.unverifiable, error="robots.txt disallows checking")
             await self.pacer(urlsplit(current).hostname or "")
-            response = await self._request(current)
+            with pinned(current, addresses):
+                response = await self._request(current)
             first_status = first_status or response.status_code
             if response.is_redirect and "location" in response.headers:
                 target = urljoin(current, response.headers["location"])
@@ -213,18 +226,25 @@ class LinkChecker:
 
     async def _fetch_robots(self, origin: str) -> Protego | None:
         try:
-            await self._guard(origin)
-            response = await self.client.get(
-                f"{origin}/robots.txt",
-                headers={"User-Agent": USER_AGENT},
-                timeout=self.settings.link_timeout_s,
-                follow_redirects=False,
-            )
+            addresses = await self._guard(origin)
+            with pinned(origin, addresses):
+                async with self.client.stream(
+                    "GET",
+                    f"{origin}/robots.txt",
+                    headers={"User-Agent": USER_AGENT},
+                    timeout=self.settings.link_timeout_s,
+                    follow_redirects=False,
+                ) as response:
+                    if response.status_code != 200:
+                        return None
+                    body = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        body += chunk[: ROBOTS_MAX_BYTES - len(body)]
+                        if len(body) >= ROBOTS_MAX_BYTES:
+                            break
         except (httpx.HTTPError, UnsafeTarget, OSError):
             return None
-        if response.status_code != 200:
-            return None
-        return Protego.parse(response.text)
+        return Protego.parse(bytes(body).decode("utf-8", errors="replace"))
 
     @staticmethod
     def _same_page(original: str, target: str) -> bool:

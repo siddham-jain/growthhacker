@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import replace
 from urllib.parse import urljoin
 
 import httpx
@@ -9,12 +10,13 @@ from app.ports.clock import Clock
 from app.ports.crawler import FetchContext
 from app.services.website_intel.crawl.blocks import BlockClassifier
 from app.services.website_intel.crawl.fetching import RawResponse, UserAgents, decode_body
-from app.services.website_intel.inputs.ssrf import DnsLookupError, SsrfGuard, UnsafeTargetError
+from app.services.website_intel.inputs.ssrf import DnsLookupError, SsrfGuard, UnsafeTargetError, pinned
 from app.services.website_intel.models import PageVerdict
 
 MAX_REDIRECTS = 5
 BOMB_RATIO = 20
 ACCEPT = "text/html,application/xhtml+xml,application/pdf;q=0.9,*/*;q=0.5"
+PDF_MAGIC = b"%PDF-"
 
 
 class DirectHttpFetcher:
@@ -71,48 +73,56 @@ class DirectHttpFetcher:
         chain: list[str] = []
         current = url
         for _ in range(MAX_REDIRECTS + 1):
-            await self._guard.check(current)
-            async with self._client.stream(
-                "GET", current, headers=headers, follow_redirects=False
-            ) as response:
-                location = response.headers.get("location")
-                if response.is_redirect and location:
-                    chain.append(current)
-                    current = urljoin(current, location)
-                    continue
-                cap = (
-                    self._max_pdf_bytes
-                    if "pdf" in response.headers.get("content-type", "")
-                    else ctx.max_bytes
-                )
-                body, too_large = await self._read_capped(response, cap)
-                response_headers = {key.lower(): value for key, value in response.headers.items()}
-                verdict = self._classifier.classify(
-                    status_code=response.status_code,
-                    headers=response_headers,
-                    body=decode_body(body, response_headers.get("content-type")) if body else None,
-                    content_type=response_headers.get("content-type"),
-                )
-                return RawResponse(
-                    requested_url=url,
-                    final_url=current,
-                    status_code=response.status_code,
-                    headers=response_headers,
-                    body=body,
-                    verdict=verdict,
-                    redirect_chain=chain,
-                    too_large=too_large,
-                )
+            addresses = await self._guard.check(current)
+            with pinned(current, addresses):
+                async with self._client.stream(
+                    "GET", current, headers=headers, follow_redirects=False
+                ) as response:
+                    location = response.headers.get("location")
+                    if response.is_redirect and location:
+                        chain.append(current)
+                        current = urljoin(current, location)
+                        continue
+                    body, too_large = await self._read_capped(response, ctx.max_bytes, self._max_pdf_bytes)
+            response_headers = {key.lower(): value for key, value in response.headers.items()}
+            verdict = self._classifier.classify(
+                status_code=response.status_code,
+                headers=response_headers,
+                body=decode_body(body, response_headers.get("content-type")) if body else None,
+                content_type=response_headers.get("content-type"),
+            )
+            raw = RawResponse(
+                requested_url=url,
+                final_url=current,
+                status_code=response.status_code,
+                headers=response_headers,
+                body=body,
+                verdict=verdict,
+                redirect_chain=chain,
+                too_large=too_large,
+            )
+            if raw.is_pdf and not too_large and verdict.fetch_outcome is FetchOutcome.ok:
+                # pdf parsing is cpu bound, so it runs off the event loop
+                raw = replace(raw, pdf_text=await asyncio.to_thread(self._pdf_text, body) or "")
+            return raw
         return RawResponse(url, current, None, {}, b"", PageVerdict.error, chain, error="redirect_loop")
 
     @staticmethod
-    async def _read_capped(response: httpx.Response, cap: int) -> tuple[bytes, bool]:
+    async def _read_capped(response: httpx.Response, cap: int, pdf_cap: int) -> tuple[bytes, bool]:
+        # the larger pdf cap needs the pdf signature in the body; the content-type header alone is not trusted
+        declared_pdf = "pdf" in response.headers.get("content-type", "")
         chunks: list[bytes] = []
+        head = b""
         size = 0
+        limit = cap
         async for chunk in response.aiter_bytes():
+            if declared_pdf and len(head) < len(PDF_MAGIC):
+                head += chunk[: len(PDF_MAGIC) - len(head)]
+                if head == PDF_MAGIC:
+                    limit = max(cap, pdf_cap)
             size += len(chunk)
             compressed = max(response.num_bytes_downloaded, 1)
-            if size > cap or (size > cap // 4 and size / compressed > BOMB_RATIO):
+            if size > limit or (size > limit // 4 and size / compressed > BOMB_RATIO):
                 return b"".join(chunks), True
             chunks.append(chunk)
         return b"".join(chunks), False
@@ -126,7 +136,7 @@ class DirectHttpFetcher:
         html: str | None = None
         text: str | None = None
         if outcome is FetchOutcome.ok and raw.is_pdf:
-            text = self._pdf_text(raw.body)
+            text = (raw.pdf_text if raw.pdf_text is not None else self._pdf_text(raw.body)) or None
             outcome = FetchOutcome.ok if text else FetchOutcome.non_html
         elif outcome is FetchOutcome.ok and "html" in (raw.content_type or "html"):
             html = raw.decoded()
