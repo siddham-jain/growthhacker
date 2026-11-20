@@ -1,0 +1,27 @@
+version: "description-2026.11.1"
+booking_cta:
+  - '\b(?:book|booking|appointment|appointments|consult|consultation|schedule|register|enquire|enquiry|call now|visit us|get a quote|test drive)\b'
+  - 'अपॉइंटमेंट|संपर्क करें'
+  - '\bappointment book karein\b'
+phone:
+  - '(?<!\d)(?:\+91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}(?!\d)'
+  - '(?<!\d)1800[\s-]?\d{3}[\s-]?\d{4}(?!\d)'
+  - '(?<![\d+])\+\d{8,15}(?!\d)'
+whatsapp:
+  - 'wa\.me/'
+  - 'api\.whatsapp\.com'
+  - '\bwhatsapp\b'
+paid_disclosure:
+  - '#ad\b'
+  - '#sponsored\b'
+  - '\bpaid partnership\b'
+  - '\bsponsored by\b'
+  - '\bin partnership with\b'
+collab:
+  - '\b(?:ft\.?|feat\.?|featuring)\s+@?[\w.\-]{2,30}'
+  - '\b(?:with|x)\s+@[\w.\-]{3,30}'
+  - '\bin conversation with\b'
+  - '\bcollab\b'
+shorteners: [bit.ly, tinyurl.com, t.co, goo.gl, rb.gy, cutt.ly, is.gd, ow.ly, buff.ly, shorturl.at, tiny.cc]
+youtube_domains: [youtube.com, youtu.be]
+social_domains: [facebook.com, fb.com, instagram.com, twitter.com, x.com, linkedin.com, pinterest.com, threads.net, tiktok.com, snapchat.com, wa.me, whatsapp.com]

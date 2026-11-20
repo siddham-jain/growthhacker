@@ -1,0 +1,60 @@
+version: "intents-2026.11.1"
+base:
+  cost:
+    en: [cost, costs, price, prices, fees, fee, charges, how much, rate, rates, package, emi, insurance cover, rs]
+    hi_latn: [kitna, kitne, kitni, kharcha, kharch, paisa, paise, fees kya]
+    hi_deva: ["कितना", "कितने", "खर्च", "कीमत", "फीस", "पैसे"]
+    symbols: ["₹"]
+  location:
+    en: [where, location, address, branch, near me, which city]
+    hi_latn: [kahan, kaha, kidhar, address bhejo]
+    hi_deva: ["कहाँ", "कहां", "पता", "शाखा"]
+  booking:
+    en: [appointment, book, booking, consult, consultation, slot, contact number, phone number, how to contact, whatsapp number]
+    hi_latn: [appointment kaise, milna hai, contact karna, number do]
+    hi_deva: ["अपॉइंटमेंट", "संपर्क", "मिलना है", "नंबर"]
+  efficacy:
+    en: [does it work, is it effective, results, is it safe, side effects, side effect, risk, permanent]
+    hi_latn: [kya ye kaam karta, asar, safe hai kya, side effect]
+    hi_deva: ["असर", "सुरक्षित", "साइड इफेक्ट"]
+  how_to:
+    en: [how to, how do i, steps, what should i do]
+    hi_latn: [kaise kare, kya kare]
+    hi_deva: ["कैसे करें", "क्या करें"]
+  availability:
+    en: [available in, available at, sunday open, open on sunday]
+    hi_latn: [milega kya, available hai]
+    hi_deva: ["उपलब्ध"]
+  comparison:
+    en: [vs, better than, which is better, difference between]
+    hi_latn: [konsa better, farak]
+    hi_deva: ["कौन सा बेहतर", "अंतर"]
+niches:
+  healthcare:
+    doctor:
+      en: [which doctor, doctor name, specialist name]
+      hi_latn: [doctor ka naam, kaun se doctor]
+      hi_deva: ["डॉक्टर का नाम", "कौन से डॉक्टर"]
+      patterns: ['(?i:\bdr)\.?\s+[A-Z][a-z]+']
+    booking:
+      en: [opd timing, opd timings]
+    efficacy:
+      en: [success rate]
+    availability:
+      en: [cashless, insurance accepted, emergency]
+  auto_dealer:
+    cost:
+      en: [on-road price, on road price, mileage]
+    booking:
+      en: [test drive]
+  home_services:
+    cost:
+      en: [visit charge, visiting charge]
+    availability:
+      en: [same day]
+    efficacy:
+      en: [warranty]
+exclusions:
+  cost: [heart rate, success rate, pulse rate, survival rate]
+spam:
+  en: [giveaway, giving away, free iphone, crypto, bitcoin, forex, investment plan, telegram me, whatsapp me for, earn daily, double your money]
