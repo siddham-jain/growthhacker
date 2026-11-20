@@ -89,6 +89,8 @@ class LabelRecord(_Model):
     note: str | None = None
     seconds_spent: int | None = None
     labelled_at: datetime
+    # set when a workspace labels through the api; offline label packs carry none
+    workspace_id: UUID | None = None
 
 
 class GoldLabel(_Model):

@@ -94,7 +94,9 @@ class LabelStore:
                 note=label.note,
                 seconds_spent=label.seconds_spent,
                 labelled_at=label.labelled_at,
+                workspace_id=label.workspace_id,
             )
+            # a label is only ever replaced by its own workspace (or, for offline packs, by another pack)
             await self.session.execute(
                 statement.on_conflict_do_update(
                     index_elements=[Label.task_id, Label.labeller_id, Label.round],
@@ -102,18 +104,21 @@ class LabelStore:
                         name: statement.excluded[name]
                         for name in ("label", "reason_codes", "note", "seconds_spent", "labelled_at")
                     },
+                    where=Label.workspace_id.is_not_distinct_from(statement.excluded.workspace_id),
                 )
             )
         return len(labels)
 
-    async def labels(self, task_ids: Sequence[UUID]) -> list[LabelRecord]:
+    async def labels(
+        self, task_ids: Sequence[UUID], *, workspace_id: UUID | None = None
+    ) -> list[LabelRecord]:
+        """every label on the tasks, or only one workspace's when workspace_id is given."""
         if not task_ids:
             return []
-        rows = (
-            (await self.session.execute(select(Label).where(Label.task_id.in_(list(task_ids)))))
-            .scalars()
-            .all()
-        )
+        statement = select(Label).where(Label.task_id.in_(list(task_ids)))
+        if workspace_id is not None:
+            statement = statement.where(Label.workspace_id == workspace_id)
+        rows = (await self.session.execute(statement)).scalars().all()
         return [
             LabelRecord(
                 task_id=r.task_id,
@@ -124,6 +129,7 @@ class LabelStore:
                 note=r.note,
                 seconds_spent=r.seconds_spent,
                 labelled_at=r.labelled_at,
+                workspace_id=r.workspace_id,
             )
             for r in sorted(rows, key=lambda r: (str(r.task_id), str(r.labeller_id), r.round))
         ]

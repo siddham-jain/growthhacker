@@ -24,7 +24,8 @@ def _offset(cursor: str | None) -> int:
 
 
 class LabellingApi:
-    """outlier labels for 11's /evaluation routes; tasks are scoped through the workspace's channels."""
+    """outlier labels for 11's /evaluation routes; tasks are scoped through the workspace's channels, labels
+    through their workspace_id."""
 
     def __init__(self, container: Any) -> None:
         self.session_factory = container.session_factory
@@ -38,7 +39,7 @@ class LabellingApi:
             batch_id = await store.latest_batch_id()
             tasks = [] if batch_id is None else await store.tasks(batch_id)
             tasks = [t for t in tasks if t.video_id and t.channel_id in channels]
-            labels = await store.labels([t.task_id for t in tasks])
+            labels = await store.labels([t.task_id for t in tasks], workspace_id=scope.workspace_id)
         latest: dict[UUID, LabelRecord] = {}
         for label in sorted(labels, key=lambda lb: (lb.round, lb.labelled_at)):
             latest[label.task_id] = label
@@ -66,11 +67,13 @@ class LabellingApi:
                 raise NotFound("this video is not in a labelling batch for this workspace")
             label = LabelRecord(
                 task_id=task.task_id,
-                labeller_id=participant_id(body.labeller),
+                # labeller names are per workspace, so two workspaces' "alice" never share a label row
+                labeller_id=participant_id(f"{scope.workspace_id}:{body.labeller}"),
                 round=1,
                 label="outlier" if body.is_outlier else "not_outlier",
                 note=body.note,
                 labelled_at=now,
+                workspace_id=scope.workspace_id,
             )
             await store.save_labels([label])
         return self._out(video_id, channels.get(task.channel_id or "", []), label)

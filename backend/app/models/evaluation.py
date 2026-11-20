@@ -173,6 +173,10 @@ class Label(Base):
     note: Mapped[str | None]
     seconds_spent: Mapped[int | None]
     labelled_at: Mapped[datetime]
+    # set when a workspace labels through the api; offline label packs carry none
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
 
 
 class LabelGold(Base):
