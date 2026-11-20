@@ -36,16 +36,32 @@ class LifecycleOutcome(DomainModel):
     alerts: list[RefreshAlert] = []
 
 
+def _line_at(description: str, offset: int) -> str:
+    end = description.find("\n", offset)
+    return description[offset : end if end >= 0 else len(description)]
+
+
+def _keywords_at_placement(op: InsertionOp, description: str) -> bool:
+    if not op.keywords_added:
+        return False
+    try:
+        offset = resolve_offset(description, op)
+    except AnchorNotFound:
+        return False
+    presence = KeywordPresence(_line_at(description, offset))
+    return all(presence.contains(keyword) for keyword in op.keywords_added)
+
+
 def _op_visible(op: InsertionOp, description: str, overlap: float) -> bool:
     if op.kind is InsertionKind.link_fix:
         return op.text in description and (op.old_text or "") not in description
-    presence = KeywordPresence(description)
-    if op.keywords_added and all(presence.contains(keyword) for keyword in op.keywords_added):
+    if _keywords_at_placement(op, description):
         return True
     wanted = set(content_tokens(op.text))
     if not wanted:
         return op.text in description
-    return len(wanted & set(tokens(description))) / len(wanted) >= overlap
+    # a reworded paste still lands as one line, so overlap is judged line by line
+    return any(len(wanted & set(tokens(line))) / len(wanted) >= overlap for line in description.splitlines())
 
 
 def detect_applied(refresh: DescriptionRefresh, description: str, overlap: float) -> bool:

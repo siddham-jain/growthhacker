@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from app.core.config import RefreshSettings
+from app.core.logging import get_logger
 from app.domain.confidence import ConfidenceBasis
 from app.domain.profile import BusinessProfile
 from app.domain.recommendations import GateAction, RecommendationDraft
@@ -70,6 +71,8 @@ UNSUPPORTED_LANGUAGE = "We only suggest wording in English right now. Link fixes
 NO_ACTIONS = (
     "We couldn't find a booking or sign-up page on your website. Add one in Settings to get link suggestions."
 )
+
+logger = get_logger(__name__)
 
 
 @dataclass(slots=True)
@@ -512,7 +515,14 @@ class RefreshEngine:
     ) -> tuple[list[DescriptionRefresh], list[RecommendationDraft]]:
         merged: list[tuple[float, float, str, MergeResult]] = []
         for video_id, items in candidates.items():
-            result = self.merger.merge(states[video_id].video, items)
+            try:
+                result = self.merger.merge(states[video_id].video, items)
+            except ValueError as error:
+                # one suggestion that cannot be applied cleanly is dropped; the rest of the run continues
+                logger.warning("refresh_merge_failed", video_id=video_id, error=str(error))
+                for item in items:
+                    run.drop(item.finding, "this change could not be applied to the current description")
+                continue
             for finding, reason in result.dropped:
                 run.drop(finding, reason)
             if not result.operations and not result.advisories:

@@ -14,7 +14,7 @@ from app.models.refresh import LinkCheckCache
 from app.models.refresh import RefreshEligibility as RefreshEligibilityRow
 from app.models.refresh import RefreshImpact as RefreshImpactRow
 from app.repositories.shared.base import SharedRepository
-from app.repositories.tenant.base import TenantRepository
+from app.repositories.tenant.base import TenantMismatchError, TenantRepository
 from app.services.refresh.inputs import PastImpact, StoredRefresh
 from app.services.refresh.lifecycle import StatusChange
 from app.services.refresh.links.health import CachedLink
@@ -57,30 +57,43 @@ def stored_refresh(row: DescriptionRefreshRow) -> StoredRefresh:
 class DescriptionRefreshRepository(TenantRepository[DescriptionRefreshRow]):
     model = DescriptionRefreshRow
 
-    def save(self, refresh: DescriptionRefresh) -> DescriptionRefreshRow:
+    async def save(self, refresh: DescriptionRefresh) -> None:
+        # the id is derived from the run, so a resumed attempt rewrites its own still-open row
+        if self.scope.client_id is not None and refresh.client_id != self.scope.client_id:
+            raise TenantMismatchError("refresh belongs to another client")
         dumped = refresh.model_dump(mode="json")
-        return self.add(
-            DescriptionRefreshRow(
-                id=uuid.UUID(refresh.id),
-                client_id=refresh.client_id,
-                video_id=refresh.video_id,
-                run_id=refresh.run_id,
-                triggers=dumped["triggers"],
-                operations=dumped["operations"],
-                advisories=dumped["advisories"],
-                suggested_tags=refresh.suggested_tags,
-                keywords_added=refresh.keywords_added,
-                dedupe_keys=sorted({trigger.dedupe_key for trigger in refresh.triggers}),
-                inserted_bytes=refresh.inserted_bytes,
-                resulting_bytes=refresh.resulting_bytes,
-                expected_effect=refresh.expected_effect,
-                confidence=dumped["confidence"],
-                priority=refresh.priority,
-                expires_at=refresh.expires_at,
-                status=refresh.status.value,
-                description_hash_at_generation=refresh.description_hash_at_generation,
-                review_required=refresh.review_required,
-                generated_at=refresh.generated_at,
+        values = {
+            "id": uuid.UUID(refresh.id),
+            "workspace_id": self.scope.workspace_id,
+            "client_id": refresh.client_id,
+            "video_id": refresh.video_id,
+            "run_id": refresh.run_id,
+            "triggers": dumped["triggers"],
+            "operations": dumped["operations"],
+            "advisories": dumped["advisories"],
+            "suggested_tags": refresh.suggested_tags,
+            "keywords_added": refresh.keywords_added,
+            "dedupe_keys": sorted({trigger.dedupe_key for trigger in refresh.triggers}),
+            "inserted_bytes": refresh.inserted_bytes,
+            "resulting_bytes": refresh.resulting_bytes,
+            "expected_effect": refresh.expected_effect,
+            "confidence": dumped["confidence"],
+            "priority": refresh.priority,
+            "expires_at": refresh.expires_at,
+            "status": refresh.status.value,
+            "description_hash_at_generation": refresh.description_hash_at_generation,
+            "review_required": refresh.review_required,
+            "generated_at": refresh.generated_at,
+        }
+        statement = insert(DescriptionRefreshRow).values(**values)
+        fixed = ("id", "workspace_id", "client_id", "video_id", "run_id")
+        await self.session.execute(
+            statement.on_conflict_do_update(
+                index_elements=["id"],
+                set_={key: statement.excluded[key] for key in values if key not in fixed},
+                where=(DescriptionRefreshRow.workspace_id == self.scope.workspace_id)
+                & (DescriptionRefreshRow.client_id == refresh.client_id)
+                & (DescriptionRefreshRow.status == RefreshStatus.proposed.value),
             )
         )
 
@@ -301,7 +314,7 @@ class SqlRefreshStore:
             for change in changes:
                 await refresh_repository.apply_change(change)
             for refresh in refreshes:
-                refresh_repository.save(refresh)
+                await refresh_repository.save(refresh)
             uow.repository(RefreshEligibilityRepository, self.scope).save(eligibility, last_keyword_eval_at)
             impact_repository = uow.repository(RefreshImpactRepository, self.scope)
             for impact in impacts:

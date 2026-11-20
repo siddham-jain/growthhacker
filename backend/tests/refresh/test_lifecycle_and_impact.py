@@ -4,7 +4,14 @@ from datetime import timedelta
 import pytest
 
 from app.core.config import RefreshSettings
-from app.domain.refresh import RefreshStatus
+from app.domain.refresh import (
+    ClaimLevel,
+    InsertionAnchor,
+    InsertionKind,
+    InsertionOp,
+    InsertionPosition,
+    RefreshStatus,
+)
 from app.services.refresh.eligibility import build_video_states
 from app.services.refresh.impact import ImpactCalculator, views_at
 from app.services.refresh.inputs import StoredRefresh
@@ -82,9 +89,37 @@ async def test_applied_is_detected_from_the_refetched_description(sample_refresh
 
 async def test_partial_paste_with_reworded_line_still_counts(sample_refresh) -> None:
     description = scenarios.runable().own_videos[0].description
-    reworded = "Claude Fable 5.2 is out now (Nov 2026); this was recorded before it.\n" + description
+    first, rest = description.split("\n", 1)
+    reworded = f"{first}\nClaude Fable 5.2 is out now (Nov 2026); this was recorded before it.\n{rest}"
     reworded += "\n#MakeMoneyWithAI #AITools"
     assert detect_applied(sample_refresh, reworded, SETTINGS.applied_token_overlap)
+
+
+def top_line_op(text: str, keywords: list[str]) -> InsertionOp:
+    return InsertionOp(
+        op_id="x",
+        kind=InsertionKind.insert,
+        position=InsertionPosition.top_line,
+        anchor=InsertionAnchor(
+            strategy="line_boundary", anchor_excerpt="", anchor_hash="h", char_offset_hint=0
+        ),
+        text=text,
+        text_bytes=len(text.encode()),
+        keywords_added=keywords,
+        claim_level=ClaimLevel.l2_coverage,
+        phrased_by="template",
+    )
+
+
+async def test_a_keyword_elsewhere_in_the_description_is_not_an_applied_insert(sample_refresh) -> None:
+    text = "Hair transplant recovery: what to expect in the first weeks"
+    refresh = sample_refresh.model_copy(update={"operations": [top_line_op(text, ["hair transplant"])]})
+    unrelated = "Welcome to our clinic channel. " * 6
+    description = unrelated + "\n\nIn this video we discuss hair transplant recovery tips.\nfixed typo"
+    assert not detect_applied(refresh, description, SETTINGS.applied_token_overlap)
+    assert detect_applied(refresh, f"{text}\n{description}", SETTINGS.applied_token_overlap)
+    reworded_top = "Hair transplant: the first weeks of recovery\n" + description
+    assert detect_applied(refresh, reworded_top, SETTINGS.applied_token_overlap)
 
 
 async def test_rewritten_description_supersedes_the_suggestion(sample_refresh) -> None:

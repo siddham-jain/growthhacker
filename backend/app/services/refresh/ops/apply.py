@@ -72,17 +72,27 @@ def apply_ops(description: str, ops: Sequence[InsertionOp]) -> str:
     return result
 
 
+def _with_link_fixes(before: str, ops: Sequence[InsertionOp]) -> tuple[str, list[str]]:
+    # resolves each url span exactly as apply_ops does, so verify and apply never disagree on offsets
+    fixes = []
+    problems = []
+    for op in ops:
+        if op.kind is not InsertionKind.link_fix:
+            continue
+        try:
+            fixes.append((resolve_offset(before, op), op))
+        except AnchorNotFound:
+            problems.append("a link fix replaces text that is not in the description")
+    fixed = before
+    for offset, op in sorted(fixes, key=lambda item: item[0], reverse=True):
+        fixed = fixed[:offset] + op.text + fixed[offset + len(op.old_text or "") :]
+    return fixed, problems
+
+
 def verify_additive(before: str, after: str, ops: Sequence[InsertionOp]) -> list[str]:
     """the original must survive as an ordered subsequence of lines, with only the proposed lines added."""
     newline = newline_of(before) if before else newline_of(after)
-    fixed = before
-    problems = []
-    for op in ops:
-        if op.kind is InsertionKind.link_fix:
-            if not op.old_text or op.old_text not in fixed:
-                problems.append("a link fix replaces text that is not in the description")
-                continue
-            fixed = fixed.replace(op.old_text, op.text, 1)
+    fixed, problems = _with_link_fixes(before, ops)
     original = fixed.split(newline) if fixed else []
     cursor = 0
     added = []

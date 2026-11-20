@@ -4,7 +4,7 @@ from collections.abc import Iterable, Sequence
 import regex
 
 TOKEN = regex.compile(r"[\p{L}\p{M}\p{N}]+")
-HASHTAG = regex.compile(r"#([\p{L}\p{N}_]+)")
+HASHTAG = regex.compile(r"#([\p{L}\p{M}\p{N}_]+)")
 CAMEL_BOUNDARY = regex.compile(r"(?<=[\p{Ll}\p{N}])(?=\p{Lu})|(?<=\p{L})(?=\p{N})|(?<=\p{N})(?=\p{L})")
 NUMBER = regex.compile(r"\d+(?:[.,]\d+)*%?")
 URL_LIKE = regex.compile(r"(?:https?://|www\.)\S+", regex.IGNORECASE)
