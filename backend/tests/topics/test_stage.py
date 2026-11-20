@@ -13,6 +13,7 @@ from app.pipeline.contracts import (
     RunContext,
     UsageLedger,
 )
+from app.pipeline.stages.niche import NICHE_DISCOVERY, NicheChannel, NicheDiscovery
 from app.pipeline.stages.topics import TOPIC_REPORT, LedgerSpendGuard, TopicsStage
 from app.services.topics.engine import TopicEngine
 from tests.conftest import make_settings
@@ -59,6 +60,14 @@ class Reporter:
         self.events.append(("notice", notice.message))
 
 
+class Artifacts:
+    def __init__(self, niche=None) -> None:
+        self.niche = niche
+
+    async def get_optional(self, key):
+        return self.niche if key is NICHE_DISCOVERY else None
+
+
 class Cancel:
     def is_cancelled(self) -> bool:
         return False
@@ -84,14 +93,16 @@ class Container:
         return self._ports[port]
 
 
-def context(scope, container, refs, kind=RunKind.analysis, ledger=None) -> RunContext:
+def context(
+    scope, container, refs, kind=RunKind.analysis, ledger=None, own_channel=CHANNEL, niche=None
+) -> RunContext:
     snapshot = RunConfigSnapshot(
         workspace_id=scope.workspace_id,
         client_id=scope.client_id,
         config_version=1,
         config_hash="c",
         window_days=30,
-        own_channel_id=CHANNEL,
+        own_channel_id=own_channel,
         topic_refs=refs,
         topic_set_version=1,
         profile_version=1,
@@ -107,7 +118,7 @@ def context(scope, container, refs, kind=RunKind.analysis, ledger=None) -> RunCo
         clock=FrozenClock(NOW),
         budget=ledger or Ledger(1.0),
         reporter=Reporter(),
-        artifacts=None,
+        artifacts=Artifacts(niche),
         cancel=Cancel(),
         deps=container,
         stage="topics",
@@ -155,3 +166,44 @@ def test_spend_guard_maps_ledger_refusals() -> None:
     assert guard.allow(0.005)
     guard.record(0.008)
     assert not guard.allow(0.005)
+
+
+class WorkspaceDeps:
+    """per-run deps: the shared container plus this workspace's llm client."""
+
+    def __init__(self, shared: Container, llm) -> None:
+        self.shared = shared
+        self.llm = llm
+
+    def __getattr__(self, name: str):
+        return getattr(self.shared, name)
+
+
+async def test_stage_adjudicates_with_the_workspace_llm(scope, uow_factory, video_ids) -> None:
+    deployment = FakeLLM(judge=judge_by_label(apollo.ADJUDICATION_RULES), proposals=apollo.PROPOSALS)
+    workspace = FakeLLM(judge=judge_by_label(apollo.ADJUDICATION_RULES), proposals=apollo.PROPOSALS)
+    container = Container(uow_factory, deployment)
+    build = await TopicEngine.from_container(container).build_universe(
+        scope, apollo.PROFILE.model_copy(update={"client_id": scope.client_id}), apollo.QUESTIONS
+    )
+    deployment_calls = len(deployment.calls)
+    ctx = context(scope, WorkspaceDeps(container, workspace), build.universe.refs)
+    result = await TopicsStage().run(ctx)
+    assert result.counts["llm_calls"] > 0
+    assert len(workspace.calls) == result.counts["llm_calls"]
+    assert len(deployment.calls) == deployment_calls
+
+
+async def test_stage_matches_niche_and_creator_uploads(scope, uow_factory, video_ids) -> None:
+    llm = FakeLLM(judge=judge_by_label(apollo.ADJUDICATION_RULES), proposals=apollo.PROPOSALS)
+    container = Container(uow_factory, llm)
+    build = await TopicEngine.from_container(container).build_universe(
+        scope, apollo.PROFILE.model_copy(update={"client_id": scope.client_id}), apollo.QUESTIONS
+    )
+    alone = await TopicsStage().run(context(scope, container, build.universe.refs, own_channel=None))
+    assert alone.artifact.videos_considered == 0
+    niche = NicheDiscovery(channels=[NicheChannel(channel_id=CHANNEL, role="creator", status="active")])
+    result = await TopicsStage().run(
+        context(scope, container, build.universe.refs, own_channel=None, niche=niche)
+    )
+    assert result.artifact.videos_considered == len(video_ids)

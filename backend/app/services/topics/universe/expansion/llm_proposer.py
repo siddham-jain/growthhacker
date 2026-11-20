@@ -65,8 +65,8 @@ class LLMAliasProposer:
             try:
                 proposals.update(await self._propose_batch(batch, languages, client_id, run_id))
             except LLMError as error:
+                # one failed batch only costs that batch its proposals
                 self.warnings.append(f"alias_proposals_unavailable:{error.kind.value}")
-                break
         return proposals
 
     async def _propose_batch(

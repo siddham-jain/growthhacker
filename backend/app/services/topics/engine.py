@@ -1,3 +1,4 @@
+import copy
 import hashlib
 import json
 import time
@@ -133,6 +134,14 @@ class TopicEngine:
             router=_optional_adapter(container, "embedder"),
             llm=_optional_adapter(container, "llm"),
         )
+
+    def with_llm(self, llm: LLMClient | None) -> "TopicEngine":
+        """the same engine (caches, embedders) adjudicating through another llm client, e.g. a workspace's own."""
+        if llm is self._llm:
+            return self
+        engine = copy.copy(self)
+        engine._llm = llm
+        return engine
 
     @property
     def embedder_model_ids(self) -> dict[str, str]:

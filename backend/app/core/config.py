@@ -271,6 +271,9 @@ class AnthropicSettings(LLMProviderSettings):
         "high": {"model": "claude-sonnet-5-5", "effort": "medium", "max_tokens": 8192, "timeout_s": 60},
     }
 
+    # request fields such as service_tier; sampling params are dropped by the adapter
+    extra_params: dict[str, Any] = {}
+
 
 class OpenAICompatSettings(LLMProviderSettings):
     defaults: ClassVar[dict[str, Any]] = {
@@ -584,6 +587,8 @@ class AnalyticsSettings(BaseModel):
     lift_min_channels: int = 2
     lift_fdr_q: float = 0.10
     proxy_switch_coverage: float = 0.80
+    thumbnail_ocr_workers: int = Field(default=4, ge=1)
+    thumbnail_ocr_control_share: float = Field(default=0.2, ge=0.0, le=1.0)
 
 
 class RefreshNeedWeights(BaseModel):
@@ -776,6 +781,7 @@ class NewsSettings(BaseModel):
     long_lived_event_recency_days: int = 30
     query_lock_ttl_s: int = 120
     on_demand_cooldown_minutes: int = 30
+    poll_concurrency: int = Field(default=6, ge=1)
     rate_limited_retry_minutes: int = 15
     breaker_failure_threshold: int = 3
     breaker_window_s: int = 600
@@ -872,7 +878,7 @@ class CompetitorSettings(BaseModel):
     youtube_tier_high_overlap: float = 0.25
     youtube_tier_high_activity: float = 0.50
     youtube_tier_medium_overlap: float = 0.10
-    proposal_size: int = 7
+    proposal_size: int = 10
     min_competitors: int = 3
     max_competitors: int = 10
     niche_max: int = 20
@@ -1018,6 +1024,8 @@ class RecommendSettings(BaseModel):
         "creator": 3,
         "news_opportunity": 2,
     }
+    # extra cards per type allowed only when no other type can fill the window's slots
+    type_cap_spill: int = 2
     refresh_surface_cap: int = 5
     hygiene_cap: int = 10
     early_signal_cap: int = 5
@@ -1263,7 +1271,7 @@ class TopicEngineSettings(BaseModel):
     semantic_only_forced_below: float = 0.9
     conflict_min_lexical: float = 0.6
     no_embedder_min_lexical: float = 0.8
-    adj_batch_videos: int = 20
+    adj_batch_videos: int = 10
     adj_max_candidates: int = 5
     adj_concurrency: int = 4
     adj_max_videos_per_run: dict[str, int] = {"cold": 800, "daily": 60}
@@ -1282,8 +1290,9 @@ class TopicEngineSettings(BaseModel):
     min_buyer_questions: int = 3
     bq_merge_cos: float = 0.92
     parent_link_cos: float = 0.75
-    proposer_batch_refs: int = 30
+    proposer_batch_refs: int = 15
     proposer_max_aliases: int = 8
+    child_term_weight: float = 0.85
     default_languages: list[str] = ["en", "hi", "hi-Latn"]
     qa_sample_pct: float = 2.0
     scope_window_days: int = 90
@@ -1320,12 +1329,14 @@ class RunBudgetSettings(BaseModel):
 
 def _default_run_budgets() -> dict[str, RunBudgetSettings]:
     rows = {
-        "onboarding": (600, 150, 6, 0.60, 40),
-        "analysis": (1200, 900, 4, 1.00, 20),
+        # matches llm.budgets.onboarding_run_max_usd: an uncached profile alone is ~$0.60
+        "onboarding": (600, 150, 6, 1.50, 40),
+        # matches llm.budgets.analysis_run_max_usd: topic adjudication alone may use $1.00 on a cold run
+        "analysis": (1200, 900, 4, 1.50, 20),
         "daily_refresh": (600, 120, 1, 0.30, 10),
         "cards": (300, 0, 0, 0.40, 0),
         "news_scan": (300, 30, 1, 0.20, 20),
-        "recrawl": (900, 0, 0, 0.60, 40),
+        "recrawl": (900, 0, 0, 1.00, 40),
         "backtest": (1800, 0, 0, 1.00, 0),
     }
     return {

@@ -121,11 +121,9 @@ def test_funnel_stage_is_derived_from_facets_when_missing(lexicons) -> None:
 
 
 async def test_brand_terms_are_non_topical_and_brand_like_keywords_are_ambiguous() -> None:
-    source = profile(
-        APOLLO_CLIENT, name="Max Healthcare", keywords=[keyword("k1", "Max")], brand_terms=["Max"]
-    )
-    built = await build(UniverseInputs(profile=source, competitor_names=["Fortis Healthcare"]))
-    assert {"Max Healthcare", "Max", "Fortis Healthcare"} <= set(built.non_topical_terms)
+    source = profile(APOLLO_CLIENT, name="Apollo", keywords=[keyword("k1", "Max")], brand_terms=["Apollo"])
+    built = await build(UniverseInputs(profile=source, competitor_names=["Max", "Fortis Healthcare"]))
+    assert {"Apollo", "Max", "Fortis Healthcare"} <= set(built.non_topical_terms)
     assert built.universe.refs[0].aliases[0].ambiguous
 
 
@@ -270,3 +268,76 @@ async def test_fingerprint_ignores_alias_order_but_tracks_status() -> None:
         for alias in ref.aliases
     ]
     assert ref_fingerprint(ref.model_copy(update={"aliases": demoted})) != ref.fingerprint
+
+
+def site_evidence(quote: str, extraction: str = "nav"):
+    from app.domain.profile import Evidence
+
+    return Evidence(
+        source_kind="site_direct",
+        extraction=extraction,
+        source_url="https://example.com/",
+        quote=quote,
+        match_score=100.0,
+        fetched_at=NOW,
+    )
+
+
+def evidenced(item, *quotes: tuple[str, str]):
+    return item.model_copy(
+        update={"meta": item.meta.model_copy(update={"evidence": [site_evidence(q, e) for q, e in quotes]})}
+    )
+
+
+async def test_parent_offerings_carry_child_terms_and_site_short_names() -> None:
+    neuro = evidenced(offering("o1", "Neurosciences"), ("Neurosciences", "nav"))
+    epilepsy = evidenced(
+        offering("o2", "Epilepsy treatment"),
+        ("Epilepsy", "nav"),
+        ("Top Epilepsy Specialists in India", "page_text"),
+    ).model_copy(update={"parent_id": "o1"})
+    ambulance = evidenced(offering("o3", "Ambulance services"), ("Ambulance in Chennai", "nav"))
+    source = profile(APOLLO_CLIENT, name="Apollo", offerings=[neuro, epilepsy, ambulance])
+    source = source.model_copy(
+        update={"locations": source.locations.model_copy(update={"cities": ["Chennai"]})}
+    )
+    refs = by_label((await build(UniverseInputs(profile=source))).universe)
+    child = {
+        alias.text: alias for alias in refs["Neurosciences"].aliases if alias.origin == "profile_extracted"
+    }
+    assert set(child) == {"Epilepsy treatment", "Epilepsy"}
+    assert all(alias.status == "confirmed" and alias.weight == 0.85 for alias in child.values())
+    own = {alias.text: alias.status for alias in refs["Epilepsy treatment"].aliases}
+    # the child keeps its own short name although the parent carries it too
+    assert own["Epilepsy"] == "confirmed"
+    assert "Top Epilepsy Specialists in India" not in own
+    assert {alias.text for alias in refs["Ambulance services"].aliases} == {"Ambulance services"}
+
+
+async def test_brand_and_trust_keywords_are_not_topics() -> None:
+    trust = keyword("k3", "NABH accredited").model_copy(update={"kind": "brand_adjacent"})
+    source = profile(
+        APOLLO_CLIENT,
+        name="Apollo Hospitals",
+        keywords=[keyword("k1", "Apollo Hospital India"), keyword("k2", "cancer care hospital"), trust],
+    )
+    built = await build(UniverseInputs(profile=source, competitor_names=["CARE Hospitals"]))
+    assert set(by_label(built.universe)) == {"cancer care hospital"}
+
+
+async def test_one_failed_proposal_batch_keeps_the_others() -> None:
+    class FlakyLLM(FakeLLM):
+        async def generate_structured(self, **kwargs):
+            if not self.calls:
+                self.calls.append({"prompt": "failed"})
+                raise LLMError(LLMErrorKind.truncated, "cut off")
+            return await super().generate_structured(**kwargs)
+
+    from app.ports.llm import LLMError
+
+    llm = FlakyLLM(proposals=apollo.PROPOSALS)
+    built = await build(
+        UniverseInputs(profile=apollo.PROFILE), llm=llm, settings=TopicEngineSettings(proposer_batch_refs=1)
+    )
+    assert "alias_proposals_unavailable:truncated" in built.universe.warnings
+    assert any(alias.origin == "llm_proposed" for ref in built.universe.refs for alias in ref.aliases)

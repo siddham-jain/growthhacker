@@ -112,5 +112,6 @@ def test_explanations_name_the_evidence(apollo_run) -> None:
 
 
 def test_adjudication_stays_small(apollo_run, runable_run) -> None:
-    assert apollo_run.output.adjudication.calls == 1
-    assert runable_run.output.adjudication.calls == 1
+    # batches of 10 videos keep each verdict call small enough to judge reliably
+    assert apollo_run.output.adjudication.calls <= 2
+    assert runable_run.output.adjudication.calls <= 2

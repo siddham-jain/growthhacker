@@ -16,6 +16,7 @@ from app.pipeline.contracts import (
     StagePolicy,
     StageResult,
 )
+from app.pipeline.stages.niche import NICHE_DISCOVERY
 from app.ports.artifacts import ArtifactKey
 from app.services.topics.engine import TopicEngine
 from app.services.topics.report import TopicEngineReport
@@ -66,8 +67,9 @@ class TopicsStage:
     depends_on: ClassVar[tuple[str, ...]] = ("ingest",)
     optional_deps: ClassVar[tuple[str, ...]] = ("enrich", "niche_discovery")
     produces: ClassVar[ArtifactKey[TopicEngineReport]] = TOPIC_REPORT
+    # adjudication reads ~10 full videos per call (~$0.011), so a cold run needs room for ~90 calls
     policy: ClassVar[StagePolicy] = StagePolicy(
-        timeout_s=600, soft_timeout_s=480, budget=StageBudget(llm_usd=0.50)
+        timeout_s=600, soft_timeout_s=480, budget=StageBudget(llm_usd=1.00)
     )
     weight: ClassVar[float] = 10.0
 
@@ -90,7 +92,9 @@ class TopicsStage:
         shared = getattr(ctx.deps, "shared", ctx.deps)
         if shared not in self._engines:
             self._engines[shared] = TopicEngine.from_container(shared)
-        return self._engines[shared]
+        engine = self._engines[shared]
+        # per-run deps carry the workspace's llm client (its PUT /settings/llm overrides)
+        return engine.with_llm(ctx.deps.llm) if hasattr(ctx.deps, "llm") else engine
 
     async def run(self, ctx: RunContext[Any]) -> StageResult[TopicEngineReport]:
         engine = self._engine(ctx)
@@ -108,9 +112,16 @@ class TopicsStage:
             stored, terms = loaded
             refs = [ref for ref in stored.refs if ref.id in pinned]
             universe = stored if len(refs) == len(stored.refs) else stored.model_copy(update={"refs": refs})
-        channels = [
-            channel for channel in [snapshot.own_channel_id, *snapshot.competitor_channel_ids] if channel
-        ]
+        niche = await ctx.artifacts.get_optional(NICHE_DISCOVERY)
+        # niche and creator uploads need topics too, or creator lists can never find matching uploads
+        discovered = [channel.channel_id for channel in niche.channels] if niche is not None else []
+        channels = list(
+            dict.fromkeys(
+                channel
+                for channel in [snapshot.own_channel_id, *snapshot.competitor_channel_ids, *discovered]
+                if channel
+            )
+        )
         video_ids = await engine.scope_video_ids(channels, ctx.as_of)
         await ctx.checkpoint()
         await ctx.reporter.step("topics.match", f"Matching {len(video_ids)} videos to your topics")

@@ -6,7 +6,8 @@ You receive two blocks:
 
 For every video key, return one decision:
 - matches: the candidate topics the video is actually about. A topic matches only if the video's text is about that topic, not merely because a word appears (a passing mention, a list of services, an event announcement or a different meaning of the same word is not a match).
-- For each match, copy a short verbatim quote (at most 15 words) from the video text that proves it, and name the field it came from (title, chapters, description, tags or hashtags). Copy the words exactly as written; do not translate, summarise or fix spelling.
+- A different subject in the same field is not a match: another condition, procedure, product or service, a cosmetic procedure for a disease treatment, an awareness day or a hospital announcement for a clinical service. When unsure, prefer none.
+- For each match, copy a short verbatim quote (at most 15 words) from the video text that proves it; the quote must name the topic, one of its aliases or a direct synonym, not just restate a loosely related title, and name the field it came from (title, chapters, description, tags or hashtags). Copy the words exactly as written; do not translate, summarise or fix spelling.
 - none: true when no candidate topic matches. Then leave matches empty.
 
 Rules:

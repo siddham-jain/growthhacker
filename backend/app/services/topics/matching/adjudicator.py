@@ -26,8 +26,8 @@ from app.ports.llm import (
 from app.services.topics.llm import SpendGuard, call_structured, enum_of
 from app.services.topics.matching.combine import DecisionPolicy, PairState
 from app.services.topics.matching.quotes import adjudication_fields, verify_quote
+from app.services.topics.prompt_specs import SPECS
 from app.services.topics.repositories import AdjudicationRepository
-from app.services.topics.versions import ADJUDICATION_PROMPT_VERSION
 
 EvidenceField = Literal["title", "chapters", "description", "tags", "hashtags"]
 
@@ -75,6 +75,10 @@ def verdict_schema(video_keys: Sequence[str], topic_ids: Sequence[str]) -> type[
     return create_model(
         "TopicAdjudication", __config__=ConfigDict(extra="forbid"), decisions=(list[decision], ...)
     )
+
+
+# the prompt's content version, so an edited prompt never reuses verdicts given under the old one
+ADJUDICATION_PROMPT_VERSION = SPECS[TaskId.topic_adjudication].prompt_version
 
 
 def cache_key(model_key: str, item: AdjudicationItem) -> str:

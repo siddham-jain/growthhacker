@@ -10,6 +10,11 @@ CLIENT_KINDS = frozenset({"canonical", "client_alias"})
 CLIENT_ORIGINS = frozenset({"client"})
 
 
+def hierarchical(alias: TopicAlias) -> bool:
+    # a narrower offering's name carried by its parent topic overlaps the child topic by design
+    return alias.kind == "client_alias" and alias.origin == "profile_extracted"
+
+
 @dataclass
 class ValidationOutcome:
     refs: list[TopicRef]
@@ -104,7 +109,7 @@ class AliasValidator:
         owners: dict[str, list[tuple[str, TopicAlias]]] = {}
         for ref in refs:
             for alias in ref.aliases:
-                if alias.kind != "canonical" and alias.status != "rejected":
+                if alias.kind != "canonical" and alias.status != "rejected" and not hierarchical(alias):
                     owners.setdefault(alias.norm_key, []).append((ref.id, alias))
         for key, entries in owners.items():
             owner = canonical_owner.get(key)

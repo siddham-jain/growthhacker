@@ -7,8 +7,16 @@ import numpy as np
 from numpy.typing import NDArray
 
 from app.core.config import TopicEngineSettings
-from app.domain.profile import BusinessProfile, BuyerQuestion, ClaimStatus, FunnelStage, ReviewStatus
+from app.domain.profile import (
+    BusinessProfile,
+    BuyerQuestion,
+    ClaimStatus,
+    FunnelStage,
+    Offering,
+    ReviewStatus,
+)
 from app.domain.topics import TopicAlias, TopicKind, TopicRef, TopicUniverse, TopicUniverseStats
+from app.domain.web import ExtractionKind
 from app.ports.buyer_questions import BuyerQuestionCandidate
 from app.services.topics.lexicon import Lexicons
 from app.services.topics.text.tokenize import stems
@@ -21,6 +29,9 @@ from app.services.topics.universe.fingerprint import ref_fingerprint, ref_text, 
 
 USABLE_CLAIMS = frozenset({ClaimStatus.confirmed, ClaimStatus.edited})
 ALIAS_RANK = {"canonical": 0, "client_alias": 1}
+SHORT_NAME_MAX_TOKENS = 6
+# trust claims and brand slogans describe the business, not a subject a video can be about
+NON_TOPICAL_KEYWORD_KINDS = frozenset({"brand_adjacent"})
 STATUS_RANK = {"confirmed": 0, "proposed": 1, "rejected": 2}
 
 TextEncoder = Callable[[Sequence[str]], Awaitable[NDArray[np.float32] | None]]
@@ -34,6 +45,8 @@ class _Seed:
     order: int
     definition: str | None = None
     client_aliases: list[str] = field(default_factory=list)
+    # names of narrower offerings the client lists under this one (department -> treated condition)
+    child_terms: list[str] = field(default_factory=list)
     lang: str | None = None
     funnel_stage: FunnelStage | None = None
     offering_ids: list[str] = field(default_factory=list)
@@ -98,7 +111,7 @@ class TopicUniverseBuilder:
         brands = non_topical_terms(profile, inputs.competitor_names)
         extractor = FacetExtractor(self._lexicons, profile.locations.cities)
         entity_seeds = self._cap(
-            self._dedupe(self._entity_seeds(profile)),
+            self._dedupe(self._entity_seeds(profile, extractor, non_topical_terms(profile, ()))),
             self._settings.max_refs_keyword_offering,
             "ref_cap_applied",
             warnings,
@@ -151,12 +164,19 @@ class TopicUniverseBuilder:
             llm_calls=self._proposer.calls if self._proposer else 0,
         )
 
-    def _entity_seeds(self, profile: BusinessProfile) -> list[_Seed]:
+    def _entity_seeds(
+        self, profile: BusinessProfile, extractor: FacetExtractor, own_brands: Sequence[str]
+    ) -> list[_Seed]:
         seeds: list[_Seed] = []
         offerings = sorted(
             (offering for offering in profile.offerings if offering.meta.status in USABLE_CLAIMS),
             key=lambda offering: offering.priority,
         )
+        short_names = {offering.id: short_names_of(offering, extractor) for offering in offerings}
+        children: dict[str, list[str]] = {}
+        for offering in offerings:
+            if offering.parent_id and offering.parent_id in short_names:
+                children.setdefault(offering.parent_id, []).extend([offering.name, *short_names[offering.id]])
         for offering in offerings:
             aliases = [*offering.aliases, *([offering.name_original] if offering.name_original else [])]
             seeds.append(
@@ -166,14 +186,22 @@ class TopicUniverseBuilder:
                     label=offering.name,
                     order=len(seeds),
                     definition=offering.definition or offering.description,
-                    client_aliases=aliases,
+                    client_aliases=[*aliases, *short_names[offering.id]],
+                    child_terms=children.get(offering.id, []),
                     offering_ids=[offering.id],
                     priority=offering.priority,
                     lang=profile.identity.primary_language,
                 )
             )
+        brand_phrases = [stems(term) for term in own_brands]
         keywords = sorted(
-            (keyword for keyword in profile.niche_keywords if keyword.meta.status in USABLE_CLAIMS),
+            (
+                keyword
+                for keyword in profile.niche_keywords
+                if keyword.meta.status in USABLE_CLAIMS
+                and keyword.kind not in NON_TOPICAL_KEYWORD_KINDS
+                and not mentions_any(keyword.term, brand_phrases)
+            ),
             key=lambda keyword: -keyword.weight,
         )
         for keyword in keywords:
@@ -230,6 +258,7 @@ class TopicUniverseBuilder:
                 kept[key] = seed
                 continue
             existing.client_aliases += [seed.label, *seed.client_aliases]
+            existing.child_terms += seed.child_terms
             existing.offering_ids = list(dict.fromkeys([*existing.offering_ids, *seed.offering_ids]))
         return list(kept.values())
 
@@ -249,6 +278,11 @@ class TopicUniverseBuilder:
             alias
             for text, kind in forms
             if (alias := self._client_alias(text, kind, seed, brand_keys)) is not None
+        ]
+        aliases += [
+            alias
+            for text in seed.child_terms
+            if (alias := self._child_alias(text, seed, brand_keys)) is not None
         ]
         facets, core, locality, stage = [], [], [], None
         if seed.kind is TopicKind.buyer_question:
@@ -287,6 +321,14 @@ class TopicUniverseBuilder:
             weight=1.0,
             lang=seed.lang,
             ambiguous=ambiguous,
+        )
+
+    def _child_alias(self, text: str, seed: _Seed, brand_keys: set[str]) -> TopicAlias | None:
+        alias = self._client_alias(text, "client_alias", seed, brand_keys)
+        if alias is None:
+            return None
+        return alias.model_copy(
+            update={"origin": "profile_extracted", "weight": self._settings.child_term_weight}
         )
 
     async def _merge_questions(self, refs: list[TopicRef], warnings: list[str]) -> list[TopicRef]:
@@ -457,6 +499,35 @@ class TopicUniverseBuilder:
         if entities < self._settings.min_refs or questions < self._settings.min_buyer_questions:
             return ["thin_universe"]
         return []
+
+
+def mentions_any(text: str, phrases: Sequence[Sequence[str]]) -> bool:
+    """true when the text contains one of the stemmed phrases, e.g. a keyword built on the brand name."""
+    keys = list(stems(text))
+    return any(
+        phrase and any(keys[index : index + len(phrase)] == list(phrase) for index in range(len(keys)))
+        for phrase in phrases
+    )
+
+
+def short_names_of(offering: Offering, extractor: FacetExtractor) -> list[str]:
+    """the site's own short names for an offering: sub-phrases of its name and its navigation labels."""
+    label_stems = set(stems(offering.name))
+    names = []
+    for evidence in offering.meta.evidence:
+        quote = " ".join(evidence.quote.split())
+        quote_stems = list(stems(quote))
+        if (
+            not quote_stems
+            or len(quote_stems) > SHORT_NAME_MAX_TOKENS
+            or norm_key(quote) == norm_key(offering.name)
+        ):
+            continue
+        sub_phrase = set(quote_stems) < label_stems
+        nav_label = evidence.extraction is ExtractionKind.nav and not extractor.locality_terms(quote)
+        if sub_phrase or nav_label:
+            names.append(quote)
+    return list(dict.fromkeys(names))
 
 
 def _lexical_parents(question: TopicRef, parents: Sequence[TopicRef]) -> list[str]:
