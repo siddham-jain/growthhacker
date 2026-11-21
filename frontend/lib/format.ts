@@ -12,6 +12,15 @@ export function formatRatio(ratio: number | null | undefined): string {
   return ratio === null || ratio === undefined ? "no baseline yet" : `${ratio.toFixed(1)}×`;
 }
 
+// a median views ratio in words: how a channel's typical recent video compares with its own usual
+export function describeVsUsual(ratio: number | null | undefined): string {
+  if (ratio === null || ratio === undefined) return "Too few videos yet to know their usual views";
+  if (ratio >= 2) return `Typical video lately: ${ratio.toFixed(1)}× their usual views`;
+  const percent = Math.round(Math.abs(ratio - 1) * 100);
+  if (percent < 5) return "Typical video lately: about their usual views";
+  return `Typical video lately: ${percent}% ${ratio > 1 ? "above" : "below"} their usual views`;
+}
+
 export function formatDate(iso: string, timeZone = "Asia/Kolkata"): string {
   const date = new Date(iso);
   const sameYear = date.getFullYear() === new Date().getFullYear();

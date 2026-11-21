@@ -35,6 +35,7 @@
 - Add shared context brief, env template and gitignore.
 
 ### Changed
+- Explain competitor cards in plain words: hits, uploads per week and typical video vs usual.
 - Regenerate the ops report and screenshots from the real stack; rewrite the runbook with UI, demo login and evaluation steps.
 - Ignore var/, where evaluation bundles and packs with API data live.
 - Expected range is the reference videos' plain outlier ratios (capped 0.5x–3.0x, interquartile or min–max) times the client's median baseline, labelled "calculated by GrowthHacker".

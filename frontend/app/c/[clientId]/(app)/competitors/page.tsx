@@ -14,7 +14,7 @@ import { CalcMark, CalcNote } from "@/components/ui/calc-mark";
 import { Chip, SegmentedControl, SegmentedControlItem } from "@/components/ui/primitives";
 import { gapsQuery, scorecardsQuery } from "@/lib/api/queries";
 import type { ChannelScorecard } from "@/lib/api/types";
-import { formatRatio } from "@/lib/format";
+import { describeVsUsual, formatRatio, plural } from "@/lib/format";
 import { CALC_MARK, RELATION_LABELS } from "@/lib/labels";
 import { useTabParam, useViewParams } from "@/lib/url-state";
 import { useClientId } from "@/lib/use-client-id";
@@ -69,11 +69,15 @@ export default function CompetitorsPage() {
         <span className="text-caption-1-medium text-muted-foreground">Sort by</span>
         <SegmentedControl aria-label="Sort competitors" selectedKeys={[sort]} onSelectionChange={(keys) => setSort([...keys][0] as Sort)}>
           <SegmentedControlItem id="name">Name</SegmentedControlItem>
-          <SegmentedControlItem id="outliers">Outliers</SegmentedControlItem>
-          <SegmentedControlItem id="cadence">Cadence</SegmentedControlItem>
-          <SegmentedControlItem id="median">Median ratio</SegmentedControlItem>
+          <SegmentedControlItem id="outliers">Hits</SegmentedControlItem>
+          <SegmentedControlItem id="cadence">Uploads</SegmentedControlItem>
+          <SegmentedControlItem id="median">Typical video</SegmentedControlItem>
         </SegmentedControl>
       </div>
+      <p className="mb-4 max-w-2xl text-caption-1-regular text-muted-foreground">
+        A <span className="text-foreground">hit</span> is a video that got 3× or more the views that channel usually gets by the same age. &ldquo;Usual&rdquo; is the middle of
+        its recent videos, so every channel is compared only with itself.
+      </p>
       {scorecards.isPending ? <LoadingBlock /> : null}
       {scorecards.error ? <ErrorState error={scorecards.error} onRetry={() => scorecards.refetch()} /> : null}
       {scorecards.data && !competitors.length ? (
@@ -98,11 +102,11 @@ export default function CompetitorsPage() {
                   <CalcMark />
                 </>
               }
-              countLabel={`outliers of ${card.videos_in_window} videos`}
-              meta={`${card.uploads_per_week.toFixed(1)}/week${CALC_MARK}`}
+              countLabel={`of ${plural(card.videos_in_window, "video")} ${card.outliers_in_window === 1 ? "was a hit" : "were hits"}`}
+              meta={`${card.uploads_per_week.toFixed(1)} uploads/week`}
             />
             <p className="px-1 text-caption-1-regular text-muted-foreground">
-              median {formatRatio(card.median_ratio)} their normal
+              {describeVsUsual(card.median_ratio)}
               <CalcMark />
               {card.days_since_last_upload > 45 ? ` · no uploads in ${card.days_since_last_upload} days` : ""}
               {card.subscriber_hidden ? " · subscribers hidden" : ""}
@@ -129,7 +133,7 @@ export default function CompetitorsPage() {
                   {card.role === "benchmark_set" ? "Benchmark: used for format and title ideas only" : "Niche"}
                 </Chip>
                 <span className="ml-auto text-caption-1-regular text-muted-foreground">
-                  {card.outliers_in_window} outliers · {card.uploads_per_week.toFixed(1)}/week
+                  {plural(card.outliers_in_window, "hit")} · {card.uploads_per_week.toFixed(1)} uploads/week
                   <CalcMark />
                 </span>
               </li>
