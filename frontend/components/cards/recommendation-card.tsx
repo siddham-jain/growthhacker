@@ -4,7 +4,6 @@ import { RiArrowDownSLine } from "@remixicon/react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { LensChip, TypeChip } from "@/components/ui/chips";
-import { CalcMark } from "@/components/ui/calc-mark";
 import { ConfidenceMeter } from "@/components/ui/confidence-meter";
 import type { FeedbackIn, LensFilter, RecommendationOut } from "@/lib/api/types";
 import { cx } from "@/lib/cx";
@@ -89,7 +88,6 @@ export function RecommendationCard({ recommendation: rec, lensFilter, defaultExp
             {rec.expected_range_vs_baseline ? (
               <>
                 {rec.expected_range_vs_baseline}
-                <CalcMark />
               </>
             ) : (
               "Not enough comparable videos for a range."

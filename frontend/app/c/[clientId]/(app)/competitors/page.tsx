@@ -10,12 +10,12 @@ import { FreshnessLine } from "@/components/shell/freshness-line";
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState, ErrorState, LoadingBlock } from "@/components/states/states";
 import { Button, LinkButton } from "@/components/ui/button";
-import { CalcMark, CalcNote } from "@/components/ui/calc-mark";
+import { CalcNote } from "@/components/ui/calc-mark";
 import { Chip, SegmentedControl, SegmentedControlItem } from "@/components/ui/primitives";
 import { gapsQuery, scorecardsQuery } from "@/lib/api/queries";
 import type { ChannelScorecard } from "@/lib/api/types";
 import { describeVsUsual, formatRatio, plural } from "@/lib/format";
-import { CALC_MARK, RELATION_LABELS } from "@/lib/labels";
+import { RELATION_LABELS } from "@/lib/labels";
 import { useTabParam, useViewParams } from "@/lib/url-state";
 import { useClientId } from "@/lib/use-client-id";
 
@@ -95,19 +95,13 @@ export default function CompetitorsPage() {
               href={`/c/${clientId}/competitors/${card.channel.channel_id}?w=${windowDays}`}
               badge={card.relation ? RELATION_LABELS[card.relation] : undefined}
               subtitle={card.channel.handle}
-              previews={card.top_outliers.map((video) => ({ videoId: video.video_id, title: video.title, badge: `${formatRatio(video.outlier_ratio)}${CALC_MARK}` }))}
-              count={
-                <>
-                  {card.outliers_in_window}
-                  <CalcMark />
-                </>
-              }
+              previews={card.top_outliers.map((video) => ({ videoId: video.video_id, title: video.title, badge: `${formatRatio(video.outlier_ratio)}` }))}
+              count={card.outliers_in_window}
               countLabel={`of ${plural(card.videos_in_window, "video")} ${card.outliers_in_window === 1 ? "was a hit" : "were hits"}`}
               meta={`${card.uploads_per_week.toFixed(1)} uploads/week`}
             />
             <p className="px-1 text-caption-1-regular text-muted-foreground">
               {describeVsUsual(card.median_ratio)}
-              <CalcMark />
               {card.days_since_last_upload > 45 ? ` · no uploads in ${card.days_since_last_upload} days` : ""}
               {card.subscriber_hidden ? " · subscribers hidden" : ""}
             </p>
@@ -134,7 +128,6 @@ export default function CompetitorsPage() {
                 </Chip>
                 <span className="ml-auto text-caption-1-regular text-muted-foreground">
                   {plural(card.outliers_in_window, "hit")} · {card.uploads_per_week.toFixed(1)} uploads/week
-                  <CalcMark />
                 </span>
               </li>
             ))}

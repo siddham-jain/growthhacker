@@ -10,7 +10,7 @@ import { NoticeList } from "@/components/states/notice-list";
 import { FreshnessLine } from "@/components/shell/freshness-line";
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState, LoadingBlock } from "@/components/states/states";
-import { CalcMark, CalcNote } from "@/components/ui/calc-mark";
+import { CalcNote } from "@/components/ui/calc-mark";
 import { Tab, TabList, TabPanel, Tabs, toast } from "@/components/ui/primitives";
 import { useDismissNews } from "@/lib/api/mutations";
 import { earlySignalsQuery, newsQuery, outliersQuery, recommendationsQuery, trendingQuery } from "@/lib/api/queries";
@@ -95,7 +95,6 @@ export default function RadarPage() {
                   <p className="text-body-medium text-foreground">{topic.label}</p>
                   <p className="text-caption-1-regular text-muted-foreground">
                     {topic.uploads_prev} → {topic.uploads_now} uploads, {topic.outliers_prev} → {topic.outliers_now} outliers vs the window before
-                    <CalcMark />
                   </p>
                 </li>
               ))}
@@ -108,7 +107,6 @@ export default function RadarPage() {
                   </span>
                   <span className="text-caption-1-regular text-muted-foreground">
                     {item.channel_title} · {formatCompact(item.views_per_day)} views/day
-                    <CalcMark />
                   </span>
                 </li>
               ))}
@@ -126,7 +124,6 @@ export default function RadarPage() {
                 No one has answered “{note.text}” on YouTube in the last {note.window_days} days{" "}
                 <span className="text-muted-foreground">
                   (checked {note.videos_checked} videos across {note.channels_checked} channels).
-                  <CalcMark />
                 </span>
               </li>
             ))}

@@ -6,7 +6,7 @@ import { ChartCard, ChartPlot } from "@/components/ui/primitives";
 import { MethodBadge } from "@/components/ui/chips";
 import type { OwnPerformanceReport } from "@/lib/api/types";
 import { formatDate, formatRatio } from "@/lib/format";
-import { CALC_MARK, METHOD_LABELS } from "@/lib/labels";
+import { METHOD_LABELS } from "@/lib/labels";
 import { ChartTableToggle, DataTable } from "./chart-table-toggle";
 import { linear, PLOT_PADDING } from "./scale";
 
@@ -83,8 +83,8 @@ export function PerformanceChart({ report }: { report: OwnPerformanceReport }) {
       pulseKey={active}
       caption={
         hovered
-          ? `${formatDate(hovered.published_at)} · ${METHOD_LABELS[hovered.method].label.toLowerCase()} ${CALC_MARK}`
-          : `median of ${report.videos_in_window} videos at day ${report.comparison_age_days} · was ${formatRatio(report.median_ratio_prev_window)} the window before ${CALC_MARK}`
+          ? `${formatDate(hovered.published_at)} · ${METHOD_LABELS[hovered.method].label.toLowerCase()}`
+          : `median of ${report.videos_in_window} videos at day ${report.comparison_age_days} · was ${formatRatio(report.median_ratio_prev_window)} the window before`
       }
       legend={[
         { label: "Measured", color: "var(--chart-1)" },

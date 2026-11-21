@@ -16,7 +16,6 @@ import { Eyebrow } from "@/components/ui/surface";
 import { clientQuery, newsQuery, outliersQuery, ownPerformanceQuery, recommendationsQuery, refreshQuery } from "@/lib/api/queries";
 import { BRIEF_CONFIG, composeBrief } from "@/lib/brief";
 import { formatRatio } from "@/lib/format";
-import { CALC_MARK } from "@/lib/labels";
 import { useViewParams } from "@/lib/url-state";
 import { useClientId } from "@/lib/use-client-id";
 
@@ -67,7 +66,7 @@ export default function TodayPage() {
       <PageHeader
         eyebrow={<Eyebrow className="mb-2">{briefEyebrow(now)}</Eyebrow>}
         title={<span className="text-greeting">{title}</span>}
-        subtitle={`${brief.length} ${brief.length === 1 ? "action" : "actions"}. Evidence from ${channelsSeen}${CALC_MARK} channels in the last ${windowDays} days.`}
+        subtitle={`${brief.length} ${brief.length === 1 ? "action" : "actions"}. Evidence from ${channelsSeen} channels in the last ${windowDays} days.`}
       />
       <FreshnessLine envelope={envelope} />
       {envelope ? <NoticeList notices={envelope.notices} className="mb-5" /> : null}

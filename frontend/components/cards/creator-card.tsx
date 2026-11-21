@@ -1,4 +1,3 @@
-import { CalcMark } from "@/components/ui/calc-mark";
 import { subscriberBandLabel } from "@/lib/api/adapters";
 import type { CreatorView } from "@/lib/api/types";
 import { formatCompact, formatDate, formatRatio } from "@/lib/format";
@@ -25,7 +24,6 @@ export function CreatorCard({ creator }: { creator: CreatorView }) {
           <h3 className="text-headline text-foreground">{title}</h3>
           <p className="text-caption-1-regular text-muted-foreground">
             {[creator.channel.handle, subscriberBandLabel(creator.subscriber_band), `${creator.uploads_90d} uploads in 90 days`].filter(Boolean).join(" · ")}
-            <CalcMark />
           </p>
         </div>
       </header>
@@ -35,7 +33,6 @@ export function CreatorCard({ creator }: { creator: CreatorView }) {
           <dt className="inline text-muted-foreground">Relevance: </dt>
           <dd className="inline text-foreground">
             {Math.round(creator.match_share * 100)}% of recent videos match your keywords · {creator.topics_covered} of your topics covered
-            <CalcMark />
           </dd>
         </div>
         <div>
@@ -43,7 +40,6 @@ export function CreatorCard({ creator }: { creator: CreatorView }) {
           <dd className="inline text-foreground">
             median {formatRatio(performance.median_outlier_ratio)} their own normal
             {performance.niche_median_views_at_age ? ` · niche median ${formatCompact(performance.niche_median_views_at_age)} views at day ${performance.comparison_age_days}` : ""}
-            <CalcMark />
           </dd>
         </div>
         <div>
@@ -52,7 +48,6 @@ export function CreatorCard({ creator }: { creator: CreatorView }) {
             {consistency.median_gap_days === null ? "–" : `posts every ${consistency.median_gap_days} days`}
             {consistency.hit_rate === null ? "" : ` · ${Math.round(consistency.hit_rate * 100)}% of videos beat their normal`}
             {consistency.last_upload_at ? ` · last upload ${formatDate(consistency.last_upload_at)}` : ""}
-            {consistency.median_gap_days === null && consistency.hit_rate === null ? null : <CalcMark />}
           </dd>
         </div>
         {creator.collaborations.length ? (

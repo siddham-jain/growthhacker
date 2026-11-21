@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { OriginChip } from "@/components/ui/chips";
-import { CalcMark, CalcNote } from "@/components/ui/calc-mark";
+import { CalcNote } from "@/components/ui/calc-mark";
 import { Chip } from "@/components/ui/primitives";
 import { ErrorState, LoadingBlock } from "@/components/states/states";
 import { answerCitationsQuery } from "@/lib/api/queries";
@@ -90,9 +90,8 @@ export function YourAnswerCitations({ clientId }: { clientId: string }) {
       {data && data.counts.questions_checked ? (
         <>
           <p className="text-body-regular text-muted-foreground">
-            Your videos are cited for {data.counts.cite_you} of {plural(data.counts.questions_checked, "buyer question")}
-            <CalcMark />. A competitor is cited instead of you for {data.counts.competitor_only}
-            <CalcMark />.
+            Your videos are cited for {data.counts.cite_you} of {plural(data.counts.questions_checked, "buyer question")}. A competitor is cited instead of you for{" "}
+            {data.counts.competitor_only}.
           </p>
           <ul className="flex flex-col divide-y divide-border">
             {questions.map((question) => (
@@ -135,7 +134,6 @@ export function CompetitorAnswerCitations({ clientId, names }: { clientId: strin
                 {names[entry.channel_id] ?? entry.channel_title ?? entry.channel_id}
                 <span className="ml-2 text-caption-1-regular text-muted-foreground">
                   cited for {plural(entry.buyer_question_ids.length, "question")}
-                  <CalcMark />
                 </span>
               </p>
               <ul className="flex flex-col gap-0.5 text-caption-1-regular text-muted-foreground">
@@ -151,7 +149,6 @@ export function CompetitorAnswerCitations({ clientId, names }: { clientId: strin
         <div className="flex flex-col gap-1">
           <h3 className="text-caption-1-medium text-foreground">
             Gaps: a competitor is cited and you aren&apos;t · {gaps.length}
-            <CalcMark />
           </h3>
           <ul className="flex flex-col gap-0.5 text-caption-1-regular text-muted-foreground">
             {gaps.map((question) => (

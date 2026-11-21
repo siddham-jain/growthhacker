@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { CalcMark } from "@/components/ui/calc-mark";
 import { OriginChip } from "@/components/ui/chips";
 
 interface TileProps {
@@ -19,7 +18,6 @@ export function ChangeTile({ origin, label, value, comparison }: TileProps) {
       <p className="text-body-regular text-muted-foreground">{label}</p>
       <p className="text-metric text-foreground">
         {value}
-        {value === "–" ? null : <CalcMark />}
       </p>
       <p className="text-caption-1-regular text-muted-foreground">{comparison}</p>
     </div>

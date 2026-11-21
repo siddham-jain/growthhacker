@@ -1,6 +1,5 @@
 import type { Confidence } from "@/lib/api/types";
 import { cx } from "@/lib/cx";
-import { CalcMark } from "./calc-mark";
 
 const BARS: Record<Confidence["label"], number> = { High: 3, Medium: 2, Low: 1 };
 
@@ -18,7 +17,6 @@ export function ConfidenceMeter({ confidence, firstMover = false, compact = fals
       <span>
         <span className="text-foreground">{label}</span>
         {compact ? null : firstMover ? " · no reference videos yet" : ` · ${confidence.outliers} outliers · ${confidence.channels} channels`}
-        {compact || firstMover ? null : <CalcMark />}
       </span>
     </span>
   );
