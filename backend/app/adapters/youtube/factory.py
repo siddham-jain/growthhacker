@@ -4,9 +4,11 @@ from typing import Any
 from app.adapters.youtube.analytics_v2 import AnalyticsApiGateway
 from app.adapters.youtube.cached import CachedGateway
 from app.adapters.youtube.data_api_v3 import DataApiV3Gateway
+from app.adapters.youtube.fallback import FallbackGateway
 from app.adapters.youtube.http import HttpHandler, RequestHandler
 from app.adapters.youtube.middleware import build_handler_chain
 from app.adapters.youtube.oauth_google import GoogleOAuthFlow
+from app.adapters.youtube.ytdlp import YtDlpGateway
 from app.core.registry import adapter_registry
 from app.services.youtube.cache_policy import FreshnessPolicy
 from app.services.youtube.comments import CommentSampler
@@ -108,10 +110,25 @@ class YouTubeDataLayer:
         )
 
     @cached_property
+    def ytdlp(self) -> YtDlpGateway:
+        return YtDlpGateway(
+            self.classifier,
+            self.clock,
+            settings=self.youtube.fallback,
+            freshness=self.youtube.freshness,
+            counting_regime=self.counting_regime,
+            embed_max_width=self.youtube.formats.embed_max_width,
+        )
+
+    @cached_property
+    def upstream(self) -> FallbackGateway:
+        return FallbackGateway(self.data_api, self.ytdlp, enabled=self.youtube.fallback.enabled)
+
+    @cached_property
     def gateway(self) -> CachedGateway:
         container = self._container
         return CachedGateway(
-            self.data_api,
+            self.upstream,
             self.store,
             FreshnessPolicy(self.youtube.freshness),
             self.clock,

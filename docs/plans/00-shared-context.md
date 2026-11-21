@@ -3,7 +3,7 @@
 Every component plan MUST be consistent with this file. If your research shows a decision here is wrong, keep the plan consistent anyway and raise it under "Open questions / proposed changes to shared context".
 
 ## 1. Product
-GrowthHacker is a client-agnostic SaaS that tells a business what YouTube content to make next, how to improve what it already published, and what competitors are doing — optimised for **conversions, not just views**. Built on the assignment `Assignment YouTube Content Recommendation Engine.pdf` (path: `/Users/siddham/.t3/userdata/attachments/d77aa8fb-e84b-44e5-80ae-d01fb83eead0-e13ccb5e-3d05-4b81-b737-96e233b406df-pdf.pdf` — read it fully, it is the source of truth for requirements). We must cover everything in that doc AND go beyond it.
+GrowthHacker is a client-agnostic SaaS that tells a business what YouTube content to make next, how to improve what it already published, and what competitors are doing — optimised for **conversions, not just views**. Built on the assignment `Assignment YouTube Content Recommendation Engine.pdf` (read it fully, it is the source of truth for requirements). We must cover everything in that doc AND go beyond it.
 
 The engine answers, per client, through two lenses (views, conversion):
 1. How is my content doing vs my own baseline?
@@ -91,4 +91,4 @@ Domain object names to use consistently: BusinessProfile, Offering, ValueProposi
 12. Implementation task breakdown (ordered, sized, with dependencies on other components)
 13. Open questions / proposed changes to shared context
 
-Rules for plan authors: research with official docs (WebFetch/WebSearch) and cite; verify API facts live where possible with the keys in `/Users/siddham/.t3/projects/growthhacker/.env` (never print keys; keep quota use minimal — at most a handful of cheap calls, no search.list calls unless essential); do not write implementation code (short signatures/pseudocode are fine); write only your own plan file.
+Rules for plan authors: research with official docs (WebFetch/WebSearch) and cite; verify API facts live where possible with the keys in the project `.env` (never print keys; keep quota use minimal — at most a handful of cheap calls, no search.list calls unless essential); do not write implementation code (short signatures/pseudocode are fine); write only your own plan file.

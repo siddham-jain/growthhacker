@@ -50,6 +50,8 @@ class ArtifactExpiry:
 
 # above the inline cap a payload is gzipped into run_artifact_blobs; past this it is refused outright
 MAX_BLOB_BYTES = 64 * 1024 * 1024
+# the check constraint measures jsonb, which runs about 1.2x compact json, so spill with headroom
+INLINE_JSON_BYTES = MAX_ARTIFACT_PAYLOAD_BYTES // 2
 BLOB_POINTER = "$blob"
 
 
@@ -64,7 +66,7 @@ def serialise(key: ArtifactKey[Any], value: BaseModel) -> Encoded:
         raise TypeError(f"artifact '{key.name}' must be {key.model.__name__}, got {type(value).__name__}")
     payload = value.model_dump(mode="json")
     raw = json.dumps(payload, separators=(",", ":")).encode()
-    if len(raw) < MAX_ARTIFACT_PAYLOAD_BYTES:
+    if len(raw) < INLINE_JSON_BYTES:
         return Encoded(payload)
     if len(raw) >= MAX_BLOB_BYTES:
         raise ArtifactTooLarge(

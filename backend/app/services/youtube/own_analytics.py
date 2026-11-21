@@ -32,7 +32,7 @@ from app.domain.youtube import (
 from app.models.own_analytics import OwnAnalyticsDaily, OwnSearchTerm, OwnTrafficSource
 from app.models.own_analytics import OwnVideoMetrics as OwnVideoMetricsRow
 from app.models.tenancy import Client, OAuthToken
-from app.models.youtube_cache import YtVideo
+from app.models.youtube_cache import YtChannel, YtVideo
 from app.ports.youtube import AnalyticsQuery, AnalyticsTable, RequestContext
 from app.repositories.shared.base import chunked
 from app.repositories.tenant.oauth_tokens import OAuthTokenRepository
@@ -378,7 +378,9 @@ class OwnAnalyticsService:
         token_id, access = connection.token_id, connection.access_token
         today = self._pacific.day(self._clock.now())
         period_start = today - timedelta(days=self._settings.backfill_days)
-        start = await self._channel_daily_start(scope, period_start)
+        start = await self._channel_daily_start(
+            scope, connection.channel_id, today - timedelta(days=self._settings.channel_daily_days)
+        )
 
         async def run(query: AnalyticsQuery) -> list[dict[str, Any]]:
             report.requests += 1
@@ -470,15 +472,23 @@ class OwnAnalyticsService:
             # the creatorContentType pairing is unverified; fall back to the documented top-videos report
             return await run(AnalyticsQuery(**query, dimensions=["video"]))
 
-    async def _channel_daily_start(self, scope: TenantScope, period_start: date) -> date:
+    async def _channel_daily_start(self, scope: TenantScope, channel_id: str, period_start: date) -> date:
         # analytics lag 48-72 h, so the last few pacific days are always pulled again
         async with self._uow_factory() as uow:
-            latest = await uow.session.scalar(
-                select(func.max(OwnAnalyticsDaily.day)).where(
-                    OwnAnalyticsDaily.client_id == scope.client_id, OwnAnalyticsDaily.video_id == ""
+            earliest, latest = (
+                await uow.session.execute(
+                    select(func.min(OwnAnalyticsDaily.day), func.max(OwnAnalyticsDaily.day)).where(
+                        OwnAnalyticsDaily.client_id == scope.client_id, OwnAnalyticsDaily.video_id == ""
+                    )
                 )
+            ).one()
+            created = await uow.session.scalar(
+                select(YtChannel.published_at).where(YtChannel.channel_id == channel_id)
             )
         if latest is None:
+            return period_start
+        # history pulled under a shorter window is backfilled once; a younger channel simply has less
+        if created is not None and earliest > max(period_start, created.date()):
             return period_start
         return max(period_start, latest - timedelta(days=self._settings.repull_days))
 

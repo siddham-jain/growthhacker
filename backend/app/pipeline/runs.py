@@ -166,6 +166,16 @@ def confirm_decision(*, active_kind: RunKind, active_status: RunStatus, active_c
     return "conflict"
 
 
+def _needs_full_recrawl(run: PipelineRun) -> bool:
+    # onboarding read only the key pages; the first confirmed analysis hands the deep read to the batch queue
+    confirms = RunParams.model_validate(run.params or {}).confirm_setup
+    return (
+        run.kind == RunKind.analysis.value
+        and confirms
+        and bool((run.config_snapshot or {}).get("website_url"))
+    )
+
+
 def job_id(run_id: UUID, attempt: int) -> str:
     return f"run:{run_id}:{attempt}"
 
@@ -563,6 +573,8 @@ class RunService:
             await self._update_schedule(session, finished, final, now)
         if final in {RunStatus.succeeded, RunStatus.partial} and finished.follow_up_requested:
             await self._request_follow_up(finished)
+        elif final in {RunStatus.succeeded, RunStatus.partial} and _needs_full_recrawl(finished):
+            await self._request_full_recrawl(finished)
         return final
 
     async def fail_unclaimed(self, run: PipelineRun, error: RunError) -> None:
@@ -609,6 +621,13 @@ class RunService:
             await self.request_run(scope, RunRequest(kind=RunKind.analysis, trigger=RunTrigger.system))
         except (RunServiceError, LookupError) as error:
             logger.warning("runs.follow_up_skipped", run_id=str(run.id), reason=str(error))
+
+    async def _request_full_recrawl(self, run: PipelineRun) -> None:
+        scope = TenantScope(workspace_id=run.workspace_id, client_id=run.client_id)
+        try:
+            await self.request_run(scope, RunRequest(kind=RunKind.recrawl, trigger=RunTrigger.system))
+        except (RunServiceError, LookupError) as error:
+            logger.warning("runs.full_recrawl_skipped", run_id=str(run.id), reason=str(error))
 
     async def _update_schedule(self, session: AsyncSession, run: PipelineRun, status: RunStatus, now) -> None:
         if run.kind not in {RunKind.daily_refresh.value, RunKind.news_scan.value}:

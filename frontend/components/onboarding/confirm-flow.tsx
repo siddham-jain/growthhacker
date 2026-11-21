@@ -6,6 +6,7 @@ import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m } from "moti
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from "react";
 import { ErrorState, InfoNote, LoadingBlock } from "@/components/states/states";
+import { LoadingState } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
 import { buyerQuestionsQuery, clientKey, clientQuery, competitorsQuery, keywordsQuery, profileQuery } from "@/lib/api/queries";
 import type { BuyerQuestionItem, ChannelVerifiedBy, CompetitorView, KeywordItem, ProfileFact, ProfileGroup } from "@/lib/api/types";
@@ -39,6 +40,9 @@ const FACT_SCREENS: Record<"offerings" | "locations" | "contacts" | "reasons", {
 const SCREEN_EYEBROW: Record<string, string> = { business: "1 · Your business", buyers: "2 · Your buyers", competitors: "3 · Your competitors", review: "Last step" };
 
 const SOURCE_TONE: Record<string, string> = { site: "bg-info", third: "bg-warning", user: "bg-foreground", youtube: "bg-danger" };
+
+// onboarding keeps finding competitors after the review opens
+const SETUP_POLL_MS = 3_000;
 
 function storageKey(clientId: string): string {
   return `gh:confirm:${clientId}`;
@@ -82,11 +86,14 @@ export function ConfirmFlow() {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const client = useQuery(clientQuery(clientId));
+  const client = useQuery({ ...clientQuery(clientId), refetchInterval: (query) => (query.state.data?.lifecycle === "onboarding" ? SETUP_POLL_MS : false) });
+  const setupPending = client.data?.lifecycle === "onboarding";
   const profile = useQuery(profileQuery(clientId));
   const keywords = useQuery(keywordsQuery(clientId));
   const questions = useQuery(buyerQuestionsQuery(clientId));
-  const competitors = useQuery(competitorsQuery(clientId));
+  const competitors = useQuery({ ...competitorsQuery(clientId), refetchInterval: setupPending ? SETUP_POLL_MS : false });
+  const refetchCompetitors = competitors.refetch;
+  const wasPending = useRef(setupPending);
   const ownChannel = client.data?.own_channel ?? null;
   const needsChannel = client.data ? !ownChannel?.verified : false;
   const channelRef = ownChannel?.channel_id ?? client.data?.website_url ?? client.data?.name ?? "";
@@ -127,6 +134,12 @@ export function ConfirmFlow() {
     }
   }, [clientId, current.screen, loading, params, pathname, router, stepParam]);
 
+  // one last read once onboarding hands over, in case discovery finished between two polls
+  useEffect(() => {
+    if (wasPending.current && !setupPending) void refetchCompetitors();
+    wasPending.current = setupPending;
+  }, [setupPending, refetchCompetitors]);
+
   const dispatch = useCallback(
     (action: FlowAction) => {
       setFlow((state) => flowReducer(screens, state ?? current, action));
@@ -144,8 +157,11 @@ export function ConfirmFlow() {
   const questionItems = activeTopics(questions.data?.items ?? []);
   const groups = groupCompetitors(competitors.data?.items ?? []);
   const topicCount = keywordItems.length + questionItems.length;
+  const discovering = setupPending && !competitors.data?.items.length;
 
   const blockerFor = (screen: ScreenId): string | null => {
+    if (discovering && (screen === "direct" || screen === "watch")) return "Still finding competitors.";
+    if (setupPending && screen === "review") return "Finishing your setup. This takes a few more seconds.";
     if (screen === "keywords" && topicCount === 0) return "Keep at least one buyer question or keyword.";
     if (screen === "direct" || screen === "review") return competitorBlocker(groups.direct.length) ?? (screen === "review" && topicCount === 0 ? "Keep at least one buyer question or keyword." : null);
     return null;
@@ -252,6 +268,13 @@ export function ConfirmFlow() {
   }
 
   function renderScreen(): ReactNode {
+    if (discovering && (screen.id === "direct" || screen.id === "watch")) {
+      return frame(
+        screen.id === "direct" ? "Who are your direct competitors?" : "Anyone else worth watching?",
+        "We're still searching YouTube for businesses like yours. This fills in on its own.",
+        <LoadingState label="Finding competitors" showGrid={false} />,
+      );
+    }
     switch (screen.id) {
       case "summary":
         return frame(

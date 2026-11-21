@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from app.domain.runs import ClientLifecycle, RunEventType, RunKind, RunStatus, StageStatus
+from app.models.runs import PipelineRun
 from app.pipeline.client_settings import ClientSettings
 from app.pipeline.context import RunBudgetLedger
 from app.pipeline.contracts import BudgetExceeded, BudgetKind, RunBudget, StageBudget, UsageLedger
@@ -12,7 +13,7 @@ from app.pipeline.fingerprint import as_of_bucket, stage_fingerprint
 from app.pipeline.lifecycle import ClientLifecycleMachine, RunStateMachine, StageStateMachine, TransitionError
 from app.pipeline.progress import ProgressTracker, RunProgress
 from app.pipeline.registry import PipelineConfigError
-from app.pipeline.runs import dedupe_decision
+from app.pipeline.runs import _needs_full_recrawl, dedupe_decision
 from app.pipeline.schedules import jitter_minutes, next_daily_due
 from app.workers.scheduler import DueClient, round_robin
 from tests.conftest import make_settings
@@ -257,3 +258,19 @@ def test_round_robin_interleaves_workspaces_least_recently_served_first() -> Non
         [due(1, 10, now), due(1, 11, now), due(1, 12, now), due(2, 20, None), due(2, 21, None)]
     )
     assert [item.workspace_id.int for item in order] == [2, 1, 2, 1, 1]
+
+
+@pytest.mark.parametrize(
+    ("kind", "confirm", "website", "expected"),
+    [
+        (RunKind.analysis, True, "https://smiledental.in", True),
+        (RunKind.analysis, False, "https://smiledental.in", False),
+        (RunKind.analysis, True, None, False),
+        (RunKind.daily_refresh, True, "https://smiledental.in", False),
+    ],
+)
+def test_only_the_first_confirmed_analysis_queues_the_full_recrawl(kind, confirm, website, expected) -> None:
+    run = PipelineRun(
+        kind=kind.value, params={"confirm_setup": confirm}, config_snapshot={"website_url": website}
+    )
+    assert _needs_full_recrawl(run) is expected

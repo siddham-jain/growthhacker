@@ -14,6 +14,10 @@ class ChannelRef(DomainModel):
     raw: str
 
 
+# yt_dlp marks records scraped by the fallback gateway when the data api is unavailable
+DataSource = Literal["data_api", "yt_dlp"]
+
+
 class ChannelRecord(DomainModel):
     channel_id: ChannelId
     title: str
@@ -36,6 +40,7 @@ class ChannelRecord(DomainModel):
     last_upload_at: AwareDatetime | None = None
     recent_upload_ids: list[VideoId] = Field(default=[], max_length=50)
     cadence_flags: list[str] = []
+    data_source: DataSource = "data_api"
     metadata_fetched_at: AwareDatetime
     stats_fetched_at: AwareDatetime
 
@@ -102,6 +107,7 @@ class VideoRecord(DomainModel):
     first_missing_at: AwareDatetime | None = None
     ingest_source: Literal["uploads", "search", "manual", "recommendation_ref"]
     quality_flags: list[str] = []
+    data_source: DataSource = "data_api"
     metadata_fetched_at: AwareDatetime
 
     @property
@@ -117,7 +123,7 @@ class VideoSnapshot(DomainModel):
     view_count: int
     like_count: int | None = None
     comment_count: int | None = None
-    source: Literal["batch_stats", "videos_list", "backtest_freeze"]
+    source: Literal["batch_stats", "videos_list", "backtest_freeze", "yt_dlp"]
     counting_regime: str
 
 

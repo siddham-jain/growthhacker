@@ -108,7 +108,7 @@ class FinishOnboardingStage:
     name = "finish_onboarding"
     version = 1
     depends_on: tuple[str, ...] = ("build_profile", "discover_competitors", "seed_topic_refs")
-    optional_deps: tuple[str, ...] = ("prefetch_own_channel",)
+    optional_deps: tuple[str, ...] = ("prefetch_own_channel", "prefetch_competitors")
     produces = ONBOARDING_SUMMARY
     policy = StagePolicy(timeout_s=30, max_attempts=2, reusable=False)
     weight = 2.0

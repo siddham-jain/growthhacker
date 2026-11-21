@@ -58,6 +58,11 @@ class NotFound(YouTubeApiError):
     pass
 
 
+class ScraperFailed(YouTubeApiError):
+    # the yt-dlp fallback could not read youtube.com either
+    pass
+
+
 class InvalidPageToken(YouTubeApiError):
     pass
 

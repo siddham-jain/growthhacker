@@ -10,6 +10,7 @@ import { FreshnessLine } from "@/components/shell/freshness-line";
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState, ErrorState, LoadingBlock } from "@/components/states/states";
 import { ThinDataPrompt } from "@/components/states/thin-data-prompt";
+import { TrendingIdeas } from "@/components/trends/trending-ideas";
 import { Button } from "@/components/ui/button";
 import { CalcNote } from "@/components/ui/calc-mark";
 import { SegmentedControl, SegmentedControlItem, Tab, TabList, TabPanel, Tabs } from "@/components/ui/primitives";
@@ -76,10 +77,12 @@ export default function IdeasPage() {
 
   return (
     <>
-      <PageHeader title="Next videos" subtitle="What should you make next, and why will it bring buyers? Every idea links to the videos behind it." />
+      <PageHeader title="Next videos" subtitle="What to post next, built on what's trending on YouTube in your niche and what's working for your competitors. Every idea links to the videos behind it." />
       <FreshnessLine envelope={envelope} />
       <div className="grid gap-6 xl:grid-cols-[1fr_300px]">
         <div className="flex min-w-0 flex-col gap-4">
+          <TrendingIdeas clientId={clientId} />
+          <h2 className="pt-4 text-title-3-medium text-foreground">What’s working for your competitors</h2>
           <Tabs selectedKey={tab} onSelectionChange={(key) => setTab(key as (typeof TABS)[number])}>
             <TabList aria-label="Recommendation types">
               {TABS.map((id) => (

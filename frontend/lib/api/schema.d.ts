@@ -160,6 +160,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/clients/{client_id}/analytics/landscape": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Analytics Landscape */
+        get: operations["analytics_landscape"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/clients/{client_id}/analytics/outliers": {
         parameters: {
             query?: never;
@@ -741,6 +758,23 @@ export interface paths {
         put?: never;
         /** Runs Create */
         post: operations["runs_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/clients/{client_id}/trends": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Trends Latest */
+        get: operations["trends_latest"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1764,6 +1798,25 @@ export interface components {
             /** Video Count */
             video_count: number;
         };
+        /** ChannelLandscape */
+        ChannelLandscape: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Competitor Median */
+            competitor_median: {
+                [key: string]: number | null;
+            };
+            /** Competitors */
+            competitors: components["schemas"]["ChannelOverview"][];
+            /** Growth Days */
+            growth_days: number;
+            own: components["schemas"]["ChannelOverview"] | null;
+            /** Window Days */
+            window_days: number;
+        };
         /** ChannelLink */
         ChannelLink: {
             /** Channel Id */
@@ -1776,6 +1829,64 @@ export interface components {
              * @enum {string}
              */
             resolved_via: "id" | "forHandle" | "forUsername" | "video" | "user";
+        };
+        /** ChannelOverview */
+        ChannelOverview: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** By Format */
+            by_format: {
+                [key: string]: components["schemas"]["FormatStats"];
+            };
+            /** Channel Id */
+            channel_id: string;
+            /** Days Since Last Upload */
+            days_since_last_upload: number | null;
+            /** Format Mix */
+            format_mix: {
+                [key: string]: number;
+            };
+            /** Longest Gap Days */
+            longest_gap_days: number | null;
+            /** Median Gap Days */
+            median_gap_days: number | null;
+            overall: components["schemas"]["FormatStats"];
+            /** Pace Change Pct */
+            pace_change_pct: number | null;
+            /** Previous Window Uploads */
+            previous_window_uploads: number | null;
+            role: components["schemas"]["ChannelRole"];
+            /**
+             * Scraped Uploads
+             * @default 0
+             */
+            scraped_uploads: number;
+            subscriber_growth?: components["schemas"]["GrowthFigure"] | null;
+            /** Subscribers */
+            subscribers: number | null;
+            /** Title */
+            title: string;
+            /**
+             * Top Uploads
+             * @default []
+             */
+            top_uploads: components["schemas"]["TopUpload"][];
+            /** Total Videos */
+            total_videos: number | null;
+            /** Total Views */
+            total_views: number | null;
+            view_growth?: components["schemas"]["GrowthFigure"] | null;
+            /** Views Per Subscriber */
+            views_per_subscriber: number | null;
+            /** Views Share */
+            views_share: {
+                [key: string]: number;
+            };
+            /** Window Days */
+            window_days: number;
         };
         /** ChannelRef */
         ChannelRef: {
@@ -3060,6 +3171,23 @@ export interface components {
          * @enum {string}
          */
         FormatSegment: "short_form" | "long_form" | "live";
+        /** FormatStats */
+        FormatStats: {
+            /** Mean Engagement Rate */
+            mean_engagement_rate: number | null;
+            /** Mean Views */
+            mean_views: number | null;
+            /** Median Views */
+            median_views: number | null;
+            /** Rated Uploads */
+            rated_uploads: number;
+            /** Total Views */
+            total_views: number;
+            /** Uploads */
+            uploads: number;
+            /** Uploads Per Week */
+            uploads_per_week: number;
+        };
         /** FormatSuggestion */
         FormatSuggestion: {
             /**
@@ -3281,6 +3409,41 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** GrowthFigure */
+        GrowthFigure: {
+            /** Change */
+            change: number;
+            /** Change Pct */
+            change_pct: number | null;
+            /** Days Covered */
+            days_covered: number;
+            /**
+             * End Day
+             * Format: date
+             */
+            end_day: string;
+            /** End Value */
+            end_value: number | null;
+            /**
+             * Metric
+             * @enum {string}
+             */
+            metric: "subscribers" | "views";
+            /** Requested Days */
+            requested_days: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "youtube_analytics" | "channel_history";
+            /**
+             * Start Day
+             * Format: date
+             */
+            start_day: string;
+            /** Start Value */
+            start_value: number | null;
+        };
         /** HygieneData */
         HygieneData: {
             eligibility?: components["schemas"]["RefreshEligibility"] | null;
@@ -3407,6 +3570,26 @@ export interface components {
          * @enum {string}
          */
         IntentClass: "cost" | "location" | "booking" | "doctor" | "efficacy" | "how_to" | "availability" | "comparison";
+        /** KeywordCandidate */
+        KeywordCandidate: {
+            /** Autocomplete Rank */
+            autocomplete_rank?: number | null;
+            /** Keyword */
+            keyword: string;
+            /** Sources */
+            sources: components["schemas"]["KeywordSource"][];
+            /** Topic Label */
+            topic_label: string;
+            /** Topic Ref Id */
+            topic_ref_id: string;
+            /** Web Reason */
+            web_reason?: string | null;
+            /**
+             * Web Urls
+             * @default []
+             */
+            web_urls: string[];
+        };
         /** KeywordCreate */
         KeywordCreate: {
             /**
@@ -3443,6 +3626,61 @@ export interface components {
             updated_at?: string | null;
             /** Weight */
             weight?: number | null;
+        };
+        /**
+         * KeywordSource
+         * @enum {string}
+         */
+        KeywordSource: "profile" | "autocomplete" | "web";
+        /** KeywordTrend */
+        KeywordTrend: {
+            candidate: components["schemas"]["KeywordCandidate"];
+            /**
+             * Channels
+             * @default 0
+             */
+            channels: number;
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /**
+             * Competitor Videos
+             * @default 0
+             */
+            competitor_videos: number;
+            /**
+             * Heat
+             * @default quiet
+             * @enum {string}
+             */
+            heat: "hot" | "warm" | "quiet";
+            /** Leaders Views Per Day */
+            leaders_views_per_day?: number | null;
+            /** Median Views Per Day */
+            median_views_per_day?: number | null;
+            /** Momentum */
+            momentum?: number | null;
+            /**
+             * Recent Videos
+             * @default 0
+             */
+            recent_videos: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "checked" | "cached" | "unchecked_quota" | "unchecked_error";
+            /** Top Views Per Day */
+            top_views_per_day?: number | null;
+            /**
+             * Videos
+             * @default []
+             */
+            videos: components["schemas"]["TrendVideo"][];
+            /** Window Days */
+            window_days: number;
         };
         /** LLMProviderIn */
         LLMProviderIn: {
@@ -5293,6 +5531,32 @@ export interface components {
          * @enum {string}
          */
         RelevanceBand: "none" | "tangential" | "adjacent" | "strong" | "direct";
+        /** ResultEnvelope[ChannelLandscape] */
+        ResultEnvelope_ChannelLandscape_: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            data: components["schemas"]["ChannelLandscape"];
+            freshness: components["schemas"]["Freshness"];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Notices
+             * @default []
+             */
+            notices: components["schemas"]["RunNotice"][];
+            /** Prev Run Id */
+            prev_run_id?: string | null;
+            /** Run Id */
+            run_id: string;
+            /** Window Days */
+            window_days: number;
+        };
         /** ResultEnvelope[CompetitorDetail] */
         ResultEnvelope_CompetitorDetail_: {
             /**
@@ -5535,6 +5799,32 @@ export interface components {
              */
             as_of: string;
             data: components["schemas"]["RecommendationsData"];
+            freshness: components["schemas"]["Freshness"];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Notices
+             * @default []
+             */
+            notices: components["schemas"]["RunNotice"][];
+            /** Prev Run Id */
+            prev_run_id?: string | null;
+            /** Run Id */
+            run_id: string;
+            /** Window Days */
+            window_days: number;
+        };
+        /** ResultEnvelope[TrendScan] */
+        ResultEnvelope_TrendScan_: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            data: components["schemas"]["TrendScan"];
             freshness: components["schemas"]["Freshness"];
             /**
              * Generated At
@@ -6381,6 +6671,24 @@ export interface components {
             /** Year Is Current Or Next */
             year_is_current_or_next: boolean;
         };
+        /** TopUpload */
+        TopUpload: {
+            /** Engagement Rate */
+            engagement_rate: number | null;
+            /** Format */
+            format: string;
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /** Title */
+            title: string;
+            /** Video Id */
+            video_id: string;
+            /** Views */
+            views: number;
+        };
         /** TopicCoverage */
         TopicCoverage: {
             client?: components["schemas"]["GapCell"] | null;
@@ -6565,6 +6873,112 @@ export interface components {
             n: number;
             /** Usage Share */
             usage_share: number;
+        };
+        /** TrendIdea */
+        TrendIdea: {
+            /** Angle */
+            angle: string;
+            /** Buyer Question */
+            buyer_question?: string | null;
+            /** Fit To Client */
+            fit_to_client: string;
+            /**
+             * Format
+             * @enum {string}
+             */
+            format: "short" | "long";
+            /** Id */
+            id: string;
+            /** Keyword */
+            keyword: string;
+            /** Reference Video Ids */
+            reference_video_ids: string[];
+            /** Title */
+            title: string;
+            /** Topic Ref Id */
+            topic_ref_id: string;
+            /** Why */
+            why: string[];
+        };
+        /** TrendScan */
+        TrendScan: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /**
+             * Ideas
+             * @default []
+             */
+            ideas: components["schemas"]["TrendIdea"][];
+            /**
+             * Keywords
+             * @default []
+             */
+            keywords: components["schemas"]["KeywordTrend"][];
+            /** Language */
+            language?: string | null;
+            /**
+             * Llm Calls
+             * @default 0
+             */
+            llm_calls: number;
+            /**
+             * Messages
+             * @default []
+             */
+            messages: string[];
+            /** Region */
+            region?: string | null;
+            /**
+             * Search Calls
+             * @default 0
+             */
+            search_calls: number;
+            /**
+             * Tavily Credits
+             * @default 0
+             */
+            tavily_credits: number;
+            /** Window Days */
+            window_days: number;
+            /**
+             * Youtube Units
+             * @default 0
+             */
+            youtube_units: number;
+        };
+        /** TrendVideo */
+        TrendVideo: {
+            /** Age Days */
+            age_days: number;
+            /** Channel Id */
+            channel_id: string;
+            /** Channel Title */
+            channel_title: string;
+            /** Duration S */
+            duration_s?: number | null;
+            /**
+             * Is Competitor
+             * @default false
+             */
+            is_competitor: boolean;
+            /**
+             * Published At
+             * Format: date-time
+             */
+            published_at: string;
+            /** Thumbnail Url */
+            thumbnail_url?: string | null;
+            /** Title */
+            title: string;
+            /** Video Id */
+            video_id: string;
+            /** Views */
+            views: number;
+            /** Views Per Day */
+            views_per_day: number;
         };
         /** TrendingData */
         TrendingData: {
@@ -8468,6 +8882,129 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResultEnvelope_GapMatrixData_"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    analytics_landscape: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description cl_… id */
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultEnvelope_ChannelLandscape_"];
                 };
             };
             /** @description Bad Request */
@@ -13936,6 +14473,129 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": unknown;
+                };
+            };
+        };
+    };
+    trends_latest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description cl_… id */
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultEnvelope_TrendScan_"];
                 };
             };
             /** @description Bad Request */

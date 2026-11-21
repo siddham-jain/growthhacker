@@ -1,3 +1,4 @@
+import time
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -101,7 +102,9 @@ class AcquisitionCascade:
             await reporter.step(
                 "crawl.source_started", f"Tier {source.tier}: reading {SOURCE_LABELS[source.source_kind]}"
             )
+            started = time.monotonic()
             result = await source.acquire(request, remaining, reporter)
+            outcome.stats[f"{source.source_kind.value}_ms"] += int((time.monotonic() - started) * 1000)
             if not isinstance(result, SourceHarvest):
                 raise TypeError(f"{source.source_kind.value} must return a SourceHarvest")
             self._merge(outcome, result, seen_urls)

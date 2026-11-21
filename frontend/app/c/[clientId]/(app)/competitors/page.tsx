@@ -6,13 +6,14 @@ import Link from "next/link";
 import { GapMatrix } from "@/components/charts/lazy";
 import { CompetitorAnswerCitations } from "@/components/citations/answer-citations";
 import { CompetitorFolder } from "@/components/competitors/competitor-folder";
+import { LandscapeTable } from "@/components/landscape/landscape-table";
 import { FreshnessLine } from "@/components/shell/freshness-line";
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState, ErrorState, LoadingBlock } from "@/components/states/states";
 import { Button, LinkButton } from "@/components/ui/button";
 import { CalcNote } from "@/components/ui/calc-mark";
 import { Chip, SegmentedControl, SegmentedControlItem } from "@/components/ui/primitives";
-import { gapsQuery, scorecardsQuery } from "@/lib/api/queries";
+import { gapsQuery, landscapeQuery, scorecardsQuery } from "@/lib/api/queries";
 import type { ChannelScorecard } from "@/lib/api/types";
 import { describeVsUsual, formatRatio, plural } from "@/lib/format";
 import { RELATION_LABELS } from "@/lib/labels";
@@ -41,6 +42,7 @@ export default function CompetitorsPage() {
   const [view, setView] = useTabParam(VIEWS, "folders", "view");
   const scorecards = useQuery(scorecardsQuery(clientId, windowDays));
   const gaps = useQuery({ ...gapsQuery(clientId, windowDays), enabled: view === "gaps" });
+  const landscape = useQuery(landscapeQuery(clientId));
   const all = scorecards.data?.data ?? [];
   const competitors = all.filter((card) => card.role === "competitor_set").sort(SORTERS[sort]);
   const watching = all.filter((card) => card.role !== "competitor_set").sort(byName);
@@ -63,6 +65,11 @@ export default function CompetitorsPage() {
           {gaps.isPending ? <LoadingBlock rows={1} /> : null}
           {gaps.error ? <ErrorState error={gaps.error} onRetry={() => gaps.refetch()} /> : null}
           {gaps.data ? <GapMatrix matrix={gaps.data.data} clientId={clientId} /> : null}
+        </div>
+      ) : null}
+      {landscape.data?.data.competitors.length ? (
+        <div className="mb-8">
+          <LandscapeTable landscape={landscape.data.data} clientId={clientId} />
         </div>
       ) : null}
       <div className="mb-4 flex flex-wrap items-center gap-2">

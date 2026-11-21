@@ -77,7 +77,7 @@ curl -s -X POST $API/clients "${H[@]}" -H "Idempotency-Key: $(uuidgen)" -d '{
 curl -N $API/runs/<run_id>/events -H "Authorization: Bearer $KEY" -H "Accept: text/event-stream"
 ```
 
-**Onboarding.** `resolve_inputs → crawl_site → build_profile → {discover_competitors, seed_topic_refs} + prefetch_own_channel → finish_onboarding`. For Apollo, JSON-LD `sameAs` on the official site verifies the channel. The client then becomes `awaiting_confirmation` (or moves straight on in a demo workspace).
+**Onboarding.** `resolve_inputs → crawl_site → build_profile → {discover_competitors → prefetch_competitors, seed_topic_refs} + prefetch_own_channel → finish_onboarding`. The crawl reads only the key pages (`website_intel.onboarding`); the review opens once `build_profile` and `seed_topic_refs` finish, and the full-budget `recrawl` is queued after the first confirmed analysis. For Apollo, JSON-LD `sameAs` on the official site verifies the channel. The client then becomes `awaiting_confirmation` (or moves straight on in a demo workspace).
 
 **Confirm.** Outside demo mode, review the profile, keywords, questions and competitors in the UI (or the setup endpoints), then `POST $API/clients/<client_id>/confirm-setup`. It returns 202 with the queued analysis run; the worker freezes the competitor set and rebuilds topics before it validates (3–10 competitors, at least one topic). To promote a rival the proposal ranked just outside its slots:
 
@@ -87,7 +87,7 @@ curl -s -X POST  $API/clients/<client_id>/competitors/<cmp_id>/confirm "${H[@]}"
 curl -s -X POST  $API/clients/<client_id>/confirm-setup "${H[@]}" -H "Idempotency-Key: $(uuidgen)" -d '{}'
 ```
 
-**Analysis.** `snapshot_config → {ingest, niche_discovery, news, own_analytics, competitor_drift} → enrich → topics → analytics → refresh → recommend → write_cards → finalize`. `finalize` publishes all three windows at once. Results: `/clients/<id>/recommendations?window_days=30` (add `&format=contract` for the strict assignment shape), `/early-signals`, `/hygiene`, `/refresh-suggestions`, `/creators`, `/news/opportunities`, `/answer-citations`, `/analytics/*`.
+**Analysis.** `snapshot_config → {ingest, niche_discovery, news, trends, own_analytics, competitor_drift} → enrich → topics → analytics → refresh → recommend → write_cards → finalize`. `finalize` publishes all three windows at once. Results: `/clients/<id>/trends` (trending keywords and trend ideas), `/clients/<id>/recommendations?window_days=30` (add `&format=contract` for the strict assignment shape), `/early-signals`, `/hygiene`, `/refresh-suggestions`, `/creators`, `/news/opportunities`, `/answer-citations`, `/analytics/*`.
 
 Re-run an analysis on an existing client with `POST $API/clients/<id>/runs` and `{"kind": "analysis", "force": true}` (`force` recomputes every stage).
 

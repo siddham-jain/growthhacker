@@ -11,7 +11,7 @@ from app.evaluation.ops.aggregate import run_timings
 from app.evaluation.ops.api import LedgerOpsService
 from app.evaluation.ops.render import render_ops_report
 from app.evaluation.ops.report import OpsReportBuilder, pt_days
-from app.evaluation.ops.sources import RunRow
+from app.evaluation.ops.sources import RunRow, StageRow
 from tests.conftest import make_settings
 from tests.evaluation import ops_fixtures as fx
 
@@ -179,3 +179,36 @@ async def test_ops_service_scopes_clients_to_the_workspace(session_factory) -> N
     )
     assert payload["scope"]["clients"] == "workspace"
     assert {item["client_id"] for item in payload["quota"]} == {str(mine.client_id)}
+
+
+def test_onboarding_timings_report_first_review_and_crawl_sub_steps() -> None:
+    client, start = uuid.uuid4(), datetime(2026, 11, 20, 10, tzinfo=UTC)
+    run = RunRow(
+        uuid.uuid4(),
+        uuid.uuid4(),
+        client,
+        "onboarding",
+        "succeeded",
+        start,
+        start + timedelta(seconds=150),
+        0,
+    )
+    stuck = RunRow(uuid.uuid4(), uuid.uuid4(), client, "onboarding", "failed", start, None, 0)
+
+    def stage(name: str, seconds: int, row: RunRow = run, **counts: int) -> StageRow:
+        finished = start + timedelta(seconds=seconds)
+        return StageRow(client, "onboarding", name, "succeeded", 1000, row.run_id, finished, counts)
+
+    stages = [
+        stage("crawl_site", 40, discover_ms=12_000, fetch_ms=25_000, pages=20),
+        stage("build_profile", 80, synthesize_ms=30_000),
+        stage("seed_topic_refs", 85),
+        stage("discover_competitors", 140),
+        stage("build_profile", 90, stuck),
+    ]
+    by_stage = {item.stage: item for item in run_timings([run, stuck], stages)["onboarding"]}
+    # the review opens when the profile and its topics exist, not when competitors finish
+    assert by_stage["first_review"].n == 1 and by_stage["first_review"].p50_ms == 85_000
+    assert by_stage["crawl_site › fetch"].p50_ms == 25_000
+    assert by_stage["build_profile › synthesize"].p50_ms == 30_000
+    assert "crawl_site › pages" not in by_stage

@@ -46,7 +46,7 @@ function ClientSwitcher({ client }: { client: Client | undefined }) {
       </summary>
       <div className="absolute inset-x-0 top-full z-30 mt-1 rounded-control border border-border bg-card p-1 shadow-overlay">
         {clients.data?.items.map((item) => (
-          <Link key={item.id} href={`/c/${item.id}/today`} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-body-regular hover:bg-muted">
+          <Link key={item.id} href={`/c/${item.id}/ideas`} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-body-regular hover:bg-muted">
             <LifecycleDot lifecycle={item.lifecycle} />
             <span className="truncate">{item.name}</span>
           </Link>

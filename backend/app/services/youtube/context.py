@@ -11,6 +11,7 @@ class SearchPool(StrEnum):
     onboarding = "onboarding"
     news = "news"
     niche = "niche"
+    trends = "trends"
 
 
 DEFAULT_SEARCH_POOL = {

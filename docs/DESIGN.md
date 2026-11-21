@@ -45,7 +45,7 @@ Inputs: a website and/or a YouTube channel (or just a business name). Outputs:
 
 | pipeline | stages |
 |---|---|
-| onboarding | resolve_inputs → crawl_site → build_profile → {discover_competitors, seed_topic_refs} + prefetch_own_channel → finish_onboarding |
+| onboarding | resolve_inputs → crawl_site (key pages) → build_profile → {discover_competitors → prefetch_competitors, seed_topic_refs} + prefetch_own_channel → finish_onboarding |
 | analysis, daily_refresh | snapshot_config → {ingest, niche_discovery, news, own_analytics, competitor_drift} → enrich → topics → analytics → refresh → recommend → write_cards → finalize |
 | cards | snapshot_config → write_cards → finalize (on-demand wording for another window) |
 | backtest | snapshot_config → frozen_corpus → enrich → topics → analytics → recommend → record_backtest |

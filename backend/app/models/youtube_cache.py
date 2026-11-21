@@ -23,7 +23,8 @@ VIDEO_FORMATS = ("short_form", "long_form", "live", "upcoming", "unknown")
 LIVE_BROADCAST_CONTENT = ("none", "live", "upcoming")
 COMMENTS_STATES = ("enabled", "disabled", "unknown")
 INGEST_SOURCES = ("uploads", "search", "manual", "recommendation_ref")
-SNAPSHOT_SOURCES = ("batch_stats", "videos_list", "backtest_freeze")
+SNAPSHOT_SOURCES = ("batch_stats", "videos_list", "backtest_freeze", "yt_dlp")
+DATA_SOURCES = ("data_api", "yt_dlp")
 PARTITIONED_TABLES = ("yt_video_snapshots", "yt_channel_snapshots")
 
 
@@ -33,6 +34,7 @@ class YtChannel(Base):
     __table_args__ = (
         CheckConstraint("channel_id ~ '^UC[0-9A-Za-z_-]{22}$'", name="channel_id_format"),
         check_in("availability", CHANNEL_AVAILABILITY),
+        check_in("data_source", DATA_SOURCES),
         Index("ix_yt_channels_handle", "handle"),
         Index(
             "ix_yt_channels_retention_clock",
@@ -63,6 +65,7 @@ class YtChannel(Base):
     last_upload_at: Mapped[datetime | None]
     recent_upload_ids: Mapped[list[str]] = text_array()
     cadence_flags: Mapped[list[str]] = text_array()
+    data_source: Mapped[str] = mapped_column(server_default=text("'data_api'"))
     etag: Mapped[str | None]
     metadata_fetched_at: Mapped[datetime]
     stats_fetched_at: Mapped[datetime]
@@ -118,6 +121,7 @@ class YtVideo(Base):
         check_in("live_broadcast_content", LIVE_BROADCAST_CONTENT, nullable=True),
         check_in("comments_state", COMMENTS_STATES),
         check_in("ingest_source", INGEST_SOURCES),
+        check_in("data_source", DATA_SOURCES),
         Index(
             "ix_yt_videos_channel_id_effective_published_at",
             "channel_id",
@@ -178,6 +182,7 @@ class YtVideo(Base):
     availability: Mapped[str] = mapped_column(server_default=text("'available'"))
     first_missing_at: Mapped[datetime | None]
     ingest_source: Mapped[str]
+    data_source: Mapped[str] = mapped_column(server_default=text("'data_api'"))
     quality_flags: Mapped[list[str]] = text_array()
     etag: Mapped[str | None]
     metadata_fetched_at: Mapped[datetime]

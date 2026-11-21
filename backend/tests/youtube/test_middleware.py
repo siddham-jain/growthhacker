@@ -113,11 +113,11 @@ async def test_retry_after_is_honoured_and_attempts_are_bounded(chain) -> None:
 async def test_never_retries_final_errors(chain, status, reason, raised) -> None:
     handler, quota, ledger, _ = chain
     route = respx.get(URL).mock(return_value=error(status, reason))
-    with pytest.raises(raised):
+    with pytest.raises(raised) as caught:
         await handler.send(request())
     assert route.call_count == 1 and quota.reserved == 1 and ledger.rows[0].reason == reason
     if raised is QuotaExhausted:
-        assert quota.exhausted == [QuotaBucket.main]
+        assert quota.exhausted == [QuotaBucket.main] and caught.value.reason == "google"
 
 
 @respx.mock

@@ -1,4 +1,5 @@
 import asyncio
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -59,6 +60,11 @@ class BuildResult:
     issues: list[Issue]
     llm_usage: dict[str, object]
     notices: list[RunNotice] = field(default_factory=list)
+    timings_ms: dict[str, int] = field(default_factory=dict)
+
+
+def elapsed_ms(started: float) -> int:
+    return int((time.monotonic() - started) * 1000)
 
 
 def map_order(pages: Sequence[ExtractedPage]) -> list[ExtractedPage]:
@@ -124,6 +130,8 @@ class ProfileBuilder:
         )
         map_pages = map_order(pages)[: self._profile.map_page_budget]
         await reporter.step("profile.extracting", f"Reading facts from {len(map_pages)} pages")
+        timings: dict[str, int] = {}
+        started = time.monotonic()
         report = await PageFactExtractor(
             self._llm,
             EvidenceVerifier(
@@ -133,6 +141,7 @@ class ProfileBuilder:
             concurrency=self._settings.map_concurrency,
             cache=self._map_cache,
         ).extract(map_pages, self._boilerplate_free(map_pages), tables, store)
+        timings["extract_ms"] = elapsed_ms(started)
         kb_page = next((page for page in pages if page.page.source_kind is SourceKind.knowledge_base), None)
         name_guess = located.business_name if located else None
         brand_signals = (
@@ -147,6 +156,7 @@ class ProfileBuilder:
             else []
         )
         await reporter.step("profile.extracting", "Synthesising the business profile")
+        started = time.monotonic()
         core = await ProfileSynthesizer(self._llm, token_cap=self._profile.reduce_input_token_cap).synthesize(
             SynthesisContext(
                 store=store,
@@ -163,11 +173,13 @@ class ProfileBuilder:
                 coverage_notes=outcome.notes[:10],
             )
         )
+        timings["synthesize_ms"] = elapsed_ms(started)
         await self._report_fields(reporter, core)
         india = core.identity.country == "IN" or any(
             (page.page.lang or "").split("-")[0] in INDIC_LANGUAGES for page in pages
         )
         stats = site_change_stats(pages, outcome.inventory, now)
+        started = time.monotonic()
         enrichment, freshness = await asyncio.gather(
             KeywordAndQuestionEnricher(self._llm).enrich(
                 EnrichmentContext(
@@ -181,6 +193,7 @@ class ProfileBuilder:
             ),
             FreshnessProfiler(self._llm).profile(store=store, core=core, claims=claims, stats=stats),
         )
+        timings["enrich_ms"] = elapsed_ms(started)
         warnings = [*core.warnings, *outcome.notes]
         coverage = coverage_report(
             pages=pages,
@@ -226,6 +239,7 @@ class ProfileBuilder:
             quality=quality,
         )
         profile, issues = ValidatorChain().apply(profile)
+        started = time.monotonic()
         questions = await BuyerQuestionService(
             [
                 UserQuestionSource(user_questions, language=core.identity.primary_language),
@@ -234,6 +248,7 @@ class ProfileBuilder:
                 WebsiteDerivedSource(enrichment.questions),
             ]
         ).collect(client_id, profile, claims, existing_questions)
+        timings["questions_ms"] = elapsed_ms(started)
         question_ids = {normalise_name(question.text): question.id for question in questions}
         pillars = [
             pillar.model_copy(
@@ -264,6 +279,7 @@ class ProfileBuilder:
             issues=issues,
             llm_usage=self._llm.usage.as_dict(),
             notices=notices,
+            timings_ms=timings,
         )
 
     @staticmethod

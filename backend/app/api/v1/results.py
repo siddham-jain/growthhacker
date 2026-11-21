@@ -38,15 +38,17 @@ from app.api.services import (
     NEWS,
     RECOMMENDATIONS,
     REFRESH,
+    TRENDS,
     AnalyticsScope,
     RecommendationFilters,
 )
 from app.api.v1.common import PAGING_PARAMS, json_response, only_params
 from app.core.tenancy import TenantScope
-from app.domain.analytics import TraitLift
+from app.domain.analytics import ChannelLandscape, TraitLift
 from app.domain.news import NewsSignal
 from app.domain.recommendations import ASSIGNMENT_REC_TYPES, RecType
 from app.domain.runs import RunKind, RunTrigger
+from app.domain.trends import TrendScan
 from app.models.tenancy import Client
 from app.pipeline.client_settings import read_settings
 from app.pipeline.runs import RunRequest
@@ -255,6 +257,30 @@ async def analytics_gaps(
     service = state.service(ANALYTICS)
     active = await _published(state, scope, window_days)
     return _wrap(state, await service.gaps(scope, active.run_id, active.window_days), active)
+
+
+@router.get(
+    "/clients/{client_id}/analytics/landscape",
+    operation_id="analytics_landscape",
+    response_model=ResultEnvelope[ChannelLandscape],
+    dependencies=[Depends(only_params())],
+)
+async def analytics_landscape(state: State, scope: ClientScope) -> ResultEnvelope[ChannelLandscape]:
+    # fixed 90-day window and 365-day growth, independent of the analysis window
+    service = state.service(ANALYTICS)
+    active = await _published(state, scope, None)
+    return _wrap(state, await service.landscape(scope, active.run_id), active)
+
+
+@router.get(
+    "/clients/{client_id}/trends",
+    operation_id="trends_latest",
+    response_model=ResultEnvelope[TrendScan],
+    dependencies=[Depends(only_params())],
+)
+async def trends_latest(state: State, scope: ClientScope) -> ResultEnvelope[TrendScan]:
+    active = await _published(state, scope, None)
+    return _wrap(state, await state.service(TRENDS).latest(scope, active.window_days), active)
 
 
 @router.get(

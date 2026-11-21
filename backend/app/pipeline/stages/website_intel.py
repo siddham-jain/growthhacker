@@ -8,7 +8,7 @@ import app.adapters.context  # noqa: F401  registers every ContextSource tier
 from app.core.registry import artifact_schema_registry, stage_registry
 from app.core.tenancy import TenantScope
 from app.domain.profile import BusinessProfile
-from app.domain.runs import RunNotice, RunNoticeCode
+from app.domain.runs import RunKind, RunNotice, RunNoticeCode
 from app.domain.web import CoverageFacet, SourceKind
 from app.domain.youtube import OwnershipLabel
 from app.models.tenancy import Client
@@ -28,7 +28,7 @@ from app.services.website_intel.identity.locator import LocatedBusinessDetail
 from app.services.website_intel.persistence import PgMapCache, WebsiteIntelStore
 from app.services.website_intel.profile.market import market_timezone
 from app.services.website_intel.profile.prompts import WEBSITE_PROMPTS, prompt_version
-from app.services.website_intel.service import WebsiteIntelService, deps_from_container
+from app.services.website_intel.service import CrawlProfileKind, WebsiteIntelService, deps_from_container
 
 LOCATED_BUSINESS = ArtifactKey(
     name="located_business", model=LocatedBusinessDetail, schema_version=1, contains_api_data=True
@@ -74,8 +74,16 @@ async def record_market(ctx: RunContext[Any], profile: BusinessProfile) -> None:
         write_settings(client, merged(settings, config_version=settings.config_version + 1))
 
 
+def crawl_profile(ctx: RunContext[Any]) -> CrawlProfileKind:
+    return "onboarding" if ctx.kind is RunKind.onboarding else "client"
+
+
 def website_service(ctx: RunContext[Any]) -> WebsiteIntelService:
-    return WebsiteIntelService(deps_from_container(ctx.deps))
+    return WebsiteIntelService(deps_from_container(ctx.deps), profile_kind=crawl_profile(ctx))
+
+
+def timing_counts(stats: Mapping[str, int]) -> dict[str, int]:
+    return {key: int(value) for key, value in stats.items() if key.endswith("_ms")}
 
 
 def scope(ctx: RunContext[Any]) -> TenantScope:
@@ -202,7 +210,12 @@ class CrawlSiteStage:
     def fingerprint_inputs(self, ctx: RunContext[Any]) -> Mapping[str, Any]:
         settings = ctx.deps.settings.website_intel
         digest = hashlib.sha256(settings.model_dump_json().encode()).hexdigest()[:16]
-        return {"website": ctx.snapshot.website_url, "settings": digest, "day": ctx.as_of.date().isoformat()}
+        return {
+            "website": ctx.snapshot.website_url,
+            "profile": crawl_profile(ctx),
+            "settings": digest,
+            "day": ctx.as_of.date().isoformat(),
+        }
 
     async def run(self, ctx: RunContext[Any]) -> StageResult[SiteAcquisition]:
         located = await ctx.artifacts.get(LOCATED_BUSINESS)
@@ -234,7 +247,7 @@ class CrawlSiteStage:
                 crawl_run_id = await store.record_crawl(
                     website_id,
                     run_id=ctx.run_id,
-                    trigger="onboarding",
+                    trigger="onboarding" if ctx.kind is RunKind.onboarding else "full",
                     profile=service.profile_kind,
                     outcome=outcome,
                     started_at=started,
@@ -266,7 +279,12 @@ class CrawlSiteStage:
         return StageResult(
             status=status,
             artifact=artifact,
-            counts={"pages": len(outcome.pages), "site_pages": site_pages, "blocked": len(outcome.blocked)},
+            counts={
+                "pages": len(outcome.pages),
+                "site_pages": site_pages,
+                "blocked": len(outcome.blocked),
+                **timing_counts(outcome.stats),
+            },
             notices=tuple(notices),
         )
 
@@ -346,6 +364,7 @@ class BuildProfileStage:
                 "conversion_actions": len(profile.conversion_actions),
                 "buyer_questions": len(result.questions),
                 "facts": len(result.facts.facts),
+                **result.timings_ms,
             },
             notices=tuple(result.notices),
         )

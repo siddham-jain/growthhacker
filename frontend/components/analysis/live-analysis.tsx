@@ -92,23 +92,28 @@ interface LiveAnalysisProps {
   subtitle: string;
   doneHref: string;
   doneLabel: string;
+  // opens doneHref before the run ends, once what that page needs exists
+  readyEarly?: (state: LiveRunState) => boolean;
+  earlyNote?: string;
 }
 
-export function LiveAnalysis({ runId, step, headline, subtitle, doneHref, doneLabel }: LiveAnalysisProps) {
+export function LiveAnalysis({ runId, step, headline, subtitle, doneHref, doneLabel, readyEarly, earlyNote }: LiveAnalysisProps) {
   const router = useRouter();
   const { state, error } = useRunStream(runId);
   const announcement = useThrottledAnnouncement(state);
   const finished = SUCCESS.includes(state.status);
   const failed = state.status === "failed" || state.status === "cancelled";
+  const early = !finished && !failed && Boolean(readyEarly?.(state));
+  const ready = finished || early;
   const stage = activeStage(state);
   const eta = etaLabel(state);
   const shownPercent = useCountUp(Math.round(state.percent), 600);
 
   useEffect(() => {
-    if (!finished) return;
+    if (!ready) return;
     const timer = setTimeout(() => router.push(doneHref), ROUTE_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [finished, doneHref, router]);
+  }, [ready, doneHref, router]);
 
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(320px,440px)_minmax(0,1fr)] lg:gap-12">
@@ -160,7 +165,8 @@ export function LiveAnalysis({ runId, step, headline, subtitle, doneHref, doneLa
               </InfoNote>
             ))}
 
-            {finished ? (
+            {early && earlyNote ? <InfoNote>{earlyNote}</InfoNote> : null}
+            {ready ? (
               <LinkButton href={doneHref} variant="primary" size="medium" className="w-fit">
                 {doneLabel}
               </LinkButton>

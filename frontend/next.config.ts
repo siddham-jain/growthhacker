@@ -3,7 +3,7 @@ import { API_BASE, DEMO_WORKSPACE } from "./lib/env";
 
 const mock = process.env.NEXT_PUBLIC_API_MOCK === "1";
 const dev = process.env.NODE_ENV === "development";
-const apiOrigin = new URL(API_BASE).origin;
+const apiOrigin = API_BASE.startsWith("/") ? "" : new URL(API_BASE).origin;
 
 // no nonces: pages are prerendered, so next's inline bootstrap and the theme script need 'unsafe-inline'; dev adds eval and the hmr socket
 const contentSecurityPolicy = [
@@ -38,6 +38,12 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ["@remixicon/react", "react-aria-components", "motion"],
   },
   poweredByHeader: false,
+  allowedDevOrigins: ["*.trycloudflare.com"],
+  async rewrites() {
+    // set when the app is shared through one tunnel, so the browser reaches the api on the same origin
+    const target = process.env.API_PROXY_TARGET;
+    return target ? [{ source: "/api/v1/:path*", destination: `${target.replace(/\/$/, "")}/api/v1/:path*` }] : [];
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

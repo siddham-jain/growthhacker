@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from pydantic import SecretStr
 
 from app.adapters.youtube.data_api_v3 import DataApiV3Gateway, unique
+from app.adapters.youtube.fallback import FallbackGateway
 from app.core.clock import Clock
 from app.core.redis import LockManager
 from app.domain.common import ChannelId, VideoId
@@ -29,7 +30,7 @@ class CachedGateway:
 
     def __init__(
         self,
-        inner: DataApiV3Gateway,
+        inner: DataApiV3Gateway | FallbackGateway,
         store: YouTubeStore,
         policy: FreshnessPolicy,
         clock: Clock,
@@ -288,6 +289,9 @@ class CachedGateway:
         self, query: SearchQuery, page_token: str | None, ctx: RequestContext, key: str
     ) -> SearchPage:
         page = await self._inner.search(query, page_token, ctx)
+        # a page that expires at once (an empty scrape) is returned but never cached
+        if page.expires_at <= page.fetched_at:
+            return page
         params = {**search_params_for_key(query), "next_page_token": page.next_page_token}
         async with self._store.uow() as uow:
             await uow.repository(SearchCacheRepository).put(

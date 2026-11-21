@@ -1,4 +1,5 @@
-import type { RunKind } from "@/lib/api/types";
+import type { RunKind, StageStatus } from "@/lib/api/types";
+import type { LiveRunState } from "./run-reducer";
 
 // keyed by the backend's stage names (backend/app/pipeline/definitions.py)
 export const STAGE_LABELS: Record<string, string> = {
@@ -8,12 +9,14 @@ export const STAGE_LABELS: Record<string, string> = {
   build_profile: "Understanding your business",
   discover_competitors: "Finding competitors",
   seed_topic_refs: "Turning your offerings into topics",
+  prefetch_competitors: "Fetching your competitors' videos",
   finish_onboarding: "Preparing your setup",
   snapshot_config: "Locking this run's settings",
   ingest: "Fetching recent videos",
   niche_discovery: "Finding channels in your niche",
   own_analytics: "Reading your owner analytics",
   news: "Scanning the news",
+  trends: "Finding what's trending in your niche",
   competitor_drift: "Checking your competitor set",
   enrich: "Reading titles and thumbnails",
   topics: "Matching videos to your topics",
@@ -26,6 +29,14 @@ export const STAGE_LABELS: Record<string, string> = {
 
 // display order for known stages; stages run as a graph, so several can be in flight at once
 export const RUN_STAGES: Partial<Record<RunKind, string[]>> = {
-  onboarding: ["resolve_inputs", "crawl_site", "prefetch_own_channel", "build_profile", "discover_competitors", "seed_topic_refs", "finish_onboarding"],
-  analysis: ["snapshot_config", "ingest", "niche_discovery", "own_analytics", "news", "competitor_drift", "enrich", "topics", "analytics", "recommend", "write_cards", "refresh", "finalize"],
+  onboarding: ["resolve_inputs", "crawl_site", "prefetch_own_channel", "build_profile", "discover_competitors", "seed_topic_refs", "prefetch_competitors", "finish_onboarding"],
+  analysis: ["snapshot_config", "ingest", "niche_discovery", "own_analytics", "news", "trends", "competitor_drift", "enrich", "topics", "analytics", "recommend", "write_cards", "refresh", "finalize"],
 };
+
+const PRODUCED: StageStatus[] = ["succeeded", "degraded", "reused"];
+// the review needs only the profile and its topics; competitors keep loading while the user reviews
+const REVIEW_STAGES = ["build_profile", "seed_topic_refs"];
+
+export function reviewReady(state: LiveRunState): boolean {
+  return REVIEW_STAGES.every((id) => PRODUCED.includes(state.stages[id]?.status ?? "pending"));
+}

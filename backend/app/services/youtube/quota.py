@@ -12,7 +12,7 @@ from app.core.config import QuotaSettings
 from app.core.logging import get_logger
 from app.core.redis import QuotaCounter, ReservationStatus
 from app.domain.youtube import QuotaBucket, QuotaPriority
-from app.ports.quota import QuotaExhausted, QuotaReservation
+from app.ports.quota import QuotaExhausted, QuotaReason, QuotaReservation
 from app.ports.youtube import RequestContext
 from app.services.youtube.context import as_youtube_context
 
@@ -90,6 +90,14 @@ class QuotaManager:
         }
         return caps.get(bucket, 0)
 
+    def _refusal(self, bucket: QuotaBucket, units: int, status: ReservationStatus, used: int) -> QuotaReason:
+        if status is ReservationStatus.over_client_cap:
+            return "client_cap"
+        # a class ceiling below the daily limit is our own reserve for other work, not an empty project
+        if status is ReservationStatus.over_limit and used + units <= self.daily_limit(bucket):
+            return "priority"
+        return "project"
+
     def _pool_bucket(self, ctx: RequestContext) -> tuple[str, int]:
         pool = as_youtube_context(ctx).pool
         return f"search_pool_{pool.value}", getattr(self._settings.search_split, pool.value)
@@ -128,7 +136,7 @@ class QuotaManager:
         used = await self._redis.incrby(key, units)
         if used > int(cap):
             await self._redis.decrby(key, units)
-            raise QuotaExhausted(bucket, self.resets_at())
+            raise QuotaExhausted(bucket, self.resets_at(), "run_cap")
         stage = as_youtube_context(ctx).budget_stage
         if stage is not None:
             async with self._redis.pipeline(transaction=True) as pipe:
@@ -166,7 +174,7 @@ class QuotaManager:
                 pool = await self._counter.reserve(pool_bucket, day, units, limit=pool_limit)
                 if not pool.ok:
                     pool_bucket = None
-                    raise QuotaExhausted(bucket, self.resets_at())
+                    raise QuotaExhausted(bucket, self.resets_at(), "search_pool")
             result = await self._counter.reserve(
                 bucket.value,
                 day,
@@ -178,7 +186,9 @@ class QuotaManager:
             if not result.ok:
                 if result.status is ReservationStatus.over_client_cap:
                     logger.info("quota_client_cap", bucket=bucket.value, client_id=client_id)
-                raise QuotaExhausted(bucket, self.resets_at())
+                raise QuotaExhausted(
+                    bucket, self.resets_at(), self._refusal(bucket, units, result.status, result.used)
+                )
         except QuotaExhausted:
             if pool_bucket is not None:
                 await self._counter.refund(pool_bucket, day, units)
@@ -202,7 +212,7 @@ class QuotaManager:
         allowance = self._settings.redis_down_interactive_units
         if ctx.priority is not QuotaPriority.interactive or self._local_units + units > allowance:
             logger.warning("quota_redis_unavailable", bucket=bucket.value, error=type(error).__name__)
-            raise QuotaExhausted(bucket, self._clock.now() + timedelta(minutes=5)) from error
+            raise QuotaExhausted(bucket, self._clock.now() + timedelta(minutes=5), "redis_down") from error
         self._local_units += units
         return YouTubeQuotaReservation(
             bucket=bucket,

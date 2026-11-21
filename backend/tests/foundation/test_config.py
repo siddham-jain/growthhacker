@@ -12,7 +12,7 @@ def test_defaults_follow_owner_decisions() -> None:
     assert anthropic.low.effort is None
     assert (anthropic.medium.model, anthropic.medium.effort) == ("claude-sonnet-5-5", "low")
     assert (anthropic.high.model, anthropic.high.effort) == ("claude-sonnet-5-5", "medium")
-    assert settings.quota.search_split.model_dump() == {"onboarding": 30, "news": 15, "niche": 55}
+    assert settings.quota.search_split.model_dump() == {"onboarding": 30, "news": 15, "niche": 15, "trends": 40}
     assert settings.quota.main_daily_units == 10_000
     assert settings.quota.batch_stats_daily_units == 10_000
     assert settings.policy.retention_mode == "strict_30d"
@@ -22,12 +22,12 @@ def test_defaults_follow_owner_decisions() -> None:
 
 def test_nested_env_override_keeps_tier_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GH_LLM__ANTHROPIC__MEDIUM__TIMEOUT_S", "12")
-    monkeypatch.setenv("GH_QUOTA__SEARCH_SPLIT__NICHE", "50")
+    monkeypatch.setenv("GH_QUOTA__SEARCH_SPLIT__NICHE", "10")
     settings = IsolatedSettings()
     assert settings.llm.anthropic.medium.timeout_s == 12
     assert settings.llm.anthropic.medium.model == "claude-sonnet-5-5"
     assert settings.llm.anthropic.medium.effort == "low"
-    assert settings.quota.search_split.niche == 50
+    assert settings.quota.search_split.niche == 10
 
 
 def test_legacy_env_names_map_into_sections(monkeypatch: pytest.MonkeyPatch) -> None:

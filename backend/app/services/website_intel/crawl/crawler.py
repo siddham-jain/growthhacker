@@ -202,7 +202,8 @@ class PoliteCrawler:
             max_bytes=self._settings.max_html_bytes,
         )
         state = _CrawlState(site=site, ctx=ctx, harvest=CrawlHarvest(site=site))
-        deadline = time.monotonic() + min(budget.wall_seconds, self._settings.phase_a_timeout_s)
+        started = time.monotonic()
+        deadline = started + min(budget.wall_seconds, self._settings.phase_a_timeout_s)
         try:
             rules, mode = await self._robots.rules(site.canonical_origin, ctx)
         except (UnsafeTargetError, DnsLookupError) as error:
@@ -231,10 +232,16 @@ class PoliteCrawler:
             self._add_candidate(state, home_url, "home", depth=0, linked_from_home=True)
         await self._read_sitemaps(state, rules, deadline)
         await self._follow_links(state, reporter, budget, deadline, country_hint)
+        stats = state.harvest.stats
+        stats["discover_ms"] = int((time.monotonic() - started) * 1000)
         await reporter.step("crawl.discovered", f"Found {len(state.candidates)} pages to consider")
+        phase = time.monotonic()
         chosen = await self._choose(state, budget, business_name)
+        stats["select_ms"] = int((time.monotonic() - phase) * 1000)
+        phase = time.monotonic()
         await self._fetch_selected(state, chosen, reporter, budget, country_hint)
         await self._fetch_pdfs(state, reporter)
+        stats["fetch_ms"] = int((time.monotonic() - phase) * 1000)
         self._finish_inventory(state)
         return state.harvest
 

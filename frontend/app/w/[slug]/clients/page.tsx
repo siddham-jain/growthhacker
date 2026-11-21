@@ -33,7 +33,7 @@ export default function ClientsPage() {
       <ul className="grid gap-3 md:grid-cols-2">
         {items.map((client) => (
           <li key={client.id}>
-            <Link href={client.lifecycle === "onboarding" ? `/c/${client.id}/setup/analyze` : `/c/${client.id}/today`} className="flex flex-col gap-2 rounded-card bg-card p-5 shadow-card transition-shadow hover:shadow-raised">
+            <Link href={client.lifecycle === "onboarding" ? `/c/${client.id}/setup/analyze` : `/c/${client.id}/ideas`} className="flex flex-col gap-2 rounded-card bg-card p-5 shadow-card transition-shadow hover:shadow-raised">
               <span className="flex items-center gap-2">
                 <LifecycleDot lifecycle={client.lifecycle} />
                 <span className="text-headline text-foreground">{client.name}</span>

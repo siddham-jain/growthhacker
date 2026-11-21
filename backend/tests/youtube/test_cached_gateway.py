@@ -135,6 +135,19 @@ async def test_search_pages_are_shared_by_key(make_cached, clock, committed_stor
     assert second.items[0].id == video_id(1) or first.items[0].id == video_id(1)
 
 
+async def test_empty_scraped_search_is_not_cached(make_cached, clock, committed_store) -> None:
+    upstream = inner(clock)
+    upstream.search_pages["zz-test empty scrape"] = SearchPage(
+        query_key="ignored", items=[], fetched_at=NOW, expires_at=NOW, from_cache=False
+    )
+    gateway = make_cached(upstream, cache_store=committed_store)
+    query = SearchQuery(q="zz-test empty scrape", type="video")
+    await gateway.search(query, None, CTX)
+    again = await gateway.search(query, None, CTX)
+    assert upstream.calls.count("search.list") == 2
+    assert not again.from_cache
+
+
 async def test_video_stats_write_through_with_live_age_alignment(make_cached, clock, store) -> None:
     live = video_record(
         video_id(9),

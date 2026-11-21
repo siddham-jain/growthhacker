@@ -13,6 +13,7 @@ from app.domain.common import ChannelRole
 from app.domain.runs import RunKind, RunNotice, RunNoticeCode, RunTrigger, VideosFetchedPayload
 from app.domain.youtube import QuotaBucket, QuotaPriority
 from app.pipeline.contracts import BudgetKind, RunConfigSnapshot, RunContext, StagePolicy, StageResult
+from app.pipeline.stages.competitors import COMPETITOR_DISCOVERY_ARTIFACT
 from app.pipeline.stages.website_intel import LOCATED_BUSINESS
 from app.ports.artifacts import ArtifactKey
 from app.services.youtube import messages
@@ -52,6 +53,11 @@ class OwnChannelPrefetch(BaseModel):
     status: str
 
 
+class CompetitorPrefetch(BaseModel):
+    channels: list[ChannelIngestSummary]
+    quota_limited: bool = False
+
+
 class OwnAnalyticsPullArtifact(BaseModel):
     connected: bool
     requests: int
@@ -64,6 +70,9 @@ class OwnAnalyticsPullArtifact(BaseModel):
 INGEST = ArtifactKey(name="youtube_ingest", model=IngestArtifact, schema_version=1, contains_api_data=True)
 OWN_PREFETCH = ArtifactKey(
     name="own_channel_prefetch", model=OwnChannelPrefetch, schema_version=1, contains_api_data=True
+)
+COMPETITOR_PREFETCH = ArtifactKey(
+    name="competitor_prefetch", model=CompetitorPrefetch, schema_version=1, contains_api_data=True
 )
 OWN_ANALYTICS = ArtifactKey(
     name="own_analytics_pull", model=OwnAnalyticsPullArtifact, schema_version=1, contains_api_data=True
@@ -278,10 +287,10 @@ class IngestStage:
 
 @stage_registry.register("prefetch_own_channel")
 class PrefetchOwnChannelStage:
-    """warms the shared cache with the own channel's last 50 uploads while the site is crawled."""
+    """runs the analysis' full own-channel ingest while the site is crawled, so the first analysis reads cache."""
 
     name = "prefetch_own_channel"
-    version = 1
+    version = 2
     depends_on: tuple[str, ...] = ("resolve_inputs",)
     optional_deps: tuple[str, ...] = ()
     produces = OWN_PREFETCH
@@ -302,8 +311,12 @@ class PrefetchOwnChannelStage:
             return StageResult(status="skipped", artifact=None)
         layer = data_layer(ctx)
         before = await open_run_budget(ctx, layer)
-        [result] = await layer.ingest.ensure_baseline(
-            [channel_id], youtube_context(ctx, QuotaPriority.interactive)
+        result = await layer.ingest.ingest_channel(
+            channel_id,
+            ChannelRole.own,
+            youtube_context(ctx, QuotaPriority.interactive),
+            mode="full",
+            languages=[ctx.snapshot.market.language.split("-")[0]],
         )
         await charge_usage(ctx, layer, before)
         artifact = OwnChannelPrefetch(channel_id=channel_id, videos=len(result.videos), status=result.status)
@@ -311,6 +324,72 @@ class PrefetchOwnChannelStage:
             notice = quota_notice(ctx, self.name, result.quota_bucket, result.quota_resets_at)
             return StageResult(status="degraded", artifact=artifact, notices=(notice,))
         return StageResult(status="succeeded", artifact=artifact, counts={"videos": len(result.videos)})
+
+
+@stage_registry.register("prefetch_competitors")
+class PrefetchCompetitorsStage:
+    """ingests the proposed competitors during onboarding; the user's review hides it and analysis reads cache."""
+
+    name = "prefetch_competitors"
+    version = 1
+    depends_on: tuple[str, ...] = ("discover_competitors",)
+    optional_deps: tuple[str, ...] = ()
+    produces = COMPETITOR_PREFETCH
+    # no stage budget: the run's quota cap stops it before a call, a stage cap would only fail it afterwards
+    policy = StagePolicy(timeout_s=120, soft_timeout_s=60, max_attempts=1, critical=False)
+    weight = 6.0
+
+    def enabled(self, snapshot: RunConfigSnapshot) -> bool:
+        return True
+
+    def fingerprint_inputs(self, ctx: RunContext[Any]) -> Mapping[str, Any]:
+        return {"pt_day": ctx.as_of.date().isoformat()}
+
+    async def run(self, ctx: RunContext[Any]) -> StageResult[CompetitorPrefetch]:
+        discovery = await ctx.artifacts.get_optional(COMPETITOR_DISCOVERY_ARTIFACT)
+        channel_ids = list(discovery.proposal.competitor_channel_ids) if discovery else []
+        if not channel_ids:
+            return StageResult(status="skipped", artifact=None)
+        layer = data_layer(ctx)
+        before = await open_run_budget(ctx, layer)
+        request = youtube_context(ctx, QuotaPriority.interactive)
+        languages = [ctx.snapshot.market.language.split("-")[0]]
+        summaries: list[ChannelIngestSummary | None] = [None] * len(channel_ids)
+        stopped = False
+        gate = asyncio.Semaphore(CHANNEL_CONCURRENCY)
+
+        async def prefetch_one(index: int, channel_id: str) -> None:
+            nonlocal stopped
+            async with gate:
+                await ctx.checkpoint()
+                if stopped:
+                    summaries[index] = ChannelIngestSummary(
+                        channel_id=channel_id, role=ChannelRole.competitor, status="skipped"
+                    )
+                    return
+                try:
+                    result = await layer.ingest.ingest_channel(
+                        channel_id, ChannelRole.competitor, request, mode="full", languages=languages
+                    )
+                except KeyRejected:
+                    stopped = True
+                    summaries[index] = ChannelIngestSummary(
+                        channel_id=channel_id, role=ChannelRole.competitor, status="unavailable"
+                    )
+                    return
+                stopped = stopped or result.status == "quota_limited"
+                summaries[index] = summary(result, ChannelRole.competitor)
+
+        await asyncio.gather(*(prefetch_one(index, cid) for index, cid in enumerate(channel_ids)))
+        await charge_usage(ctx, layer, before)
+        artifact = CompetitorPrefetch(
+            channels=[item for item in summaries if item is not None], quota_limited=stopped
+        )
+        return StageResult(
+            status="degraded" if stopped else "succeeded",
+            artifact=artifact,
+            counts={"channels": len(channel_ids), "videos": sum(item.videos for item in artifact.channels)},
+        )
 
 
 @stage_registry.register("own_analytics")

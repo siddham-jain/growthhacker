@@ -31,11 +31,12 @@ from app.api.services_impl.common import (
     summary_or_bare,
     video_summaries,
 )
+from app.api.services_impl.landscape import load_landscape
 from app.api.services_impl.own_figures import own_scorecard
 from app.api.services_impl.profile import ProfileEdits, ProfileMissing
 from app.core.container import Container
 from app.core.tenancy import TenantScope
-from app.domain.analytics import ChannelScorecard, LiftScope, OutlierRecord, TraitLift
+from app.domain.analytics import ChannelLandscape, ChannelScorecard, LiftScope, OutlierRecord, TraitLift
 from app.domain.common import ChannelRole
 from app.domain.topics import TopicKind
 from app.models.runs import PipelineRun
@@ -403,6 +404,20 @@ class AnalyticsReadService(ServiceBase):
                 for ref in refs
                 if own_id is not None and (cell := cells.get(ref.id, {}).get(own_id)) is not None
             },
+        )
+
+    async def landscape(self, scope: TenantScope, run_id: UUID) -> ChannelLandscape:
+        # the published run fixes which channels are compared; numbers come from the live cache
+        snapshot = await self._snapshot(run_id)
+        if snapshot is None:
+            raise ArtifactNotStored("the published run has no channel set")
+        return await load_landscape(
+            self.session_factory,
+            scope,
+            snapshot.own_channel_id,
+            list(snapshot.competitor_channel_ids),
+            self.clock.now(),
+            AnalyticsEngineSettings.from_settings(self.settings).rates,
         )
 
     async def _review_flags(self, scope: TenantScope) -> Counter[str]:

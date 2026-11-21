@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { LiveAnalysis } from "@/components/analysis/live-analysis";
 import { EmptyState } from "@/components/states/states";
 import { clientQuery } from "@/lib/api/queries";
+import { reviewReady } from "@/lib/runs/stages";
 import { useClientId } from "@/lib/use-client-id";
 
 export default function AnalyzePage() {
@@ -23,6 +24,8 @@ export default function AnalyzePage() {
       subtitle="Watch what we read and find. Every row below is a real step, not an animation."
       doneHref={`/c/${clientId}/setup/confirm`}
       doneLabel="Review what we found"
+      readyEarly={reviewReady}
+      earlyNote="Your business profile is ready. Opening the review now; competitors keep loading while you check it."
     />
   );
 }

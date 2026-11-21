@@ -1,9 +1,9 @@
 """read-only views over the ledgers other components own (02 quota, 10/03/08 provider usage, 11 runs)."""
 
 from collections.abc import Collection
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from sqlalchemy import Integer, case, func, select
@@ -63,6 +63,9 @@ class StageRow:
     stage: str
     status: str
     duration_ms: int | None
+    run_id: UUID | None = None
+    finished_at: datetime | None = None
+    counts: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -178,7 +181,14 @@ class PipelineRunSource:
     async def stages(self, session: AsyncSession, start: datetime, end: datetime) -> list[StageRow]:
         statement = (
             select(
-                PipelineRun.client_id, PipelineRun.kind, StageRun.stage, StageRun.status, StageRun.duration_ms
+                PipelineRun.client_id,
+                PipelineRun.kind,
+                StageRun.stage,
+                StageRun.status,
+                StageRun.duration_ms,
+                StageRun.run_id,
+                StageRun.finished_at,
+                StageRun.counts,
             )
             .join(PipelineRun, PipelineRun.id == StageRun.run_id)
             .where(

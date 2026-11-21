@@ -1,16 +1,22 @@
 from datetime import datetime
-from typing import Protocol
+from typing import Literal, Protocol
 
 from app.domain.common import DomainModel
 from app.domain.youtube import QuotaBucket
 from app.ports.youtube import RequestContext
 
+# who said no: our own caps (run, client, priority class, search pool) or the project's quota itself
+QuotaReason = Literal["run_cap", "client_cap", "priority", "search_pool", "project", "google", "redis_down"]
+# only these mean the data api cannot answer at all, rather than a deliberate cap
+SOURCE_DOWN_REASONS: frozenset[QuotaReason] = frozenset({"project", "google", "redis_down"})
+
 
 class QuotaExhausted(Exception):
-    def __init__(self, bucket: QuotaBucket, resets_at: datetime) -> None:
-        super().__init__(f"{bucket.value} quota exhausted until {resets_at.isoformat()}")
+    def __init__(self, bucket: QuotaBucket, resets_at: datetime, reason: QuotaReason = "project") -> None:
+        super().__init__(f"{bucket.value} quota exhausted ({reason}) until {resets_at.isoformat()}")
         self.bucket = bucket
         self.resets_at = resets_at
+        self.reason = reason
 
 
 class QuotaReservation(DomainModel):

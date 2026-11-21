@@ -8,7 +8,7 @@ from sqlalchemy import insert, select
 from app.bootstrap import load_registrations
 from app.domain.profile import ClaimStatus
 from app.domain.topics import TopicKind
-from app.models.runs import PipelineRun, RunArtifact, RunArtifactBlob
+from app.models.runs import MAX_ARTIFACT_PAYLOAD_BYTES, PipelineRun, RunArtifact, RunArtifactBlob
 from app.pipeline.contracts import Market, RunConfigSnapshot
 from app.pipeline.definitions import ANALYSIS_STAGES, ONBOARDING_STAGES
 from app.pipeline.inputs.common import artifact_store
@@ -151,6 +151,41 @@ async def test_oversized_artifacts_are_stored_as_blobs_and_read_back(container, 
     assert [blob.sha256 for blob in blobs] == [row.payload["$blob"]]
     assert await store.get(run_id, BULKY) == value
     assert (await store.find_latest(BULKY)).value == value
+
+
+class Scores(BaseModel):
+    rows: list[dict[str, int]]
+
+
+SCORES = ArtifactKey(name="scores", model=Scores, schema_version=1, contains_api_data=True)
+
+
+async def test_payload_under_the_json_cap_but_over_it_as_jsonb_is_still_stored(container, tenant):
+    store = artifact_store(container, tenant)
+    async with container.session_factory() as session, session.begin():
+        run_id = (
+            await session.execute(
+                insert(PipelineRun)
+                .values(
+                    workspace_id=tenant.workspace_id,
+                    client_id=tenant.client_id,
+                    kind="analysis",
+                    trigger="user",
+                    status="running",
+                    config_snapshot={},
+                    config_hash="h",
+                    queue="interactive",
+                    budget={},
+                    as_of=container.clock.now(),
+                )
+                .returning(PipelineRun.id)
+            )
+        ).scalar_one()
+    # small objects of small ints: about 1.9 MB as compact json, more as jsonb
+    value = Scores(rows=[{"a": index % 9, "b": 1, "c": 2} for index in range(97_000)])
+    assert 1_800_000 < len(value.model_dump_json()) < MAX_ARTIFACT_PAYLOAD_BYTES
+    await store.put(run_id, SCORES, value, "fp")
+    assert await store.get(run_id, SCORES) == value
 
 
 async def test_niche_search_hits_are_baselined_as_creators():

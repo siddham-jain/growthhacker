@@ -22,6 +22,7 @@ import type {
 import { channels, CLIENT_ID, daysAgo, envelope, NOW } from "./fixtures/base";
 import { answerCitations } from "./fixtures/citations";
 import { competitorDetail, competitorViews, gapMatrix, scorecards } from "./fixtures/competitors";
+import { landscape } from "./fixtures/landscape";
 import {
   creators,
   earlySignals,
@@ -36,6 +37,7 @@ import {
 import { applyProfileView } from "@/lib/onboarding/edits";
 import { profileView } from "./fixtures/profile";
 import { buyerQuestions, keywords } from "./fixtures/topics";
+import { trendScan } from "./fixtures/trends";
 import { getMockRun, listMockRuns, mockEventsAfter, startMockRun } from "./runs";
 
 const LATENCY_MS = 220;
@@ -344,9 +346,13 @@ export const mockApi: GrowthHackerApi = {
     },
     patterns: (_clientId, _scope, windowDays) => respond(envelope(competitorDetail(channels.fortis.channel_id)?.trait_lift ?? [], windowDays)),
     gaps: (_clientId, windowDays) => respond(envelope(gapMatrix(), windowDays)),
+    landscape: () => respond(envelope(landscape(), 90)),
     answerCitations: () => respond(answerCitations()),
     topics: (_clientId, windowDays) =>
       respond(envelope(buyerQuestions.map((item, index) => ({ topic_ref: { id: item.id, label: item.text }, own_videos: index % 3, competitor_videos: 6 - index, outliers: index % 2, review_flagged: 0 })), windowDays)),
+  },
+  trends: {
+    latest: () => respond(envelope(trendScan(), 30)),
   },
   recommendations: {
     list: (_clientId, query) => {

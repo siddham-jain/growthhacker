@@ -18,7 +18,8 @@ from app.evaluation.ops.sources import OpsSources
 from app.retention.rules import retention_registry
 from app.retention.sweeper import RetentionSweeper
 
-ONBOARDING_TARGET_S = 8 * 60
+ONBOARDING_TARGET_S = 4 * 60
+FIRST_REVIEW_TARGET_S = 90
 NO_RUNS_NOTE = "No daily_refresh runs were recorded in this period; the planning figures below are estimates."
 
 
@@ -155,13 +156,17 @@ class OpsReportBuilder:
     ) -> dict[str, bool | None]:
         target_ms = self.settings.evaluation.ops.latency_target_s * 1000
         refresh = _total(run_time.get(aggregate.DAILY_REFRESH))
-        onboarding = _total(run_time.get("onboarding"))
+        onboarding = _total(run_time.get(aggregate.ONBOARDING))
+        first_review = _p95(run_time.get(aggregate.ONBOARDING), aggregate.FIRST_REVIEW)
         typical_main = aggregate.median_or_none(self.client_day_units(quota, "main"))
         return {
             "daily_refresh_p95_under_120s": None if refresh is None else refresh < target_ms,
-            "onboarding_p95_under_8min": None
+            "onboarding_first_review_p95_under_90s": None
+            if first_review is None
+            else first_review <= FIRST_REVIEW_TARGET_S * 1000,
+            "onboarding_p95_under_4min": None
             if onboarding is None
-            else onboarding < ONBOARDING_TARGET_S * 1000,
+            else onboarding <= ONBOARDING_TARGET_S * 1000,
             "units_per_client_within_budget": None
             if typical_main is None
             else typical_main <= self.settings.evaluation.ops.units_per_client_budget,
@@ -171,6 +176,10 @@ class OpsReportBuilder:
 
 
 def _total(timings: list[StageTiming] | None) -> int | None:
+    return _p95(timings, aggregate.TOTAL)
+
+
+def _p95(timings: list[StageTiming] | None, stage: str) -> int | None:
     if not timings:
         return None
-    return next((t.p95_ms for t in timings if t.stage == aggregate.TOTAL), None)
+    return next((t.p95_ms for t in timings if t.stage == stage), None)

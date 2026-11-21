@@ -1267,6 +1267,65 @@
         "title": "ChannelEvidence",
         "type": "object"
       },
+      "ChannelLandscape": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "competitor_median": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Competitor Median",
+            "type": "object"
+          },
+          "competitors": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelOverview"
+            },
+            "title": "Competitors",
+            "type": "array"
+          },
+          "growth_days": {
+            "title": "Growth Days",
+            "type": "integer"
+          },
+          "own": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChannelOverview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "as_of",
+          "window_days",
+          "growth_days",
+          "own",
+          "competitors",
+          "competitor_median"
+        ],
+        "title": "ChannelLandscape",
+        "type": "object"
+      },
       "ChannelLink": {
         "additionalProperties": false,
         "properties": {
@@ -1307,6 +1366,211 @@
           "resolved_via"
         ],
         "title": "ChannelLink",
+        "type": "object"
+      },
+      "ChannelOverview": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "by_format": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FormatStats"
+            },
+            "title": "By Format",
+            "type": "object"
+          },
+          "channel_id": {
+            "pattern": "^UC[0-9A-Za-z_-]{22}$",
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "days_since_last_upload": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Since Last Upload"
+          },
+          "format_mix": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Format Mix",
+            "type": "object"
+          },
+          "longest_gap_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longest Gap Days"
+          },
+          "median_gap_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Gap Days"
+          },
+          "overall": {
+            "$ref": "#/components/schemas/FormatStats"
+          },
+          "pace_change_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pace Change Pct"
+          },
+          "previous_window_uploads": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Window Uploads"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ChannelRole"
+          },
+          "scraped_uploads": {
+            "default": 0,
+            "title": "Scraped Uploads",
+            "type": "integer"
+          },
+          "subscriber_growth": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GrowthFigure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "subscribers": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscribers"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "top_uploads": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TopUpload"
+            },
+            "maxItems": 3,
+            "title": "Top Uploads",
+            "type": "array"
+          },
+          "total_videos": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Videos"
+          },
+          "total_views": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Views"
+          },
+          "view_growth": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GrowthFigure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "views_per_subscriber": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Views Per Subscriber"
+          },
+          "views_share": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Views Share",
+            "type": "object"
+          },
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "channel_id",
+          "role",
+          "title",
+          "as_of",
+          "window_days",
+          "subscribers",
+          "total_views",
+          "total_videos",
+          "format_mix",
+          "overall",
+          "by_format",
+          "views_share",
+          "previous_window_uploads",
+          "pace_change_pct",
+          "days_since_last_upload",
+          "median_gap_days",
+          "longest_gap_days",
+          "views_per_subscriber"
+        ],
+        "title": "ChannelOverview",
         "type": "object"
       },
       "ChannelRef": {
@@ -4913,6 +5177,71 @@
         "title": "FormatSegment",
         "type": "string"
       },
+      "FormatStats": {
+        "additionalProperties": false,
+        "properties": {
+          "mean_engagement_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Engagement Rate"
+          },
+          "mean_views": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Views"
+          },
+          "median_views": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Views"
+          },
+          "rated_uploads": {
+            "title": "Rated Uploads",
+            "type": "integer"
+          },
+          "total_views": {
+            "title": "Total Views",
+            "type": "integer"
+          },
+          "uploads": {
+            "title": "Uploads",
+            "type": "integer"
+          },
+          "uploads_per_week": {
+            "title": "Uploads Per Week",
+            "type": "number"
+          }
+        },
+        "required": [
+          "uploads",
+          "uploads_per_week",
+          "total_views",
+          "mean_views",
+          "median_views",
+          "mean_engagement_rate",
+          "rated_uploads"
+        ],
+        "title": "FormatStats",
+        "type": "object"
+      },
       "FormatSuggestion": {
         "additionalProperties": false,
         "properties": {
@@ -5422,6 +5751,96 @@
         "title": "GroundedEntity",
         "type": "object"
       },
+      "GrowthFigure": {
+        "additionalProperties": false,
+        "properties": {
+          "change": {
+            "title": "Change",
+            "type": "integer"
+          },
+          "change_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Pct"
+          },
+          "days_covered": {
+            "title": "Days Covered",
+            "type": "integer"
+          },
+          "end_day": {
+            "format": "date",
+            "title": "End Day",
+            "type": "string"
+          },
+          "end_value": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Value"
+          },
+          "metric": {
+            "enum": [
+              "subscribers",
+              "views"
+            ],
+            "title": "Metric",
+            "type": "string"
+          },
+          "requested_days": {
+            "title": "Requested Days",
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "youtube_analytics",
+              "channel_history"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "start_day": {
+            "format": "date",
+            "title": "Start Day",
+            "type": "string"
+          },
+          "start_value": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Value"
+          }
+        },
+        "required": [
+          "metric",
+          "source",
+          "requested_days",
+          "start_day",
+          "end_day",
+          "days_covered",
+          "start_value",
+          "end_value",
+          "change",
+          "change_pct"
+        ],
+        "title": "GrowthFigure",
+        "type": "object"
+      },
       "HygieneData": {
         "properties": {
           "eligibility": {
@@ -5765,6 +6184,69 @@
         "title": "IntentClass",
         "type": "string"
       },
+      "KeywordCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "autocomplete_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Autocomplete Rank"
+          },
+          "keyword": {
+            "title": "Keyword",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/KeywordSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "topic_label": {
+            "title": "Topic Label",
+            "type": "string"
+          },
+          "topic_ref_id": {
+            "pattern": "^tr_[0-9a-f]{12}$",
+            "title": "Topic Ref Id",
+            "type": "string"
+          },
+          "web_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Reason"
+          },
+          "web_urls": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Web Urls",
+            "type": "array"
+          }
+        },
+        "required": [
+          "keyword",
+          "sources",
+          "topic_ref_id",
+          "topic_label"
+        ],
+        "title": "KeywordCandidate",
+        "type": "object"
+      },
       "KeywordCreate": {
         "additionalProperties": false,
         "properties": {
@@ -5876,6 +6358,127 @@
           "source"
         ],
         "title": "KeywordItem",
+        "type": "object"
+      },
+      "KeywordSource": {
+        "enum": [
+          "profile",
+          "autocomplete",
+          "web"
+        ],
+        "title": "KeywordSource",
+        "type": "string"
+      },
+      "KeywordTrend": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/KeywordCandidate"
+          },
+          "channels": {
+            "default": 0,
+            "title": "Channels",
+            "type": "integer"
+          },
+          "checked_at": {
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "competitor_videos": {
+            "default": 0,
+            "title": "Competitor Videos",
+            "type": "integer"
+          },
+          "heat": {
+            "default": "quiet",
+            "enum": [
+              "hot",
+              "warm",
+              "quiet"
+            ],
+            "title": "Heat",
+            "type": "string"
+          },
+          "leaders_views_per_day": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leaders Views Per Day"
+          },
+          "median_views_per_day": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Views Per Day"
+          },
+          "momentum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Momentum"
+          },
+          "recent_videos": {
+            "default": 0,
+            "title": "Recent Videos",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "checked",
+              "cached",
+              "unchecked_quota",
+              "unchecked_error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "top_views_per_day": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Views Per Day"
+          },
+          "videos": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TrendVideo"
+            },
+            "title": "Videos",
+            "type": "array"
+          },
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "candidate",
+          "status",
+          "checked_at",
+          "window_days"
+        ],
+        "title": "KeywordTrend",
         "type": "object"
       },
       "LLMProviderIn": {
@@ -11174,6 +11777,63 @@
         "title": "RelevanceBand",
         "type": "string"
       },
+      "ResultEnvelope_ChannelLandscape_": {
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ChannelLandscape"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Freshness"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "notices": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunNotice"
+            },
+            "title": "Notices",
+            "type": "array"
+          },
+          "prev_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev Run Id"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "window_days",
+          "as_of",
+          "run_id",
+          "generated_at",
+          "freshness"
+        ],
+        "title": "ResultEnvelope[ChannelLandscape]",
+        "type": "object"
+      },
       "ResultEnvelope_CompetitorDetail_": {
         "properties": {
           "as_of": {
@@ -11742,6 +12402,63 @@
           "freshness"
         ],
         "title": "ResultEnvelope[RecommendationsData]",
+        "type": "object"
+      },
+      "ResultEnvelope_TrendScan_": {
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TrendScan"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Freshness"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "notices": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunNotice"
+            },
+            "title": "Notices",
+            "type": "array"
+          },
+          "prev_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev Run Id"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "window_days",
+          "as_of",
+          "run_id",
+          "generated_at",
+          "freshness"
+        ],
+        "title": "ResultEnvelope[TrendScan]",
         "type": "object"
       },
       "ResultEnvelope_TrendingData_": {
@@ -14189,6 +14906,54 @@
         "title": "TitleTraits",
         "type": "object"
       },
+      "TopUpload": {
+        "additionalProperties": false,
+        "properties": {
+          "engagement_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engagement Rate"
+          },
+          "format": {
+            "title": "Format",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "video_id": {
+            "pattern": "^[0-9A-Za-z_-]{11}$",
+            "title": "Video Id",
+            "type": "string"
+          },
+          "views": {
+            "title": "Views",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "video_id",
+          "title",
+          "format",
+          "published_at",
+          "views",
+          "engagement_rate"
+        ],
+        "title": "TopUpload",
+        "type": "object"
+      },
       "TopicCoverage": {
         "properties": {
           "client": {
@@ -14755,6 +15520,250 @@
           "usage_share"
         ],
         "title": "TraitPerf",
+        "type": "object"
+      },
+      "TrendIdea": {
+        "additionalProperties": false,
+        "properties": {
+          "angle": {
+            "title": "Angle",
+            "type": "string"
+          },
+          "buyer_question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Buyer Question"
+          },
+          "fit_to_client": {
+            "title": "Fit To Client",
+            "type": "string"
+          },
+          "format": {
+            "enum": [
+              "short",
+              "long"
+            ],
+            "title": "Format",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "keyword": {
+            "title": "Keyword",
+            "type": "string"
+          },
+          "reference_video_ids": {
+            "items": {
+              "pattern": "^[0-9A-Za-z_-]{11}$",
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Reference Video Ids",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "topic_ref_id": {
+            "pattern": "^tr_[0-9a-f]{12}$",
+            "title": "Topic Ref Id",
+            "type": "string"
+          },
+          "why": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Why",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "keyword",
+          "topic_ref_id",
+          "title",
+          "angle",
+          "fit_to_client",
+          "format",
+          "why",
+          "reference_video_ids"
+        ],
+        "title": "TrendIdea",
+        "type": "object"
+      },
+      "TrendScan": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "ideas": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TrendIdea"
+            },
+            "title": "Ideas",
+            "type": "array"
+          },
+          "keywords": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/KeywordTrend"
+            },
+            "title": "Keywords",
+            "type": "array"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "llm_calls": {
+            "default": 0,
+            "title": "Llm Calls",
+            "type": "integer"
+          },
+          "messages": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
+          },
+          "search_calls": {
+            "default": 0,
+            "title": "Search Calls",
+            "type": "integer"
+          },
+          "tavily_credits": {
+            "default": 0.0,
+            "title": "Tavily Credits",
+            "type": "number"
+          },
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          },
+          "youtube_units": {
+            "default": 0,
+            "title": "Youtube Units",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "as_of",
+          "window_days"
+        ],
+        "title": "TrendScan",
+        "type": "object"
+      },
+      "TrendVideo": {
+        "additionalProperties": false,
+        "properties": {
+          "age_days": {
+            "title": "Age Days",
+            "type": "number"
+          },
+          "channel_id": {
+            "pattern": "^UC[0-9A-Za-z_-]{22}$",
+            "title": "Channel Id",
+            "type": "string"
+          },
+          "channel_title": {
+            "title": "Channel Title",
+            "type": "string"
+          },
+          "duration_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration S"
+          },
+          "is_competitor": {
+            "default": false,
+            "title": "Is Competitor",
+            "type": "boolean"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "thumbnail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail Url"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "video_id": {
+            "pattern": "^[0-9A-Za-z_-]{11}$",
+            "title": "Video Id",
+            "type": "string"
+          },
+          "views": {
+            "title": "Views",
+            "type": "integer"
+          },
+          "views_per_day": {
+            "title": "Views Per Day",
+            "type": "number"
+          }
+        },
+        "required": [
+          "video_id",
+          "channel_id",
+          "channel_title",
+          "title",
+          "published_at",
+          "views",
+          "age_days",
+          "views_per_day"
+        ],
+        "title": "TrendVideo",
         "type": "object"
       },
       "TrendingData": {
@@ -17946,6 +18955,150 @@
           }
         },
         "summary": "Analytics Gaps",
+        "tags": [
+          "results"
+        ]
+      }
+    },
+    "/api/v1/clients/{client_id}/analytics/landscape": {
+      "get": {
+        "operationId": "analytics_landscape",
+        "parameters": [
+          {
+            "description": "cl_\u2026 id",
+            "in": "path",
+            "name": "client_id",
+            "required": true,
+            "schema": {
+              "description": "cl_\u2026 id",
+              "title": "Client Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultEnvelope_ChannelLandscape_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Too Many Requests"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Implemented"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Analytics Landscape",
         "tags": [
           "results"
         ]
@@ -25276,6 +26429,150 @@
         "summary": "Runs Create",
         "tags": [
           "runs"
+        ]
+      }
+    },
+    "/api/v1/clients/{client_id}/trends": {
+      "get": {
+        "operationId": "trends_latest",
+        "parameters": [
+          {
+            "description": "cl_\u2026 id",
+            "in": "path",
+            "name": "client_id",
+            "required": true,
+            "schema": {
+              "description": "cl_\u2026 id",
+              "title": "Client Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultEnvelope_TrendScan_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Too Many Requests"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not Implemented"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Trends Latest",
+        "tags": [
+          "results"
         ]
       }
     },

@@ -53,9 +53,10 @@ from app.api.schemas.setup import (
 )
 from app.core.registry import Registry
 from app.core.tenancy import TenantScope
-from app.domain.analytics import TraitLift
+from app.domain.analytics import ChannelLandscape, TraitLift
 from app.domain.news import NewsSignal
 from app.domain.recommendations import InsufficiencyNotice, RecommendationFeedback, WhiteSpaceNote
+from app.domain.trends import TrendScan
 
 api_service_registry: Registry[Callable[[Any], Any]] = Registry("api_service_registry")
 
@@ -66,6 +67,7 @@ COMPETITORS = "competitors"
 ANALYTICS = "analytics"
 RECOMMENDATIONS = "recommendations"
 NEWS = "news"
+TRENDS = "trends"
 REFRESH = "refresh"
 CREATORS = "creators"
 YOUTUBE_OAUTH = "youtube_oauth"
@@ -174,6 +176,8 @@ class AnalyticsService(Protocol):
 
     async def topics(self, scope: TenantScope, run_id: UUID, window_days: int) -> list[TopicSummary]: ...
 
+    async def landscape(self, scope: TenantScope, run_id: UUID) -> ChannelLandscape: ...
+
     # buyer questions x tracked channels, counts only (06 gap matrix)
     async def gaps(self, scope: TenantScope, run_id: UUID, window_days: int) -> GapMatrixData: ...
 
@@ -239,6 +243,10 @@ class NewsService(Protocol):
     async def early_signals(
         self, scope: TenantScope, run_id: UUID, window_days: int
     ) -> list[EarlySignalView]: ...
+
+
+class TrendService(Protocol):
+    async def latest(self, scope: TenantScope, window_days: int) -> TrendScan: ...
 
 
 class RefreshService(Protocol):

@@ -520,3 +520,72 @@ class OutlierRecord(DomainModel):
     topic_ref_ids: list[str] = []
     segment: FormatSegment
     url: str
+
+
+class FormatStats(DomainModel):
+    # simple maths on current public counts of the uploads in the window; no score
+    uploads: int
+    uploads_per_week: float
+    total_views: int
+    mean_views: float | None
+    median_views: float | None
+    mean_engagement_rate: float | None
+    rated_uploads: int
+
+
+class GrowthFigure(DomainModel):
+    metric: Literal["subscribers", "views"]
+    # youtube_analytics: owner daily gains and losses; channel_history: our own daily public totals
+    source: Literal["youtube_analytics", "channel_history"]
+    requested_days: int
+    start_day: date
+    end_day: date
+    days_covered: int
+    start_value: int | None
+    end_value: int | None
+    change: int
+    change_pct: float | None
+
+
+class TopUpload(DomainModel):
+    video_id: VideoId
+    title: str
+    format: str
+    published_at: AwareDatetime
+    views: int
+    engagement_rate: float | None
+
+
+class ChannelOverview(DomainModel):
+    channel_id: ChannelId
+    role: ChannelRole
+    title: str
+    as_of: AwareDatetime
+    window_days: int
+    subscribers: int | None
+    total_views: int | None
+    total_videos: int | None
+    format_mix: dict[str, int]
+    overall: FormatStats
+    by_format: dict[str, FormatStats]
+    views_share: dict[str, float]
+    previous_window_uploads: int | None
+    pace_change_pct: float | None
+    days_since_last_upload: float | None
+    median_gap_days: float | None
+    longest_gap_days: float | None
+    views_per_subscriber: float | None
+    top_uploads: list[TopUpload] = Field(default=[], max_length=3)
+    subscriber_growth: GrowthFigure | None = None
+    view_growth: GrowthFigure | None = None
+    scraped_uploads: int = 0
+
+
+class ChannelLandscape(DomainModel):
+    # side by side with a competitor median for reference; never a rank or a composite score
+    as_of: AwareDatetime
+    window_days: int
+    growth_days: int
+    own: ChannelOverview | None
+    competitors: list[ChannelOverview]
+    competitor_median: dict[str, float | None]

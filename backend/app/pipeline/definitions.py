@@ -10,6 +10,7 @@ ONBOARDING_STAGES = (
     "build_profile",
     "discover_competitors",
     "seed_topic_refs",
+    "prefetch_competitors",
     "finish_onboarding",
 )
 ANALYSIS_STAGES = (
@@ -18,6 +19,7 @@ ANALYSIS_STAGES = (
     "niche_discovery",
     "own_analytics",
     "news",
+    "trends",
     "competitor_drift",
     "enrich",
     "topics",

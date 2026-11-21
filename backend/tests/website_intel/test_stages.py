@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -107,7 +108,11 @@ class FakeContainer:
         settings = make_settings()
         fast = CrawlProfileSettings(min_delay_s=0.0, fetch_budget=10, discovery_fetch_budget=4)
         self.settings = settings.model_copy(
-            update={"website_intel": settings.website_intel.model_copy(update={"client": fast})}
+            update={
+                "website_intel": settings.website_intel.model_copy(
+                    update={"client": fast, "onboarding": fast}
+                )
+            }
         )
         self.clock = clock
         self.http = http
@@ -199,7 +204,7 @@ async def run_onboarding_stages(
         def service(ctx: Any) -> WebsiteIntelService:
             deps = deps_from_container(ctx.deps)
             deps.guard = SsrfGuard(public)
-            return WebsiteIntelService(deps)
+            return WebsiteIntelService(deps, profile_kind=stages.crawl_profile(ctx))
 
         monkeypatch.setattr(stages, "website_service", service)
         artifacts = Artifacts()
@@ -240,8 +245,13 @@ async def run_onboarding_stages(
 async def test_onboarding_stages_persist_crawl_profile_and_questions(
     session_factory: SessionFactory, clock: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    scope, artifacts, reporter, _ = await run_onboarding_stages(
+    scope, artifacts, reporter, results = await run_onboarding_stages(
         session_factory, clock, monkeypatch, client=llm(), budget=UnlimitedLedger(), slug="smile"
+    )
+    # sub-step timings feed the ops report's onboarding breakdown
+    assert {"discover_ms", "select_ms", "fetch_ms", "site_direct_ms"} <= set(results["crawl_site"].counts)
+    assert {"extract_ms", "synthesize_ms", "enrich_ms", "questions_ms"} <= set(
+        results["build_profile"].counts
     )
     located = artifacts.values["located_business"]
     assert located.site.canonical_origin == ORIGIN
@@ -249,9 +259,14 @@ async def test_onboarding_stages_persist_crawl_profile_and_questions(
     # the artifact is a pointer; the pages travel gzipped on the crawl run row
     assert acquisition.crawl_run_id is not None and acquisition.stored and not acquisition.pages
     async with session_factory() as session:
-        stored = await session.scalar(
-            select(CrawlRun.acquisition_gz).where(CrawlRun.id == acquisition.crawl_run_id)
-        )
+        stored, profile_kind, trigger = (
+            await session.execute(
+                select(CrawlRun.acquisition_gz, CrawlRun.profile, CrawlRun.trigger).where(
+                    CrawlRun.id == acquisition.crawl_run_id
+                )
+            )
+        ).one()
+    assert (profile_kind, trigger) == ("onboarding", "onboarding")
     assert len(SiteAcquisition.decompressed(stored).pages) >= 4
     profile = artifacts.values["business_profile"]
     assert profile.identity.name == "Smile Dental Clinic"
@@ -344,3 +359,24 @@ async def test_onboarding_keeps_a_market_the_user_picked(
     async with session_factory() as session:
         client = await session.get(Client, scope.client_id)
     assert (client.country, client.timezone) == ("US", "America/New_York")
+
+
+def test_onboarding_reads_key_pages_and_the_recrawl_reads_deep() -> None:
+    intel = make_settings().website_intel
+    quick, deep = intel.onboarding, intel.client
+    assert quick.fetch_budget < deep.fetch_budget and quick.map_page_budget < deep.map_page_budget
+    assert quick.wall_seconds < deep.wall_seconds and quick.pdf_budget < deep.pdf_budget
+
+    def ctx(kind: RunKind) -> Any:
+        return SimpleNamespace(
+            kind=kind,
+            snapshot=SimpleNamespace(website_url="smiledental.in"),
+            deps=SimpleNamespace(settings=make_settings()),
+            as_of=NOW,
+        )
+
+    onboarding, recrawl = ctx(RunKind.onboarding), ctx(RunKind.recrawl)
+    assert stages.crawl_profile(onboarding) == "onboarding" and stages.crawl_profile(recrawl) == "client"
+    # same site and day: the deep recrawl must not reuse the key-page crawl
+    stage = stages.CrawlSiteStage()
+    assert stage.fingerprint_inputs(onboarding) != stage.fingerprint_inputs(recrawl)

@@ -4,7 +4,6 @@ import {
   RiRadarLine,
   RiSettings3Line,
   RiShieldCheckLine,
-  RiSunLine,
   RiUserStarLine,
   RiYoutubeLine,
   type RemixiconComponentType,
@@ -19,8 +18,7 @@ export interface NavItem {
 
 // fixed order; each section answers one of the brief's questions
 export const NAV_ITEMS: NavItem[] = [
-  { segment: "today", label: "Today", question: "What should you do today?", icon: RiSunLine },
-  { segment: "ideas", label: "Next videos", question: "What should you make next, and why will it convert?", icon: RiLightbulbFlashLine },
+  { segment: "ideas", label: "Next videos", question: "What's trending in your niche, and what should you post on it?", icon: RiLightbulbFlashLine },
   { segment: "competitors", label: "Competitors", question: "How are your competitors doing? Cadence, performance, what's working.", icon: RiFolder3Line },
   { segment: "channel", label: "Your channel", question: "How are your videos doing against your own normal?", icon: RiYoutubeLine },
   { segment: "radar", label: "Niche radar", question: "What's moving in your niche right now?", icon: RiRadarLine },

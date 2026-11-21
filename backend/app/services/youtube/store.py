@@ -4,8 +4,10 @@ from typing import Any
 
 from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import DBAPIError
 
 from app.core.db import UnitOfWork
+from app.core.logging import get_logger
 from app.domain.youtube import (
     ChannelRecord,
     LocalizedText,
@@ -17,6 +19,7 @@ from app.domain.youtube import (
 from app.models.youtube_cache import (
     YtChannel,
     YtChannelResolution,
+    YtChannelSnapshot,
     YtHttpEtag,
     YtVideo,
     YtVideoSnapshot,
@@ -24,8 +27,18 @@ from app.models.youtube_cache import (
 from app.repositories.shared import ChannelRepository, SnapshotRepository, VideoRepository
 from app.services.youtube.format_classifier import aspect_of
 
+logger = get_logger(__name__)
+
 CONFIDENCE_SCORES = {"high": 1.0, "medium": 0.6, "low": 0.3}
 ALIAS_MAX_TTL = timedelta(days=28)
+SCRAPER_BLIND_CHANNEL_FIELDS = (
+    "view_count",
+    "video_count",
+    "published_at",
+    "country",
+    "default_language",
+    "hidden_subscriber_count",
+)
 
 
 class FirstSourceVideoRepository(VideoRepository):
@@ -45,7 +58,24 @@ def channel_to_row(record: ChannelRecord) -> dict[str, Any]:
     # ingest-computed columns are written by the ingest service, never by an api refetch
     row = record.model_dump(exclude={"uploads_90d", "last_upload_at", "recent_upload_ids", "cadence_flags"})
     row["custom_url"] = record.handle
+    if record.data_source == "yt_dlp":
+        # fields the scraper cannot see keep their last api values
+        for name in SCRAPER_BLIND_CHANNEL_FIELDS:
+            del row[name]
+        if record.subscriber_count is None:
+            del row["subscriber_count"]
     return row
+
+
+def channel_snapshot_row(record: ChannelRecord) -> dict[str, Any]:
+    scraped = record.data_source == "yt_dlp"
+    return {
+        "channel_id": record.channel_id,
+        "captured_at": record.stats_fetched_at,
+        "subscriber_count": None if record.hidden_subscriber_count else record.subscriber_count,
+        "view_count": None if scraped else record.view_count,
+        "video_count": None if scraped else record.video_count,
+    }
 
 
 def row_to_channel(row: YtChannel) -> ChannelRecord:
@@ -71,6 +101,7 @@ def row_to_channel(row: YtChannel) -> ChannelRecord:
         last_upload_at=row.last_upload_at,
         recent_upload_ids=list(row.recent_upload_ids or [])[:50],
         cadence_flags=list(row.cadence_flags or []),
+        data_source=row.data_source or "data_api",
         metadata_fetched_at=row.metadata_fetched_at,
         stats_fetched_at=row.stats_fetched_at,
     )
@@ -145,6 +176,7 @@ def row_to_video(row: YtVideo) -> VideoRecord:
         first_missing_at=row.first_missing_at,
         ingest_source=row.ingest_source,
         quality_flags=list(row.quality_flags or []),
+        data_source=row.data_source or "data_api",
         metadata_fetched_at=row.metadata_fetched_at,
     )
 
@@ -191,7 +223,21 @@ class YouTubeStore:
             await uow.repository(ChannelRepository).upsert_many(
                 [channel_to_row(record) for record in records]
             )
+            await self._save_channel_history(uow, records)
             await uow.commit()
+
+    async def _save_channel_history(self, uow: UnitOfWork, records: Sequence[ChannelRecord]) -> None:
+        # one row per stats fetch (at most daily) is the growth history; a missing partition must not
+        # lose the channel row itself
+        try:
+            async with uow.session.begin_nested():
+                await uow.session.execute(
+                    insert(YtChannelSnapshot)
+                    .values([channel_snapshot_row(record) for record in records])
+                    .on_conflict_do_nothing()
+                )
+        except DBAPIError as error:
+            logger.warning("channel_history_not_saved", channels=len(records), error=str(error.orig)[:200])
 
     async def update_channel(self, channel_id: str, **values: Any) -> None:
         async with self._uow_factory() as uow:

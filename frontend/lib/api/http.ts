@@ -25,7 +25,8 @@ export function apiPath(strings: TemplateStringsArray, ...segments: (string | nu
 }
 
 export function buildUrl(path: string, query?: Query): string {
-  const url = new URL(`${API_BASE}${path}`);
+  // a relative base (same-origin proxy) resolves against the page
+  const url = new URL(`${API_BASE}${path}`, typeof window === "undefined" ? undefined : window.location.origin);
   for (const [key, value] of Object.entries(query ?? {})) {
     if (value !== undefined && value !== null && value !== "") url.searchParams.set(key, String(value));
   }

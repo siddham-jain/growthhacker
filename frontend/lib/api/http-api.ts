@@ -135,7 +135,11 @@ export const httpApi: GrowthHackerApi = {
     patterns: async (clientId, scope, windowDays) => toEnvelope(await request<ResultEnvelope<Wire["TraitLift"][]>>("GET", apiPath`/clients/${clientId}/analytics/patterns`, { query: { scope, window_days: windowDays } }), (items) => toCompetitorDetail({ trait_lift: items } as Wire["CompetitorDetail"]).trait_lift),
     topics: async (clientId, windowDays) => toEnvelope(await request<ResultEnvelope<Wire["TopicSummary"][]>>("GET", apiPath`/clients/${clientId}/analytics/topics`, { query: { window_days: windowDays } }), (items) => items),
     gaps: async (clientId, windowDays) => toEnvelope(await request<ResultEnvelope<Wire["GapMatrixData"]>>("GET", apiPath`/clients/${clientId}/analytics/gaps`, { query: { window_days: windowDays } }), toGapMatrix),
+    landscape: async (clientId) => toEnvelope(await request<ResultEnvelope<Wire["ChannelLandscape"]>>("GET", apiPath`/clients/${clientId}/analytics/landscape`), (data) => data),
     answerCitations: (clientId) => request<Wire["AnswerCitationsData"]>("GET", apiPath`/clients/${clientId}/answer-citations`),
+  },
+  trends: {
+    latest: async (clientId) => toEnvelope(await request<ResultEnvelope<Wire["TrendScan"]>>("GET", apiPath`/clients/${clientId}/trends`), (data) => data),
   },
   recommendations: {
     list: async (clientId, query) => {

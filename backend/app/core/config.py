@@ -186,9 +186,22 @@ class YouTubeAnalyticsApiSettings(BaseModel):
     base_url: str = "https://youtubeanalytics.googleapis.com/v2"
     repull_days: int = 3
     backfill_days: int = 90
+    # channel-level daily rows go back a year for subscriber and view growth
+    channel_daily_days: int = 365
     top_videos: int = 200
     per_video_detail: int = 10
     search_terms: int = 25
+
+
+class YouTubeFallbackSettings(BaseModel):
+    # scrapes youtube.com with yt-dlp when the data api is unavailable; outside the data api policies
+    enabled: bool = True
+    concurrency: int = 4
+    timeout_s: float = 60
+    socket_timeout_s: float = 15
+    max_comment_replies: int = 3
+    # tried in order; yt-dlp enables only deno by default, node needs >= 22
+    js_runtimes: list[str] = ["deno", "node"]
 
 
 class YouTubeSettings(BaseModel):
@@ -203,6 +216,7 @@ class YouTubeSettings(BaseModel):
     comments: YouTubeCommentSettings = YouTubeCommentSettings()
     ownership: YouTubeOwnershipSettings = YouTubeOwnershipSettings()
     analytics_api: YouTubeAnalyticsApiSettings = YouTubeAnalyticsApiSettings()
+    fallback: YouTubeFallbackSettings = YouTubeFallbackSettings()
     coalesce_window_ms: int = 150
     inflight_ttl_s: int = 30
 
@@ -464,6 +478,26 @@ class CrawlProfileSettings(BaseModel):
 
 class WebsiteIntelSettings(BaseModel):
     client: CrawlProfileSettings = CrawlProfileSettings()
+    # onboarding reads only the key pages so the review opens fast; a client-profile recrawl follows the first analysis
+    onboarding: CrawlProfileSettings = CrawlProfileSettings(
+        discovery_fetch_budget=6,
+        fetch_budget=24,
+        map_page_budget=20,
+        max_link_depth=2,
+        max_sitemap_files=4,
+        max_sitemap_urls=20_000,
+        per_template_cap=2,
+        render_budget=4,
+        tavily_max_credits=20,
+        reader_budget=8,
+        archive_budget=8,
+        pdf_budget=1,
+        phase_a_timeout_s=20,
+        phase_c_timeout_s=45,
+        wall_seconds=90,
+        reduce_input_token_cap=60_000,
+        selection_candidates=150,
+    )
     competitor: CrawlProfileSettings = CrawlProfileSettings(
         discovery_fetch_budget=10,
         fetch_budget=25,
@@ -511,7 +545,8 @@ class WebsiteIntelSettings(BaseModel):
 class SearchBudgetSplit(BaseModel):
     onboarding: int = 30
     news: int = 15
-    niche: int = 55
+    niche: int = 15
+    trends: int = 40
 
 
 class QuotaSettings(BaseModel):
@@ -526,7 +561,7 @@ class QuotaSettings(BaseModel):
     onboarding_run_units: int = 400
     onboarding_run_search_calls: int = 15
     daily_refresh_run_units: int = 80
-    daily_refresh_run_search_calls: int = 5
+    daily_refresh_run_search_calls: int = 7
     competitor_resolution_search_calls: int = 3
     counter_ttl_s: int = 48 * 3600
     # share of a bucket each priority class may push total usage up to
@@ -543,7 +578,7 @@ class QuotaSettings(BaseModel):
     @model_validator(mode="after")
     def _split_fits_bucket(self) -> "QuotaSettings":
         split = self.search_split
-        if split.onboarding + split.news + split.niche > self.search_daily_calls:
+        if split.onboarding + split.news + split.niche + split.trends > self.search_daily_calls:
             raise ValueError("quota.search_split exceeds quota.search_daily_calls")
         return self
 
@@ -716,6 +751,7 @@ class WorkerSettings(BaseModel):
 class FeatureFlags(BaseModel):
     rls_enabled: bool = False
     news_radar: bool = True
+    trend_scan: bool = True
     description_refresh: bool = True
     oauth_analytics: bool = True
 
@@ -736,6 +772,31 @@ class NewsEnvelope(BaseModel):
     recency_days: int = Field(ge=1)
     max_story_age_days: int = Field(ge=1)
     tavily_time_range: Literal["day", "week", "month"] = "week"
+
+
+class TrendSettings(BaseModel):
+    # trending = recent uploads on a keyword; capped by the client's own window
+    max_window_days: int = Field(default=14, ge=3, le=30)
+    seed_topics: int = Field(default=8, ge=1)
+    suggestions_per_seed: int = Field(default=4, ge=0)
+    # youtube autocomplete is unofficial (owner-approved exception, like the yt-dlp fallback)
+    autocomplete_enabled: bool = True
+    web_keywords_enabled: bool = True
+    web_queries: int = Field(default=2, ge=0, le=5)
+    web_results_per_query: int = Field(default=6, ge=1, le=20)
+    web_keywords: int = Field(default=6, ge=0, le=20)
+    # one search.list call each, from the trends pool of the daily search bucket
+    analysis_keywords: int = Field(default=10, ge=0)
+    daily_refresh_keywords: int = Field(default=6, ge=0)
+    # earlier checks are shown until they are this old
+    carry_over_days: int = Field(default=7, ge=0)
+    videos_per_keyword: int = Field(default=6, ge=1, le=20)
+    hot_ratio: float = Field(default=2.0, gt=1)
+    min_videos: int = Field(default=3, ge=1)
+    min_channels: int = Field(default=2, ge=1)
+    ideas_keywords: int = Field(default=6, ge=1)
+    ideas_per_keyword: int = Field(default=2, ge=1, le=5)
+    idea_min_references: int = Field(default=2, ge=1)
 
 
 class NewsSettings(BaseModel):
@@ -1328,8 +1389,8 @@ def _default_run_budgets() -> dict[str, RunBudgetSettings]:
         # matches llm.budgets.onboarding_run_max_usd: an uncached profile alone is ~$0.60
         "onboarding": (600, 150, 6, 1.50, 40),
         # matches llm.budgets.analysis_run_max_usd: topic adjudication alone may use $1.00 on a cold run
-        "analysis": (1200, 900, 4, 1.50, 20),
-        "daily_refresh": (600, 120, 1, 0.30, 10),
+        "analysis": (1200, 900, 14, 1.50, 22),
+        "daily_refresh": (600, 120, 7, 0.30, 12),
         "cards": (300, 0, 0, 0.40, 0),
         "news_scan": (300, 30, 1, 0.20, 20),
         "recrawl": (900, 0, 0, 1.00, 40),
@@ -1361,6 +1422,7 @@ class PipelineSettings(BaseModel):
         "resolve_inputs": 24,
         "crawl_site": 168,
         "prefetch_own_channel": 6,
+        "prefetch_competitors": 6,
         "ingest": 6,
         "niche_discovery": 6,
         "own_analytics": 24,
@@ -1487,6 +1549,7 @@ class Settings(BaseSettings):
     features: FeatureFlags = FeatureFlags()
     freshness: FreshnessSettings = FreshnessSettings()
     news: NewsSettings = NewsSettings()
+    trends: TrendSettings = TrendSettings()
     competitors: CompetitorSettings = CompetitorSettings()
     recommend: RecommendSettings = RecommendSettings()
     evaluation: EvaluationSettings = EvaluationSettings()

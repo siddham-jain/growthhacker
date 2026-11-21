@@ -2,6 +2,7 @@ import asyncio
 import uuid
 from dataclasses import replace
 from datetime import timedelta
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -22,6 +23,7 @@ from app.pipeline.contracts import (
 from app.pipeline.stages.youtube import (
     IngestStage,
     OwnAnalyticsStage,
+    PrefetchCompetitorsStage,
     PrefetchOwnChannelStage,
     youtube_context,
 )
@@ -104,11 +106,6 @@ class FakeIngest:
             new_video_ids=[video_id(1)],
         )
 
-    async def ensure_baseline(self, channel_ids, ctx):
-        return [
-            await self.ingest_channel(channel_ids[0], ChannelRole.creator, ctx, mode="baseline", languages=[])
-        ]
-
 
 class FakeLedgerSink:
     async def flush(self) -> int:
@@ -172,7 +169,7 @@ def context(
 
 
 def test_stages_are_registered_under_plan_11_names() -> None:
-    for name in ("ingest", "prefetch_own_channel", "own_analytics"):
+    for name in ("ingest", "prefetch_own_channel", "prefetch_competitors", "own_analytics"):
         assert stage_registry.get(name).name == name
 
 
@@ -204,6 +201,8 @@ async def test_prefetch_and_own_analytics_enablement() -> None:
     ctx, _, _ = context(layer)
     prefetch = await PrefetchOwnChannelStage().run(ctx)
     assert prefetch.status == "succeeded" and prefetch.artifact.videos == 1
+    # the analysis' own full ingest, so the first analysis reads it from cache
+    assert layer.ingest.calls == [(CHANNEL_A, ChannelRole.own, "full")]
     # the channel may only be located during onboarding, so a missing one skips at run time
     without_channel = await PrefetchOwnChannelStage().run(context(layer, own=None)[0])
     assert without_channel.status == "skipped"
@@ -256,3 +255,32 @@ async def test_parallel_stages_charge_only_their_own_spend(redis, redis_prefix) 
     # the redis cap is the run's 120 units, not the remainder counted twice
     with pytest.raises(QuotaExhausted):
         await quota.reserve(QuotaBucket.main, 41, youtube_context(ingest_ctx), "videos.list")
+
+
+class ProposedArtifacts:
+    def __init__(self, channel_ids) -> None:
+        self.discovery = SimpleNamespace(proposal=SimpleNamespace(competitor_channel_ids=list(channel_ids)))
+
+    async def get_optional(self, key):
+        return self.discovery if key.name == "competitor_discovery" else None
+
+
+async def test_prefetch_competitors_ingests_the_proposed_set_in_full() -> None:
+    layer = FakeLayer()
+    ctx, _, ledger = context(layer, kind=RunKind.onboarding, competitors=())
+    ctx = replace(ctx, artifacts=ProposedArtifacts([OTHER]))
+    result = await PrefetchCompetitorsStage().run(ctx)
+    assert result.status == "succeeded"
+    assert layer.ingest.calls == [(OTHER, ChannelRole.competitor, "full")]
+    assert [item.status for item in result.artifact.channels] == ["not_found"]
+    assert ledger.charged[BudgetKind.youtube_units] == 3
+
+
+async def test_prefetch_competitors_stops_at_the_quota_and_skips_without_a_proposal() -> None:
+    layer = FakeLayer()
+    ctx, _, _ = context(layer, kind=RunKind.onboarding, competitors=())
+    quota_limited = replace(ctx, artifacts=ProposedArtifacts([CHANNEL_B, OTHER]))
+    result = await PrefetchCompetitorsStage().run(quota_limited)
+    assert result.status == "degraded" and result.artifact.quota_limited
+    assert result.artifact.channels[0].status == "quota_limited"
+    assert (await PrefetchCompetitorsStage().run(ctx)).status == "skipped"

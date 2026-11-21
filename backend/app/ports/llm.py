@@ -29,6 +29,8 @@ class TaskId(StrEnum):
     card_write = "card_write"
     card_critique = "card_critique"
     research_query_planning = "research_query_planning"
+    trend_keywords = "trend_keywords"
+    trend_ideas = "trend_ideas"
 
 
 class PayloadClass(StrEnum):

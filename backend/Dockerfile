@@ -9,6 +9,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH"
 
 COPY --from=ghcr.io/astral-sh/uv:0.9 /uv /usr/local/bin/uv
+# javascript runtime for the yt-dlp fallback's youtube challenge solver (yt-dlp-ejs)
+COPY --from=denoland/deno:bin-2.5.6 /deno /usr/local/bin/deno
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 \

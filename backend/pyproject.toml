@@ -39,6 +39,8 @@ dependencies = [
   "rapidocr>=3.0",
   "onnxruntime>=1.20",
   "rapidfuzz>=3.14",
+  "yt-dlp>=2025.1",
+  "yt-dlp-ejs==0.8.0",
 ]
 
 [dependency-groups]

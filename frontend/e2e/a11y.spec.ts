@@ -5,7 +5,7 @@ const ROUTES = [
   "/login",
   "/w/demo/clients",
   "/w/demo/new",
-  "/c/cl_apollo/today",
+  "/c/cl_apollo/ideas",
   "/c/cl_apollo/ideas",
   "/c/cl_apollo/ideas?evidence=rec_bypasscosthyd",
   "/c/cl_apollo/competitors?view=gaps",

@@ -22,6 +22,7 @@ const STAGE_ICONS: Record<string, StageTask["icon"]> = {
   build_profile: RiBookOpenLine,
   discover_competitors: RiFolder3Line,
   seed_topic_refs: RiSearchLine,
+  prefetch_competitors: RiYoutubeLine,
   ingest: RiStackLine,
   niche_discovery: RiFolder3Line,
   news: RiRadarLine,

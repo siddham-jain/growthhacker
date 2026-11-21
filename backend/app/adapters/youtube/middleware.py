@@ -80,7 +80,7 @@ class MeteredHandler:
         except GoogleQuotaExceeded as error:
             await self._record(request, cost.bucket, cost.units, error.status or 403, error.reason)
             resets_at = await self._quota.mark_exhausted(cost.bucket)
-            raise QuotaExhausted(cost.bucket, resets_at) from error
+            raise QuotaExhausted(cost.bucket, resets_at, "google") from error
         except YouTubeApiError as error:
             await self._record(request, cost.bucket, cost.units, error.status or 0, error.reason)
             raise

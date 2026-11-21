@@ -48,7 +48,7 @@ test("onboarding to live analysis, confirm, first brief, competitor folder and e
   await start.click();
 
   await expect(page).toHaveURL(/\/setup\/analysis\?run=/);
-  await expect(page).toHaveURL(/\/today\?first=1/, { timeout: 60_000 });
+  await expect(page).toHaveURL(/\/ideas/, { timeout: 60_000 });
   await expect(page.getByRole("heading", { name: "Your first brief is ready." })).toBeVisible();
   await expect(page.locator("ol").first().getByRole("link")).toHaveCount(5);
 

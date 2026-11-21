@@ -9,11 +9,13 @@ PLANNING_FIGURES = (
     ("LLM per daily refresh", "~$0.20-0.30 (Haiku 4.5 + Sonnet 5.5)"),
     ("Tavily news credits per day", "niche-dependent (AI ≈ daily polling, dental ≈ weekly)"),
     ("Daily refresh wall time", "≈35 s typical, ≤110 s worst (target < 120 s)"),
-    ("Onboarding wall time", "crawl 3-8 min + analysis 1-2 min (tracked separately)"),
+    ("Onboarding to first review", "≤ 90 s: key pages only; the full crawl runs after the first analysis"),
+    ("Onboarding wall time", "≤ 4 min, mostly hidden behind the review (tracked separately)"),
 )
 TARGET_LABELS = {
     "daily_refresh_p95_under_120s": "Daily refresh p95 wall time < 120 s (warm cache)",
-    "onboarding_p95_under_8min": "Onboarding p95 wall time ≤ 8 min (tracked separately)",
+    "onboarding_first_review_p95_under_90s": "Onboarding p95 time to first review ≤ 90 s",
+    "onboarding_p95_under_4min": "Onboarding p95 wall time ≤ 4 min (tracked separately)",
     "units_per_client_within_budget": "Median main-bucket units per client-day within budget",
     "llm_prices_fresh": "LLM price table verified recently",
     "retention_compliant": "No API data past the retention limit",

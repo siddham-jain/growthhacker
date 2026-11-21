@@ -44,7 +44,7 @@ from app.services.website_intel.profile.merger import Tombstone
 from app.services.website_intel.profile.page_facts import MapCache
 from app.services.website_intel.profile.page_selector import LlmPageSelector
 
-CrawlProfileKind = Literal["client", "competitor"]
+CrawlProfileKind = Literal["client", "onboarding", "competitor"]
 
 
 @dataclass

@@ -45,13 +45,18 @@ async def test_priority_ceilings(redis: Redis, redis_prefix: str) -> None:
     quota = manager(redis, redis_prefix, main_daily_units=100)
     for _ in range(60):
         await quota.reserve(QuotaBucket.main, 1, ctx(QuotaPriority.background), "videos.list")
-    with pytest.raises(QuotaExhausted):
+    with pytest.raises(QuotaExhausted) as raised:
         await quota.reserve(QuotaBucket.main, 1, ctx(QuotaPriority.background), "videos.list")
+    assert raised.value.reason == "priority"
     for _ in range(25):
         await quota.reserve(QuotaBucket.main, 1, ctx(QuotaPriority.daily_refresh), "videos.list")
     with pytest.raises(QuotaExhausted):
         await quota.reserve(QuotaBucket.main, 1, ctx(QuotaPriority.daily_refresh), "videos.list")
     await quota.reserve(QuotaBucket.main, 15, ctx(QuotaPriority.interactive), "videos.list")
+    with pytest.raises(QuotaExhausted) as raised:
+        await quota.reserve(QuotaBucket.main, 1, ctx(QuotaPriority.interactive), "videos.list")
+    # the whole daily limit is spent, so this one is the project running dry
+    assert raised.value.reason == "project"
     with pytest.raises(QuotaExhausted):
         await quota.reserve(QuotaBucket.search, 1, ctx(QuotaPriority.snapshot), "search.list")
 
@@ -61,8 +66,9 @@ async def test_per_client_caps_stop_a_noisy_tenant(redis: Redis, redis_prefix: s
     noisy, quiet = uuid.uuid4(), uuid.uuid4()
     for _ in range(5):
         await quota.reserve(QuotaBucket.main, 1, ctx(client_id=noisy), "videos.list")
-    with pytest.raises(QuotaExhausted):
+    with pytest.raises(QuotaExhausted) as raised:
         await quota.reserve(QuotaBucket.main, 1, ctx(client_id=noisy), "videos.list")
+    assert raised.value.reason == "client_cap"
     await quota.reserve(QuotaBucket.main, 1, ctx(client_id=quiet), "videos.list")
     assert await quota.used(QuotaBucket.main, noisy) == 5
 
@@ -71,8 +77,9 @@ async def test_search_pools_are_reserved_separately(redis: Redis, redis_prefix: 
     quota = manager(redis, redis_prefix)
     for _ in range(15):
         await quota.reserve(QuotaBucket.search, 1, ctx(search_pool=SearchPool.news), "search.list")
-    with pytest.raises(QuotaExhausted):
+    with pytest.raises(QuotaExhausted) as raised:
         await quota.reserve(QuotaBucket.search, 1, ctx(search_pool=SearchPool.news), "search.list")
+    assert raised.value.reason == "search_pool"
     reservation = await quota.reserve(QuotaBucket.search, 1, ctx(), "search.list")
     assert reservation.pool_bucket == "search_pool_onboarding"
     assert await quota.used(QuotaBucket.search) == 16
@@ -85,8 +92,9 @@ async def test_run_budget_is_enforced_and_refunds_roll_back(redis: Redis, redis_
     reservations = [
         await quota.reserve(QuotaBucket.main, 1, ctx(run_id=run_id), "videos.list") for _ in range(3)
     ]
-    with pytest.raises(QuotaExhausted):
+    with pytest.raises(QuotaExhausted) as raised:
         await quota.reserve(QuotaBucket.main, 1, ctx(run_id=run_id), "videos.list")
+    assert raised.value.reason == "run_cap"
     await quota.refund(reservations[0], ctx(run_id=run_id))
     assert (await quota.run_usage(run_id))[QuotaBucket.main] == 2
     assert await quota.used(QuotaBucket.main) == 2
@@ -98,7 +106,7 @@ async def test_exhausted_flag_after_google_says_so(redis: Redis, redis_prefix: s
     assert resets_at == datetime(2026, 11, 21, 8, 0, tzinfo=UTC)
     with pytest.raises(QuotaExhausted) as raised:
         await quota.reserve(QuotaBucket.main, 1, ctx(), "videos.list")
-    assert raised.value.resets_at == resets_at
+    assert raised.value.resets_at == resets_at and raised.value.reason == "project"
     await quota.reserve(QuotaBucket.batch_stats, 1, ctx(QuotaPriority.snapshot), "videos.batchGetStats")
 
 
@@ -127,8 +135,9 @@ async def test_counters_are_per_pacific_day(redis: Redis, redis_prefix: str) -> 
 async def test_redis_outage_fails_closed_except_small_interactive_allowance(redis_prefix: str) -> None:
     dead = Redis.from_url("redis://127.0.0.1:1/0", socket_connect_timeout=0.2)
     quota = manager(dead, redis_prefix, redis_down_interactive_units=2)
-    with pytest.raises(QuotaExhausted):
+    with pytest.raises(QuotaExhausted) as raised:
         await quota.reserve(QuotaBucket.main, 1, ctx(QuotaPriority.daily_refresh), "videos.list")
+    assert raised.value.reason == "redis_down"
     first = await quota.reserve(QuotaBucket.main, 1, ctx(), "videos.list")
     await quota.reserve(QuotaBucket.main, 1, ctx(), "videos.list")
     with pytest.raises(QuotaExhausted):

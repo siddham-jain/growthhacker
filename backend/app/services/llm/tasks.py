@@ -81,6 +81,8 @@ DEFAULT_TASKS: tuple[TaskSpec, ...] = (
     TaskSpec(TaskId.card_write, "medium", 4096, 30, 600, degrade_path="template card writer"),
     TaskSpec(TaskId.card_critique, "low", 2048, 20, 1000, degrade_path="no critique, lint only"),
     TaskSpec(TaskId.research_query_planning, "low", 512, 15, 200, degrade_path="query templates"),
+    TaskSpec(TaskId.trend_keywords, "low", 2048, 30, 600, degrade_path="profile and autocomplete keywords only"),
+    TaskSpec(TaskId.trend_ideas, "medium", 6000, 60, 2500, degrade_path="trending keywords shown without ideas"),
 )
 
 for _spec in DEFAULT_TASKS:

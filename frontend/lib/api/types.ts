@@ -569,6 +569,19 @@ export interface GapMatrixView {
   own: Record<string, number>;
 }
 
+// founder overview over 90 days with 365-day growth; simple maths, side by side, never ranked
+export type ChannelLandscape = Wire["ChannelLandscape"];
+export type ChannelOverview = Wire["ChannelOverview"];
+export type FormatStats = Wire["FormatStats"];
+export type GrowthFigure = Wire["GrowthFigure"];
+
+// trending keywords in the client's niche and the video ideas built on them; heat is ours, not youtube's
+export type TrendScan = Wire["TrendScan"];
+export type KeywordTrend = Wire["KeywordTrend"];
+export type TrendIdea = Wire["TrendIdea"];
+export type TrendVideo = Wire["TrendVideo"];
+export type KeywordSource = Wire["KeywordSource"];
+
 // web answer citations per buyer question (conversion lens); counts are ours, not youtube's
 export type AnswerCitations = Wire["AnswerCitationsData"];
 export type QuestionCitations = Wire["QuestionCitations"];

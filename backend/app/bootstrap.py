@@ -49,6 +49,7 @@ REGISTRATION_MODULES: tuple[str, ...] = (
     "app.pipeline.stages.analytics",
     "app.pipeline.stages.recommend",
     "app.pipeline.stages.news",
+    "app.pipeline.stages.trends",
     "app.pipeline.stages.refresh",
     "app.pipeline.stages.cards",
     "app.pipeline.stages.evaluation",

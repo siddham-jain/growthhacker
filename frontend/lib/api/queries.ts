@@ -94,6 +94,12 @@ export const creatorsQuery = (clientId: string, windowDays: WindowDays, sort?: s
 
 export const meQuery = () => queryOptions({ queryKey: ["me"], queryFn: () => api.auth.me(), staleTime: 5 * MINUTE });
 
+export const trendsQuery = (clientId: string) =>
+  queryOptions({ queryKey: [...clientKey(clientId), "trends"], queryFn: () => api.trends.latest(clientId), staleTime: 10 * MINUTE });
+
+export const landscapeQuery = (clientId: string) =>
+  queryOptions({ queryKey: [...clientKey(clientId), "landscape"], queryFn: () => api.analytics.landscape(clientId), staleTime: 10 * MINUTE });
+
 export const answerCitationsQuery = (clientId: string) =>
   queryOptions({ queryKey: [...clientKey(clientId), "answer-citations"], queryFn: () => api.analytics.answerCitations(clientId), staleTime: 10 * MINUTE });
 

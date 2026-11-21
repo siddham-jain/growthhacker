@@ -3,6 +3,7 @@ import type {
   BulkStatusIn,
   BusinessProfileView,
   BuyerQuestionItem,
+  ChannelLandscape,
   ChannelResolveOut,
   ChannelScorecard,
   Client,
@@ -56,6 +57,7 @@ import type {
   TopicStatus,
   TraitLiftView,
   TrendingReport,
+  TrendScan,
   VideoMetricsView,
   WhiteSpaceNote,
   WindowDays,
@@ -147,8 +149,14 @@ export interface GrowthHackerApi {
     topics(clientId: string, windowDays: WindowDays): Promise<ResultEnvelope<TopicSummary[]>>;
     // buyer questions × tracked competitors, counts only
     gaps(clientId: string, windowDays: WindowDays): Promise<ResultEnvelope<GapMatrixView>>;
+    // own channel and competitors side by side over a fixed 90 days, growth over 365
+    landscape(clientId: string): Promise<ResultEnvelope<ChannelLandscape>>;
     // which buyer questions' web answers cite your videos, a competitor's, or neither
     answerCitations(clientId: string): Promise<AnswerCitations>;
+  };
+  trends: {
+    // newest trend scan across runs: keywords, their recent videos and the ideas built on them
+    latest(clientId: string): Promise<ResultEnvelope<TrendScan>>;
   };
   recommendations: {
     list(clientId: string, query: RecommendationQuery): Promise<RecommendationsResult>;

@@ -35,7 +35,7 @@ export default function CommandPalettePanel({ clientId, open, onOpenChange }: { 
   function run(key: Key) {
     const id = String(key);
     if (id.startsWith("nav:")) router.push(withView(`/c/${clientId}/${id.slice(4)}`));
-    else if (id.startsWith("client:")) router.push(`/c/${id.slice(7)}/today`);
+    else if (id.startsWith("client:")) router.push(`/c/${id.slice(7)}/ideas`);
     else if (id.startsWith("window:")) {
       const next = new URLSearchParams(params.toString());
       next.set("w", id.slice(7));

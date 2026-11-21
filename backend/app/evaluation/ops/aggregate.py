@@ -32,7 +32,11 @@ from app.evaluation.ops.sources import (
 from app.models.ledgers import QUOTA_BUCKETS
 
 DAILY_REFRESH = "daily_refresh"
+ONBOARDING = "onboarding"
 TOTAL = "total"
+FIRST_REVIEW = "first_review"
+# the confirm flow opens once the profile and its topics exist; competitors keep loading behind it
+FIRST_REVIEW_STAGES = frozenset({"build_profile", "seed_topic_refs"})
 
 
 def percentile_ms(values: Sequence[int], q: float) -> int | None:
@@ -157,7 +161,10 @@ def run_timings(runs: Sequence[RunRow], stages: Sequence[StageRow]) -> dict[str,
             ]
             failures = sum(r.status == "failed" for r in rows)
             items.append(timing(stage, durations, failures, len(rows)))
+            items.extend(step_timings(stage, rows))
         kind_runs = [run for run in runs if run.kind == kind]
+        if kind == ONBOARDING:
+            items.append(first_review_timing(kind_runs, by_kind[kind]))
         walls = [
             run.wall_ms
             for run in kind_runs
@@ -167,6 +174,33 @@ def run_timings(runs: Sequence[RunRow], stages: Sequence[StageRow]) -> dict[str,
         items.append(timing(TOTAL, walls, sum(run.status == "failed" for run in terminal), len(terminal)))
         report[kind] = items
     return report
+
+
+def step_timings(stage: str, rows: Sequence[StageRow]) -> list[StageTiming]:
+    """sub-steps a stage reports as `<step>_ms` counts, e.g. the crawl's discover and fetch phases."""
+    steps: dict[str, list[int]] = defaultdict(list)
+    for row in rows:
+        if row.status not in TIMED_STAGE_STATUSES:
+            continue
+        for key, value in row.counts.items():
+            if key.endswith("_ms") and isinstance(value, int | float):
+                steps[key.removesuffix("_ms")].append(int(value))
+    return [timing(f"{stage} › {step}", values, 0, len(values)) for step, values in sorted(steps.items())]
+
+
+def first_review_timing(runs: Sequence[RunRow], stages: dict[str, list[StageRow]]) -> StageTiming:
+    """run start until the profile and topics exist, i.e. when the user can start reviewing."""
+    ready: dict[UUID, list] = defaultdict(list)
+    for stage in FIRST_REVIEW_STAGES:
+        for row in stages.get(stage, []):
+            if row.run_id is not None and row.finished_at is not None and row.status in TIMED_STAGE_STATUSES:
+                ready[row.run_id].append(row.finished_at)
+    values = [
+        int((max(ready[run.run_id]) - run.started_at).total_seconds() * 1000)
+        for run in runs
+        if run.started_at is not None and len(ready[run.run_id]) == len(FIRST_REVIEW_STAGES)
+    ]
+    return timing(FIRST_REVIEW, values, 0, len(values))
 
 
 def queue_waits(runs: Sequence[RunRow]) -> dict[str, StageTiming]:

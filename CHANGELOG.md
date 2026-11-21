@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added
+- Add `trends` analysis stage: profile topics + YouTube autocomplete + Tavily news keywords, measured by recent-upload views/day, with grounded trend video ideas.
+- Add `GET /clients/{id}/trends` and a "Post on what's trending" section that leads the Next videos page.
+- Add `prefetch_competitors` onboarding stage that ingests the proposed competitors in full while the user reviews.
+- Queue a full-budget `recrawl` on the batch queue after the first confirmed analysis succeeds.
+- Report onboarding time to first review and crawl/profile sub-step timings in the ops report.
+- Add yt-dlp fallback gateway behind the data api, on by default (`GH_YOUTUBE__FALLBACK__ENABLED`); scraped rows carry `data_source=yt_dlp`.
+- Add channel landscape endpoint and panels: 90-day format mix, avg/median views, engagement, upload pace, views per subscriber, 365-day subscriber and view growth, competitor median.
+- Record daily channel stats into `yt_channel_snapshots` on every channel stats fetch.
 - Rebuild the confirm step as a three-step, one-question-per-screen flow with inline edit, remove with undo and add on every segment.
 - Allow adding, editing and removing locations and editing the market country through the profile patch.
 - Infer the client market from evidence (user, cctld, phone codes, addresses, currency, lang, wikidata) and write it back unless the user picked it.
@@ -35,8 +43,17 @@
 - Add shared context brief, env template and gitignore.
 
 ### Changed
+- Cap news-only trend keywords at a third of the searches and ask for short subject keywords (prompt v2).
+- Allow a relative `NEXT_PUBLIC_API_BASE` with an `API_PROXY_TARGET` rewrite so one tunnel serves the app and api.
+- Next videos is the landing page after onboarding and from the client list; `/today` redirects there.
+- Split the daily search bucket 30/15/15/40 (onboarding/news/niche/trends); analysis runs get 14 search calls, daily refreshes 7.
+- Onboarding crawls only key pages (`website_intel.onboarding`: 24 fetches, 20 mapped, 90 s wall).
+- Open the review as soon as the profile and topics exist; competitor screens wait for discovery and start-analysis waits for onboarding to finish.
+- `prefetch_own_channel` runs the analysis' full own-channel ingest instead of a 50-upload baseline.
+- Onboarding targets: first review p95 ≤ 90 s and run p95 ≤ 4 min (was 8 min).
 - Replace the per-number † marks with one plain disclosure line per section.
 - Explain competitor cards in plain words: hits, uploads per week and typical video vs usual.
+- Own analytics pulls channel-level daily rows for 365 days and backfills shorter histories once.
 - Regenerate the ops report and screenshots from the real stack; rewrite the runbook with UI, demo login and evaluation steps.
 - Ignore var/, where evaluation bundles and packs with API data live.
 - Expected range is the reference videos' plain outlier ratios (capped 0.5x–3.0x, interquartile or min–max) times the client's median baseline, labelled "calculated by GrowthHacker".
@@ -64,6 +81,9 @@
 - Move confirm-setup's competitor freeze and topic rebuild into the worker; the endpoint returns 202 with the run.
 
 ### Fixed
+- Let trend keywords of three or more words ground on all but one title word, and stop carrying over keywords with no videos.
+- Spill run artifacts to blobs at half the jsonb cap so 1.6–2 MB payloads stop failing `ck_run_artifacts_payload_size`.
+- Skip the trend idea writer when no keyword has enough videos instead of reporting a failure.
 - Serialize concurrent profile and keyword edits so a burst of corrections no longer collides on the profile version.
 - Adding a competitor the client already holds moves it instead of re-running discovery, which re-ranked other suggestions.
 - Keep location locks and rejections across re-crawls.
@@ -132,6 +152,16 @@
 - Fix rapidocr 3.10 enum params that failed thumbnail enrichment.
 
 ### Decisions
+- YouTube has no niche trend api (mostPopular is unfiltered, Google Trends has no public api), so "trending" = a keyword's fastest recent uploads vs the client's other keywords; labelled as ours.
+- YouTube autocomplete is an owner-approved unofficial source like the yt-dlp fallback; `GH_TRENDS__AUTOCOMPLETE_ENABLED=false` turns it off.
+- Trend matches use title and tags only; descriptions carry hashtag spam that grounded unrelated videos.
+- Trend idea evidence lines are written by code; the llm may not put digits in angle or fit.
+- The deep recrawl waits for the first analysis instead of running alongside onboarding — one active run per client means a parallel recrawl would block confirm-setup with a conflict.
+- The competitor prefetch draws only on the run's quota cap, not a stage budget — stage budgets are charged after the spend and would fail a stage whose cache warming already happened.
+- yt-dlp fallback is an explicit exception to "official APIs only" (DP §III.E.6) — the owner chose availability over policy risk; turn it off with the flag.
+- Competitor growth comes from our own daily snapshots, not a history api (none exists) — it covers only the days we hold, capped at 30 days under `strict_30d` retention.
+- A yt-dlp channel refresh never overwrites api totals, creation date, country, language or the hidden-subscriber flag — the scraper cannot see them.
+- `QuotaExhausted` carries a reason and only project/google/redis_down fall back to yt-dlp — run, client, priority and search-pool caps are deliberate limits, not an api outage.
 - Confirm-step "Looks right" confirms the items shown — it locks them so a re-crawl keeps the user's verified set.
 - Regulated-field notice is generic — the regulated flag and domain kind can be wrong for non-healthcare clients.
 - The browser locale is sent as a market hint (market_explicit=false), not a choice — name-only site search still needs a country, but phone parsing and the stored market must come from the site.

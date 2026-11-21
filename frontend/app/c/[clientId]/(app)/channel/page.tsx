@@ -7,13 +7,14 @@ import { VideoList } from "@/components/cards/video-list";
 import { YourAnswerCitations } from "@/components/citations/answer-citations";
 import { PerformanceChart, ViewsAtAgeChart } from "@/components/charts/lazy";
 import { VideoEvidenceDrawer } from "@/components/evidence/lazy-drawers";
+import { ChannelOverviewPanel } from "@/components/landscape/channel-overview";
 import { FreshnessLine } from "@/components/shell/freshness-line";
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState, ErrorState, LoadingBlock } from "@/components/states/states";
 import { Button } from "@/components/ui/button";
 import { OriginChip } from "@/components/ui/chips";
 import { Tab, TabList, TabPanel, Tabs } from "@/components/ui/primitives";
-import { clientQuery, ownPerformanceQuery, refreshQuery } from "@/lib/api/queries";
+import { clientQuery, landscapeQuery, ownPerformanceQuery, refreshQuery } from "@/lib/api/queries";
 import type { VideoMetricsView } from "@/lib/api/types";
 import { useTabParam, useViewParams } from "@/lib/url-state";
 import { useClientId } from "@/lib/use-client-id";
@@ -46,6 +47,8 @@ export default function ChannelPage() {
   const client = useQuery(clientQuery(clientId));
   const own = useQuery(ownPerformanceQuery(clientId, windowDays));
   const refresh = useQuery(refreshQuery(clientId));
+  const landscape = useQuery(landscapeQuery(clientId));
+  const overview = landscape.data?.data.own;
   const report = own.data?.data.youtube_public;
   const suggestions = (refresh.data?.data.items ?? []).filter((item) => item.basis !== "rule_based");
   const openCount = suggestions.filter((item) => item.status === "open").length;
@@ -75,6 +78,11 @@ export default function ChannelPage() {
           <Tab id="conversion">Conversion</Tab>
         </TabList>
         <TabPanel id="performance">
+          {overview && landscape.data ? (
+            <div className="mb-6">
+              <ChannelOverviewPanel overview={overview} median={landscape.data.data.competitor_median} />
+            </div>
+          ) : null}
           {own.isPending ? <LoadingBlock /> : null}
           {own.error ? <ErrorState error={own.error} onRetry={() => own.refetch()} /> : null}
           {report ? (

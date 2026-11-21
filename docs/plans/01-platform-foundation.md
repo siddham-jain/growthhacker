@@ -1101,7 +1101,7 @@ INDEX (client_id, occurred_at)  INDEX (run_id)  BRIN (occurred_at)
 
 | Guardrail / policy | How the foundation complies |
 |---|---|
-| Official APIs only (assignment; DP §III.E.6, §III.I.14) | The data model only has sources for YouTube Data/Analytics API responses; no scraping tables. Website crawl data is in separate `crawled_pages`, never in `yt_*`. |
+| Official APIs only (assignment; DP §III.E.6, §III.I.14) | **Exception (2026-11-21):** a yt-dlp fallback serves public data when the Data API fails, on by default behind `youtube.fallback.enabled`; scraped rows carry `data_source='yt_dlp'` / snapshot `source='yt_dlp'` so they can be found and purged. Otherwise only YouTube Data/Analytics API responses. Website crawl data is in separate `crawled_pages`, never in `yt_*`. |
 | Never merge YouTube with other sources into one metric | Schema separation: website/news data live in their own tables; no column combines them. `analysis_artifacts` kinds declare a single source class. |
 | Refresh or delete within 30 days | Registry-enforced retention per table, fail-closed deletion, partition drops, watchdog plus CI invariant (every table classified; oldest-age audit). |
 | Non-Authorized statistics ≤ 30 days | Snapshots dropped at 28 days; stats-derived artifacts expire from `stats_observed_at`. |
